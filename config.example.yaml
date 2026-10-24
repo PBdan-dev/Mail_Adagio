@@ -29,7 +29,9 @@ themes:
   - name: Admin
     hint: government, utilities, contracts, insurance (non-health), housing, official paperwork
   - name: Work & Projects
-    hint: job, colleagues, clients, personal projects, professional tools
+    hint: your current work, colleagues, clients, personal projects, professional tools
+  - name: Job Search
+    hint: job offers and job alerts (LinkedIn, Indeed...), applications, recruiters, interviews
   - name: Shopping & Deliveries
     hint: orders, receipts, shipping and delivery updates, returns
   - name: Travel
@@ -41,7 +43,7 @@ themes:
   - name: Promotions
     hint: marketing, sales, discounts, ads
   - name: Social & Notifications
-    hint: social networks, app and service notifications, security alerts, forums
+    hint: social networks, app and service notifications, security alerts, forums (job alerts go to Job Search)
   - name: Other
     hint: anything that does not clearly fit another theme
 
