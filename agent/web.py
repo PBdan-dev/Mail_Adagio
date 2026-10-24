@@ -4,7 +4,10 @@ The page (web/index.html) calls a small JSON API; every action goes through core
 """
 import json
 import secrets
+import socket
 import threading
+import time
+import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -15,6 +18,12 @@ from . import config, core, demo, models
 from .mail import Gmail
 
 PAGE = Path(__file__).parent / "web" / "index.html"
+CODE = Path(__file__).parent
+
+
+def code_stamp():
+    """Changes when the files of Mail Adagio are replaced by a new version."""
+    return max(f.stat().st_mtime for f in [*CODE.glob("*.py"), PAGE])
 
 
 class App:
@@ -29,6 +38,9 @@ class App:
         self.error = ""      # why the last background job failed
         self.notice = None   # what the last apply/undo did
         self.demo_behavior = {"act_alone": False, "batch_size": 50}
+        self.page = PAGE.read_text(encoding="utf-8")  # read once: the page always matches this code
+        self.stamp = code_stamp()
+        self.server = None
 
     def cfg(self):
         if self.demo:
@@ -72,6 +84,7 @@ class App:
             "job": job, "stopping": stopping, "error": error, "notice": notice,
             "sort": sort if sort and sort.get("ok") else None,
             "log": core.read_log(40),
+            "outdated": code_stamp() != self.stamp,  # files updated while open: a restart is needed
         }
 
     def model_info(self):
@@ -214,7 +227,7 @@ def make_handler(app, port):
             if self.headers.get("Host") not in allowed_hosts:
                 return self.send(403, {"error": "forbidden"})
             if self.path in ("/", "/index.html"):
-                html = PAGE.read_text(encoding="utf-8").replace("__TOKEN__", app.token)
+                html = app.page.replace("__TOKEN__", app.token)
                 return self.send(200, html.encode(), "text/html; charset=utf-8")
             if not self.trusted():
                 return self.send(403, {"error": "forbidden"})
@@ -274,6 +287,10 @@ def make_handler(app, port):
             if self.path == "/api/stop":
                 app.job["stop"] = True
                 return self.send(200, {"ok": True})
+            if self.path == "/api/shutdown":  # Mail Adagio was opened again: this older copy stops
+                self.send(200, {"ok": True})
+                print("\n  Mail Adagio was opened again in a new window. This one stops.\n")
+                return threading.Thread(target=app.server.shutdown, daemon=True).start()
             starters = {"/api/plan": lambda: app.start_plan(body), "/api/apply": lambda: app.start_apply(body),
                         "/api/undo": app.start_undo,
                         "/api/scan": lambda: app.start_simple("scan", {"action": "scan"}),
@@ -287,8 +304,32 @@ def make_handler(app, port):
     return Handler
 
 
+def running_file(config_path, demo_mode):
+    return Path(config_path).resolve().parent / (".adagio-ui-demo.json" if demo_mode else ".adagio-ui.json")
+
+
+def stop_previous(path):
+    """Ask a Mail Adagio still open from an earlier launch (maybe an older version) to stop."""
+    try:
+        old = json.loads(path.read_text(encoding="utf-8"))
+        req = urllib.request.Request(f"http://127.0.0.1:{old['port']}/api/shutdown", data=b"{}", method="POST",
+                                     headers={"X-Adagio-Token": old["token"], "Content-Type": "application/json",
+                                              "Host": f"127.0.0.1:{old['port']}"})
+        urllib.request.urlopen(req, timeout=3).read()
+    except (OSError, ValueError, KeyError):
+        return  # not running any more
+    for _ in range(50):  # wait until it has freed its port
+        try:
+            socket.create_connection(("127.0.0.1", old["port"]), timeout=0.2).close()
+            time.sleep(0.1)
+        except OSError:
+            return
+
+
 def serve(config_path=config.DEFAULT_PATH, port=8765, demo_mode=False, open_browser=True):
     app = App(config_path, demo_mode)
+    running = running_file(config_path, demo_mode)
+    stop_previous(running)
     for p in range(port, port + 20):  # first free port
         try:
             server = ThreadingHTTPServer(("127.0.0.1", p), make_handler(app, p))
@@ -297,6 +338,11 @@ def serve(config_path=config.DEFAULT_PATH, port=8765, demo_mode=False, open_brow
             continue
     else:
         raise OSError("No free port found")
+    app.server = server
+    try:
+        running.write_text(json.dumps({"port": p, "token": app.token}), encoding="utf-8")
+    except OSError:
+        running = None
     url = f"http://127.0.0.1:{p}/"
     print(f"\n  Mail Adagio is open at {url}\n  Keep this window open. Close it to stop.\n")
     if open_browser:
@@ -307,3 +353,8 @@ def serve(config_path=config.DEFAULT_PATH, port=8765, demo_mode=False, open_brow
         pass
     finally:
         server.server_close()
+        try:  # only if it is still ours (a newer launch writes its own)
+            if running and json.loads(running.read_text(encoding="utf-8")).get("token") == app.token:
+                running.unlink()
+        except (OSError, ValueError):
+            pass

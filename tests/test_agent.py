@@ -563,5 +563,41 @@ class TestWeb(unittest.TestCase):
             core.MEMORY_PATH = ":memory:"
 
 
+class TestRelaunch(unittest.TestCase):
+    """Opening Mail Adagio again stops the copy still open (maybe an older version)."""
+
+    def test_second_launch_replaces_the_first(self):
+        import threading
+        import time
+        import urllib.request
+        from agent import web
+        tmp = Path(tempfile.mkdtemp())
+        cfg = tmp / "config.yaml"
+        first = threading.Thread(target=web.serve, args=(cfg, 8931, True, False), daemon=True)
+        first.start()
+        running = web.running_file(cfg, True)
+        for _ in range(50):
+            if running.exists():
+                break
+            time.sleep(0.05)
+        token1 = json.loads(running.read_text())["token"]
+        second = threading.Thread(target=web.serve, args=(cfg, 8931, True, False), daemon=True)
+        second.start()
+        first.join(timeout=5)
+        self.assertFalse(first.is_alive())  # the first one stopped
+        for _ in range(50):
+            info = json.loads(running.read_text()) if running.exists() else {}
+            if info.get("token") not in (None, token1):
+                break
+            time.sleep(0.05)
+        self.assertEqual(info["port"], 8931)  # and the new one took its place
+        with urllib.request.urlopen(f"http://127.0.0.1:8931/") as r:
+            self.assertIn(info["token"], r.read().decode())
+        web.stop_previous(running)
+        second.join(timeout=5)
+        self.assertFalse(second.is_alive())
+        shutil.rmtree(tmp)
+
+
 if __name__ == "__main__":
     unittest.main()
