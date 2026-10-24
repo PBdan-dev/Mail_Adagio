@@ -24,6 +24,10 @@ pip install -r requirements.txt
 python adagio.py setup
 ```
 
+**On Windows, the simplest way**: double-click `Mail Adagio.bat`. The first time, it prepares a private
+Python environment, installs the libraries and opens the setup. Then it shows a menu (preview, check,
+settings…). Python must be installed (<https://www.python.org/downloads/>).
+
 `setup` asks for your Gmail address, the app password (hidden while you type), the model provider
 and its API key. Everything is saved in `config.yaml`, on your computer only (it is in `.gitignore`).
 
