@@ -4,6 +4,7 @@ Never deletes: the only writes are adding/removing Gmail labels (\\Inbox is a la
 """
 import base64
 import email
+import html as htmllib
 import imaplib
 import re
 from dataclasses import dataclass, field
@@ -28,6 +29,17 @@ class Mail:
     subject: str
     labels: list = field(default_factory=list)  # labels already on the mail
     body: str = ""          # plain text extract, kept in memory only
+    unsubscribe: str = ""   # unsubscribe link (List-Unsubscribe header, else a link in the mail)
+
+
+@dataclass
+class Header:
+    """What the sender scan reads: headers only, no content."""
+    uid: int
+    gm_msgid: str
+    date: str
+    sender: str
+    unsubscribe: str = ""
 
 
 class Gmail:
@@ -90,6 +102,26 @@ class Gmail:
                     mails.append(parse_fetch(item[0], item[1], body_chars))
         mails.sort(key=lambda m: m.uid, reverse=True)
         return mails
+
+    def headers(self, uids):
+        """From, Date and List-Unsubscribe of many mails, fast: the mail content is not downloaded."""
+        out = []
+        for chunk in chunks(list(uids), 500):
+            status, data = self.imap.uid("FETCH", ",".join(map(str, chunk)),
+                                         "(X-GM-MSGID BODY.PEEK[HEADER.FIELDS (FROM DATE LIST-UNSUBSCRIBE)])")
+            if status != "OK":
+                raise MailError("Fetch failed")
+            for item in data:
+                if not isinstance(item, tuple):
+                    continue
+                meta = item[0].decode("utf-8", "replace")
+                uid, msgid = re.search(r"UID (\d+)", meta), re.search(r"X-GM-MSGID (\d+)", meta)
+                msg = email.message_from_bytes(item[1], policy=policy.default)
+                if uid:
+                    out.append(Header(int(uid.group(1)), msgid.group(1) if msgid else "",
+                                      parse_date(msg.get("Date")), clean(str(msg.get("From", ""))),
+                                      unsubscribe_header(str(msg.get("List-Unsubscribe", "")))))
+        return out
 
     # --- step 3: writing labels -------------------------------------------------
     def folders(self):
@@ -172,7 +204,34 @@ def parse_fetch(meta, raw, body_chars):
         subject=clean(str(msg.get("Subject", ""))),
         labels=parse_labels(labels.group(1)) if labels else [],
         body=extract_text(msg)[:body_chars],
+        unsubscribe=unsubscribe_header(str(msg.get("List-Unsubscribe", ""))) or unsubscribe_link(msg),
     )
+
+
+def unsubscribe_header(value):
+    """'<mailto:x@y.com>, <https://y.com/u?id=1>' -> the web link if any, else the mailto."""
+    links = re.findall(r"<\s*([^>\s]+)\s*>", value or "")
+    web = [x for x in links if x.lower().startswith("https://") or x.lower().startswith("http://")]
+    mail = [x for x in links if x.lower().startswith("mailto:")]
+    return (web or mail or [""])[0]
+
+
+UNSUB_WORDS = re.compile(r"unsubscribe|d[ée]sabonn|d[ée]sinscri|se d[ée]sinscrire|opt[ -]?out|abmelden|darse de baja",
+                         re.I)
+
+
+def unsubscribe_link(msg):
+    """The unsubscribe link written in the mail itself (when there is no List-Unsubscribe header)."""
+    for part in msg.walk():
+        if part.get_content_type() != "text/html" or part.is_attachment():
+            continue
+        html = part_text(part)
+        for m in re.finditer(r'<a\b[^>]*href\s*=\s*["\']([^"\']+)["\'][^>]*>(.*?)</a>', html, re.I | re.S):
+            href = htmllib.unescape(m.group(1).strip())
+            text = htmllib.unescape(re.sub(r"<[^>]+>", " ", m.group(2)))
+            if href.lower().startswith(("https://", "http://")) and (UNSUB_WORDS.search(text) or UNSUB_WORDS.search(href)):
+                return href
+    return ""
 
 
 def parse_labels(text):

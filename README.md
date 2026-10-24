@@ -54,6 +54,7 @@ From another program (Orchestra, a chatbot): send one JSON request, read one JSO
 echo '{"action": "preview", "limit": 5}' | python adagio.py call
 echo '{"action": "plan", "scope": {"kind": "count", "value": 200}}' | python adagio.py call
 echo '{"action": "apply", "batch_id": 1, "skip": []}' | python adagio.py call
+echo '{"action": "scan"}' | python adagio.py call
 ```
 
 ## How sorting works (step 3)
@@ -69,6 +70,19 @@ With **Let the agent act alone** (or `act_alone: true`), batches are applied one
 without asking. Progress is saved in `adagio.db`: after a stop or a crash, it resumes where it was.
 Gmail reserves the name *Important*, so that status uses the label **Priority** (change it with
 `label:` in `config.yaml`). Set `archive: false` to keep the mails in the Inbox.
+
+## Senders: subscriptions and ready-made rules
+
+The **Senders** tab of the interface:
+
+1. **Scan** reads only the sender, date and unsubscribe headers of every mail (All Mail, or the Inbox).
+   No AI, nothing changes, a few seconds for thousands of mails.
+2. **Subscriptions**: every sender with an unsubscribe link (the `List-Unsubscribe` header, or a link
+   in the mail). **Unsubscribe** only opens that link in your browser; the agent never unsubscribes on
+   its own. Hide a sender you want to keep.
+3. **Suggest rules**: for the 20 senders who write the most (5 mails or more, no rule yet), the agent
+   classifies 3 of their mails and proposes a rule ("16 mails from Jobs Digest -> Job Search / Info").
+   **Accept** or **Change** it; the rule then sorts their mails without calling the model.
 
 The contract (input and output) is in [`agent.json`](agent.json). Errors come back as
 `{"ok": false, "error": "..."}`: the caller never crashes because of the agent.
@@ -107,6 +121,7 @@ agent/web.py         local web server (127.0.0.1 only) for the interface
 agent/web/index.html the interface: one page, no external files
 agent/demo.py        made-up mails for the demo mode
 agent/memory.py      what you taught it: rules and corrections, kept in adagio.db
+agent/senders.py     who writes to you: counts, unsubscribe links, suggested rules, in adagio.db
 tests/               python -m unittest   (fake Gmail, fake model)
 ```
 
@@ -115,4 +130,5 @@ tests/               python -m unittest   (fake Gmail, fake model)
 - The agent reads the start of each mail (1500 characters by default, `body_chars`) and sends it to the
   model you chose. With Ollama, nothing leaves your computer.
 - It does not store mail content. From step 3, only the mail id, subject and tags go into a local
-  SQLite file, to resume after a stop and to undo the last run.
+  SQLite file, to resume after a stop and to undo the last run. The Senders page stores each sender's
+  address, name, mail count and unsubscribe link.

@@ -57,7 +57,8 @@ main { padding-top: 24px; padding-bottom: 48px; display: grid; gap: 20px;
 .col { display: grid; gap: 20px; min-width: 0; }
 @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .top-in, main { padding: 0 16px; } main { padding-top: 16px; } .brand span { display: none; }
-  .brand b { white-space: nowrap; } #conn { display: none; } .top-in { gap: 8px; } }
+  .brand b { white-space: nowrap; } #conn { display: none; } .top-in { gap: 8px; }
+  .brand { display: none; } #settingsBtn .lbl { display: none; } #settingsBtn { padding: 8px 10px; } }
 
 /* pieces */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
@@ -262,6 +263,40 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
   .mail.sel input { grid-area: c; }
 }
 .btn.danger { color: var(--red); }
+
+/* pages and senders */
+.tabs { margin-left: 18px; }
+@media (max-width: 760px) { .tabs { margin-left: 4px; } .tabs button { padding: 6px 9px; } }
+.slist { display: grid; gap: 2px; }
+.srow { display: grid; grid-template-columns: 36px minmax(0, 1fr) 104px minmax(0, 1.25fr) auto; gap: 12px; align-items: center;
+  padding: 10px; border-radius: 10px; }
+.srow:hover { background: var(--surface-2); }
+.avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px; }
+.who b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who small { display: block; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.cnt { font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--muted); }
+.cnt .track { height: 6px; margin-top: 4px; }
+.cnt .track > div { background: var(--accent); }
+.sugg { display: flex; gap: 6px; align-items: center; min-width: 0; font-size: 12.5px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: var(--surface-2);
+  border: 1px solid var(--border); font-weight: 600; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.chip .dot { flex: none; }
+.sugg .btn { flex: none; }
+.chip.rule { background: var(--green-soft); color: var(--green); border-color: transparent; }
+.sugg small { color: var(--faint); }
+.btn.sm { padding: 5px 10px; font-size: 12.5px; border-radius: 8px; }
+.btn.sm.primary { padding: 5px 11px; box-shadow: none; }
+.acts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+.acts .iconb { border: 0; background: transparent; color: var(--faint); cursor: pointer; border-radius: 7px; width: 28px; height: 28px; display: grid; place-items: center; }
+.acts .iconb:hover { color: var(--text); background: var(--surface-2); }
+.opened { font-size: 11.5px; font-weight: 650; color: var(--green); white-space: nowrap; }
+.more { text-align: center; color: var(--muted); font-size: 13px; padding: 12px; }
+@media (max-width: 760px) {
+  .srow { grid-template-columns: 36px minmax(0, 1fr) auto; grid-template-areas: "a w x" "a c c" "a s s"; row-gap: 6px; }
+  .srow .avatar { grid-area: a; align-self: start; } .srow .who { grid-area: w; } .srow .cnt { grid-area: c; }
+  .srow .sugg { grid-area: s; } .srow .acts { grid-area: x; }
+  .acts .btn.sm { padding: 5px 8px; }
+}
 .undo { width: 100%; justify-content: center; margin-top: 4px; }
 </style>
 </head>
@@ -271,6 +306,7 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="3"/></svg>
   </div>
   <div class="brand"><b>Mail Adagio</b><span>Your inbox, sorted calmly</span></div>
+  <div class="seg tabs hidden" id="pageSeg"><button data-p="sort" class="on">Sort</button><button data-p="senders">Senders</button></div>
   <div class="spacer"></div>
   <span id="conn" class="pill"><i></i><span>Not set up</span></span>
   <button class="btn ghost icon-btn" id="themeBtn" title="Light / dark">
@@ -278,7 +314,7 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
   </button>
   <button class="btn" id="settingsBtn">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-    Settings
+    <span class="lbl">Settings</span>
   </button>
 </div></header>
 
@@ -372,6 +408,43 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
     </section>
   </div>
 
+  <div class="col hidden" id="sendersCol">
+    <section class="card run">
+      <div>
+        <h2>Senders and subscriptions</h2>
+        <p class="sub" style="margin:4px 0 0">A quick look at who writes to you. The scan reads only the sender, the date and the unsubscribe link of each mail. It is fast and free, uses no AI and changes nothing.</p>
+        <div class="estimate" id="scanInfo"></div>
+      </div>
+      <div class="runside">
+        <button class="btn primary" id="scanBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <span>Scan my mailbox</span></button>
+      </div>
+      <div class="progress" id="scanProgress"><div class="bar"><div id="scanFill"></div></div><small id="scanText"></small></div>
+    </section>
+
+    <section class="stats">
+      <div class="card stat"><div class="k">Senders</div><div class="v" id="tSenders">–</div></div>
+      <div class="card stat"><div class="k">Mails scanned</div><div class="v" id="tMails">–</div></div>
+      <div class="card stat"><div class="k"><i style="background:var(--accent)"></i>Subscriptions</div><div class="v" id="tSubs">–</div></div>
+      <div class="card stat"><div class="k"><i style="background:var(--green)"></i>Rules</div><div class="v" id="tRules">–</div></div>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px;align-items:flex-start">
+        <div style="min-width:0;flex:1"><h2>Who writes the most</h2><p class="sub" style="margin:0" id="sendersSub">Scan your mailbox to see your senders.</p></div>
+        <button class="btn" id="suggestBtn" title="Classifies 3 recent mails of each of your 20 biggest senders and proposes a rule">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-5 3.7L16.2 20 12 16.6 7.8 20 9 13.7 4 10l6.1-1.2z"/></svg>
+          Suggest rules for the top 20</button>
+      </div>
+      <div class="tools">
+        <div class="seg" id="senderSeg"><button data-f="all" class="on">All</button><button data-f="subs">Subscriptions</button><button data-f="sugg">Suggested rules</button><button data-f="hidden">Hidden</button></div>
+        <input class="search" id="senderSearch" placeholder="Search a sender">
+      </div>
+      <div class="slist" id="senders"></div>
+    </section>
+  </div>
+
   <aside class="col" id="sideCol">
     <section class="card">
       <h2>Connection</h2>
@@ -448,7 +521,7 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
     <div class="radio">
       <label><input type="radio" name="remember" value="sender" checked> <span>Always for <b id="fixAddr"></b></span></label>
       <label id="fixDomainRow"><input type="radio" name="remember" value="domain"> <span>Always for every sender at <b id="fixDomain"></b></span></label>
-      <label><input type="radio" name="remember" value="none"> <span>Only this mail (the model learns from it as an example)</span></label>
+      <label id="fixNoneRow"><input type="radio" name="remember" value="none"> <span>Only this mail (the model learns from it as an example)</span></label>
     </div></div>
   <div class="foot">
     <button type="button" class="btn" id="fixCancel">Cancel</button>
@@ -465,6 +538,8 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let M = null, ollMode = "active";
 let S = null, themeFilter = "", statusFilter = "", query = "", provider = "anthropic", polling = null, lastTotal = null;
+let waiting = false;  // a job was just started: report its end even if it was very quick
+let page = "sort", SD = null, senderFilter = "all", senderQuery = "";
 let scope = { kind: "count", value: 500 }, batchSize = 100, skip = new Set(), planId = null, inited = false, hintHidden = false;
 const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
                 set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
@@ -522,7 +597,7 @@ async function refresh() {
   if (!inited && S.sort) initControls();
   render();
   if (S.job.running && !polling) polling = setInterval(refresh, 600);
-  if (!S.job.running && polling) { clearInterval(polling); polling = null; jobEnded(); }
+  if (!S.job.running && (polling || waiting)) { clearInterval(polling); polling = null; waiting = false; jobEnded(); }
 }
 function jobEnded() {
   loadModel(); loadRules();
@@ -530,6 +605,9 @@ function jobEnded() {
   const n = S.notice;
   if (n && n.kind === "apply") toast(`Done: ${fmt(n.applied)} mails labelled, ${fmt(n.moved)} moved out of the Inbox.`);
   if (n && n.kind === "undo") toast(`Undone: ${fmt(n.undone)} mails back as they were.`);
+  if (n && n.kind === "scan") toast(`${fmt(n.mails)} mails from ${fmt(n.senders)} senders · ${fmt(n.with_unsubscribe)} with an unsubscribe link.`);
+  if (n && n.kind === "suggest") toast(`Rules proposed for ${fmt(n.suggested)} senders.`);
+  if (n && (n.kind === "scan" || n.kind === "suggest")) loadSenders();
 }
 
 function initControls() {
@@ -563,8 +641,11 @@ function render() {
   $("#demoBanner").classList.toggle("hidden", !S.demo);
   const ready = S.configured;
   $("#welcome").classList.toggle("hidden", ready);
-  $("#mainCol").classList.toggle("hidden", !ready);
+  $("#mainCol").classList.toggle("hidden", !ready || page !== "sort");
+  $("#sendersCol").classList.toggle("hidden", !ready || page !== "senders");
   $("#sideCol").classList.toggle("hidden", !ready);
+  $("#pageSeg").classList.toggle("hidden", !ready);
+  $("#pageSeg").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.p === page));
 
   const conn = $("#conn");
   conn.className = "pill " + (ready ? "ok" : "warn");
@@ -627,6 +708,7 @@ function render() {
 
   $("#log").textContent = S.log.length ? S.log.join("\n") : "Nothing yet.";
   renderResult();
+  renderScanJob();
 }
 const sameScope = p => p.kind === scope.kind && (p.kind === "all" || p.value === +scope.value);
 const describe = p => p.kind === "count" ? `newest ${fmt(p.value)}` : p.kind === "days" ? `last ${fmt(p.value)} days` : "whole inbox";
@@ -699,10 +781,98 @@ function renderResult() {
   }
 }
 
+/* senders page */
+function setPage(p) { page = p; store.set("adagio-page", p); render(); if (p === "senders") loadSenders(); window.scrollTo(0, 0); }
+$("#pageSeg").querySelectorAll("button").forEach(b => b.onclick = () => setPage(b.dataset.p));
+async function loadSenders() { const r = await api("/api/senders"); if (r.ok) { SD = r; renderSenders(); } }
+function renderScanJob() {
+  const job = S.job, busy = job.running, mine = busy && (job.kind === "scan" || job.kind === "suggest");
+  $("#scanBtn").disabled = busy; $("#suggestBtn").disabled = busy || !SD || !SD.scan;
+  $("#scanBtn span").textContent = busy && job.kind === "scan" ? "Scanning…" : SD && SD.scan ? "Scan again" : "Scan my mailbox";
+  $("#scanProgress").classList.toggle("on", mine); $("#scanProgress").classList.toggle("running", mine);
+  if (mine) {
+    $("#scanFill").style.width = Math.max(3, job.total ? Math.round(100 * job.done / job.total) : 3) + "%";
+    $("#scanText").textContent = job.kind === "scan" ? (job.total ? `${fmt(job.done)} of ${fmt(job.total)} mails read (headers only)` : "Listing your mails…")
+      : (job.total ? `${job.done} of ${job.total} senders checked with ${(job.model || "").split(" · ")[0]}` : "Choosing the senders…");
+  }
+}
+const safeLink = u => /^(https?:\/\/|mailto:)/i.test(u || "") ? u : "";
+const initials = r => ((r.name || r.address).replace(/[^\p{L}\p{N}]/gu, "")[0] || "?").toUpperCase();
+const hue = t => PALETTE[[...t].reduce((a, c) => a + c.charCodeAt(0), 0) % PALETTE.length];
+function renderSenders() {
+  if (!SD) return;
+  if (S) renderScanJob();
+  const all = SD.senders, scan = SD.scan;
+  $("#tSenders").textContent = scan ? fmt(all.length) : "–";
+  $("#tMails").textContent = scan ? fmt(scan.mails) : "–";
+  $("#tSubs").textContent = scan ? fmt(SD.with_unsubscribe) : "–";
+  $("#tRules").textContent = scan ? fmt(all.filter(r => r.rule).length) : "–";
+  $("#scanInfo").innerHTML = scan ? `<span>Last scan: <b>${esc(scan.created.slice(0, 16))}</b></span><span>Folder: <b>${esc(scan.mailbox)}</b></span>` : "";
+  const counts = { all: all.filter(r => r.state !== "hidden").length, subs: all.filter(r => safeLink(r.unsubscribe) && r.state !== "hidden").length,
+                   sugg: all.filter(r => r.theme && !r.rule).length, hidden: all.filter(r => r.state === "hidden").length };
+  $("#senderSeg").querySelectorAll("button").forEach(b => { b.classList.toggle("on", b.dataset.f === senderFilter);
+    b.textContent = { all: "All", subs: "Subscriptions", sugg: "Suggested rules", hidden: "Hidden" }[b.dataset.f] + (scan ? ` ${counts[b.dataset.f]}` : ""); });
+  const q = senderQuery.toLowerCase();
+  let rows = all.filter(r => senderFilter === "hidden" ? r.state === "hidden" : r.state !== "hidden");
+  if (senderFilter === "subs") rows = rows.filter(r => safeLink(r.unsubscribe));
+  if (senderFilter === "sugg") rows = rows.filter(r => r.theme && !r.rule);
+  if (q) rows = rows.filter(r => (r.name + " " + r.address).toLowerCase().includes(q));
+  $("#sendersSub").textContent = !scan ? "Scan your mailbox to see your senders." :
+    senderFilter === "subs" ? "Newsletters and mailing lists. Unsubscribe opens the sender's own page in a new tab: Mail Adagio never unsubscribes by itself."
+    : senderFilter === "sugg" ? "Rules proposed from 3 recent mails of each sender. Accept one and every mail from this sender is sorted that way, with no AI call."
+    : "Sorted by number of mails.";
+  const max = Math.max(1, ...all.map(r => r.mails)), shown = rows.slice(0, 300);
+  $("#senders").innerHTML = !scan ? `<div class="empty">No scan yet.</div>` : !rows.length ? `<div class="empty">No sender here.</div>` : shown.map((r, i) => {
+    const link = safeLink(r.unsubscribe);
+    const sugg = r.rule ? `<span class="chip rule" title="Your rule (${esc(r.rule.kind)}: ${esc(r.rule.value)})"><span class="dot" style="background:${color(r.rule.theme)}"></span>${esc(r.rule.theme)} · ${esc(r.rule.status)}</span>`
+      : r.theme ? `<span class="chip" title="Suggested from ${esc(r.votes)}"><span class="dot" style="background:${color(r.theme)}"></span>${esc(r.theme)} · ${esc(r.status)}</span>
+          <button class="btn sm primary" data-act="accept" data-i="${i}" title="Always sort ${esc(r.address)} this way">Accept</button><button class="btn sm" data-act="edit" data-i="${i}" title="Choose another theme or status">Change</button>`
+      : `<button class="btn sm ghost" data-act="edit" data-i="${i}" style="color:var(--muted)">Add a rule</button>`;
+    const unsub = link ? (r.state === "opened" ? `<span class="opened" title="Opened ${esc(r.state_at.slice(0, 16))}">Link opened</span>` : "")
+      + `<a class="btn sm" href="${esc(link)}" target="_blank" rel="noopener noreferrer" data-act="unsub" data-i="${i}" title="Opens ${esc(link.replace(/^(https?:\/\/|mailto:)/i, "").split(/[/?]/)[0])}">Unsubscribe ↗</a>` : "";
+    const hide = `<button class="iconb" data-act="${r.state === "hidden" ? "show" : "hide"}" data-i="${i}" title="${r.state === "hidden" ? "Show again" : "Hide from this list"}">${r.state === "hidden"
+      ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>`
+      : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`}</button>`;
+    return `<div class="srow">
+      <div class="avatar" style="background:${hue(r.address)}">${esc(initials(r))}</div>
+      <div class="who" title="${esc(r.address)}"><b>${esc(r.name)}</b><small>${esc(r.address)}</small></div>
+      <div class="cnt">${fmt(r.mails)} mail${r.mails === 1 ? "" : "s"} · ${esc((r.last_date || "").slice(5).replace("-", "/"))}<div class="track"><div style="width:${100 * r.mails / max}%"></div></div></div>
+      <div class="sugg">${sugg}</div>
+      <div class="acts">${unsub}${hide}</div>
+    </div>`; }).join("") + (rows.length > shown.length ? `<div class="more">Showing ${shown.length} of ${fmt(rows.length)}. Search to find the others.</div>` : "");
+  $("#senders").querySelectorAll("[data-act]").forEach(el => el.onclick = async e => {
+    const r = shown[+el.dataset.i], act = el.dataset.act;
+    if (act === "unsub") { api("/api/sender", { address: r.address, state: "opened" }).then(loadSenders); return; }
+    if (act === "edit") return openSenderFix(r);
+    if (act === "accept") {
+      const x = await api("/api/rule", { kind: "sender", value: r.address, theme: r.theme, status: r.status });
+      if (!x.ok) return toast(x.error, true);
+      toast(`Rule saved: ${r.name} → ${r.theme} · ${r.status}`); loadRules(); refresh();
+    } else {
+      await api("/api/sender", { address: r.address, state: act === "hide" ? "hidden" : "" });
+    }
+    loadSenders();
+  });
+}
+$("#senderSeg").querySelectorAll("button").forEach(b => b.onclick = () => { senderFilter = b.dataset.f; renderSenders(); });
+$("#senderSearch").oninput = e => { senderQuery = e.target.value; renderSenders(); };
+$("#scanBtn").onclick = () => start("/api/scan", {});
+$("#suggestBtn").onclick = () => { senderFilter = "sugg"; start("/api/suggest", { top: 20 }); };
+function openSenderFix(r) {
+  fix = { mode: "sender", sender: r, theme: r.theme || (r.rule && r.rule.theme) || "Other", status: r.status || (r.rule && r.rule.status) || S.statuses[S.statuses.length - 1] };
+  $("#fixDlg h2").textContent = "Rule for this sender";
+  $("#fixFrom").textContent = `${r.name} <${r.address}>`; $("#fixSubj").textContent = `${fmt(r.mails)} mails in your mailbox`;
+  $("#fixAddr").textContent = r.address; $("#fixDomain").textContent = r.domain;
+  $("#fixDomainRow").classList.toggle("hidden", !r.domain); $("#fixNoneRow").classList.add("hidden");
+  $("#fixForm").querySelector('input[value="sender"]').checked = true;
+  drawFix(); $("#fixDlg").showModal();
+}
+
 /* corrections and rules */
 let fix = null;
 function openFix(m) {
-  fix = { mail: m, theme: m.theme, status: m.status };
+  fix = { mode: "mail", mail: m, theme: m.theme, status: m.status };
+  $("#fixDlg h2").textContent = "Correct this mail"; $("#fixNoneRow").classList.remove("hidden");
   const addr = (m.sender.match(/<([^>]+)>/) || [, m.sender])[1].trim().toLowerCase();
   const dom = addr.includes("@") ? addr.split("@")[1] : "";
   $("#fixFrom").textContent = m.sender; $("#fixSubj").textContent = m.subject || "(no subject)";
@@ -722,6 +892,12 @@ $("#fixCancel").onclick = () => $("#fixDlg").close();
 $("#fixForm").onsubmit = async e => {
   e.preventDefault();
   const remember = $("#fixForm").querySelector('input[name="remember"]:checked').value;
+  if (fix.mode === "sender") {
+    const x = await api("/api/rule", { kind: remember, value: remember === "domain" ? fix.sender.domain : fix.sender.address, theme: fix.theme, status: fix.status });
+    if (!x.ok) return toast(x.error, true);
+    $("#fixDlg").close(); toast("Rule saved. Mails from this sender will be sorted this way, with no AI call.");
+    loadRules(); loadSenders(); return refresh();
+  }
   const r = await api("/api/correct", { gm_msgid: fix.mail.gm_msgid, sender: fix.mail.sender, subject: fix.mail.subject,
     theme: fix.theme, status: fix.status, remember });
   if (!r.ok) return toast(r.error, true);
@@ -781,6 +957,7 @@ $("#autoHintBtn").onclick = () => { hintHidden = true; setAlone(true); };
 async function start(path, body) {
   const r = await api(path, body);
   if (!r.ok) return toast(r.error, true);
+  waiting = path !== "/api/stop";
   refresh();
 }
 $("#runBtn").onclick = () => start("/api/plan", { scope, batch_size: batchSize });
@@ -857,7 +1034,8 @@ $("#settingsForm").onsubmit = async e => {
   await refresh(); await loadModel(); $("#checkBtn").click();
 };
 
-refresh().then(() => { loadModel(); loadRules(); });
+page = store.get("adagio-page") || "sort";
+refresh().then(() => { loadModel(); loadRules(); loadSenders(); });
 </script>
 </body>
 </html>

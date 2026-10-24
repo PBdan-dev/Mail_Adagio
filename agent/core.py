@@ -7,13 +7,14 @@ import time
 from collections import Counter
 from datetime import datetime
 
-from . import batches, classify, config, hardware, memory, models
+from . import batches, classify, config, hardware, memory, models, senders
 from .mail import Gmail, MailError, chunks
 
 AGENT = "mail-adagio"
 VERSION = "0.2.0"
 ACTIONS = ("check", "hardware", "preview", "correct", "rules", "delete_rule",
-           "estimate", "plan", "apply", "discard", "undo", "status")
+           "estimate", "plan", "apply", "discard", "undo", "status",
+           "scan", "senders", "sender_state", "suggest", "add_rule")
 LOG_PATH = config.ROOT / "adagio.log"  # readable journal of every run; None turns it off
 MEMORY_PATH = config.ROOT / "adagio.db"  # rules and examples learned from your corrections
 
@@ -31,7 +32,7 @@ def handle(request, cfg=None, gmail_factory=Gmail, ask=None, progress=None):
             cfg = cfg or config.load(request.get("config") or config.DEFAULT_PATH)
             if action == "check":
                 result = check(cfg, gmail_factory)
-            elif action in ("correct", "rules", "delete_rule"):
+            elif action in ("correct", "rules", "delete_rule", "add_rule"):
                 result = learn(cfg, request)
             elif action == "preview":
                 result = preview(cfg, request, gmail_factory, ask, progress)
@@ -54,9 +55,10 @@ def summary_line(r):
     if r["action"] == "preview":
         return (f"preview: read {r['processed']} mails, {r['fallbacks']} not classified, "
                 f"0 changes in Gmail ({r['model']})")
-    if r["action"] in ("correct", "rules", "delete_rule", "estimate", "status", "discard"):
+    if r["action"] in ("correct", "rules", "delete_rule", "estimate", "status", "discard", "senders",
+                       "sender_state", "add_rule"):
         return ""
-    if r["action"] in ("plan", "apply", "undo"):
+    if r["action"] in ("plan", "apply", "undo", "scan", "suggest"):
         return r.get("log", "")
     if r["action"] == "check":
         return f"check: connected to {r['email']}, {r['total_in_mailbox']} mails in {r['mailbox']}"
@@ -151,6 +153,13 @@ def learn(cfg, request):
         if request["action"] == "delete_rule":
             mem.delete_rule(request["id"])
             log(f"rule {request['id']} deleted")
+        if request["action"] == "add_rule":  # e.g. a suggestion you accepted on the Senders page
+            theme, status, kind = request.get("theme"), request.get("status"), request.get("kind", "sender")
+            if theme not in config.names(cfg["themes"]) or status not in config.names(cfg["statuses"]):
+                raise ValueError("Unknown theme or status")
+            mem.add_rule(kind, request.get("value", ""), theme, status)
+            log(f"rule added: mails from {request.get('value')} -> {theme} / {status}")
+            update_plan(cfg, mem, None, theme, status)
         return {"rules": mem.rules()}
     finally:
         mem.close()
@@ -542,3 +551,106 @@ def status(cfg, request, gmail_factory=None, ask=None, progress=None):
 
 STEP3 = {"estimate": estimate, "plan": plan, "apply": apply, "discard": discard, "undo": undo,
          "status": status}
+
+
+# --- Senders: subscriptions and rule suggestions --------------------------------------------
+#
+# scan: reads only the From, Date and List-Unsubscribe headers of every mail (fast, free, no AI).
+# suggest: for the senders who write the most, classifies a few of their mails and proposes a rule.
+
+def scan(cfg, request, gmail_factory, ask=None, progress=None):
+    """Count mails per sender and collect unsubscribe links. Reads headers only, changes nothing."""
+    me = cfg["gmail"]["email"].lower()
+    with connect(cfg, gmail_factory) as gmail:
+        where = cfg["gmail"].get("mailbox", "INBOX") if request.get("where") == "inbox" else gmail.all_mail()
+        gmail.open(where)
+        days = request.get("days")
+        uids = gmail.recent_uids(since_days=int(days) if days else None)
+        headers = []
+        for i, chunk in enumerate(chunks(uids, 1000)):
+            headers += gmail.headers(chunk)
+            if progress:
+                progress(min(len(uids), (i + 1) * 1000), len(uids), {})
+    headers = [h for h in headers if memory.address(h.sender) != me]  # not your own sent mails
+    headers.sort(key=lambda h: h.uid, reverse=True)
+    rows = senders.aggregate(headers)
+    store = senders.Senders(MEMORY_PATH)
+    try:
+        store.save_scan(rows, len(headers), where)
+    finally:
+        store.close()
+    links = sum(bool(r["unsubscribe"]) for r in rows.values())
+    return {"mailbox": where, "mails": len(headers), "senders": len(rows), "with_unsubscribe": links,
+            "changes_made": 0, "log": f"scan of {where}: {len(headers)} mails from {len(rows)} senders, "
+                   f"{links} with an unsubscribe link (headers only, nothing changed)"}
+
+
+def list_senders(cfg, request, gmail_factory=None, ask=None, progress=None):
+    """Every sender with its count, unsubscribe link, rule (if you have one) and suggested rule."""
+    themes, statuses = config.names(cfg["themes"]), config.names(cfg["statuses"])
+    store, mem = senders.Senders(MEMORY_PATH), memory.Memory(MEMORY_PATH)
+    try:
+        rows = store.all()
+        for r in rows:
+            rule = mem.match(r["address"], themes, statuses)
+            r["rule"] = {k: rule[k] for k in ("kind", "value", "theme", "status")} if rule else None
+            del r["samples"]
+        return {"scan": store.last_scan(), "senders": rows,
+                "with_unsubscribe": sum(bool(r["unsubscribe"]) for r in rows)}
+    finally:
+        store.close()
+        mem.close()
+
+
+def sender_state(cfg, request, gmail_factory=None, ask=None, progress=None):
+    """Remember that you opened the unsubscribe link of a sender, or hid it from the list."""
+    store = senders.Senders(MEMORY_PATH)
+    try:
+        store.set_state(request.get("address", ""), request.get("state", ""))
+        if request.get("state") == "opened":
+            log(f"unsubscribe link opened for {request.get('address')}")
+        return {}
+    finally:
+        store.close()
+
+
+def suggest(cfg, request, gmail_factory, ask=None, progress=None):
+    """Propose a rule for the senders who write the most, from a few of their mails."""
+    top, minimum = int(request.get("top") or 20), int(request.get("min_mails") or 5)
+    themes, statuses = config.names(cfg["themes"]), config.names(cfg["statuses"])
+    store, mem = senders.Senders(MEMORY_PATH), memory.Memory(MEMORY_PATH)
+    try:
+        scan_info = store.last_scan()
+        if not scan_info:
+            raise ValueError("Scan your mailbox first")
+        todo = [r for r in store.all() if r["mails"] >= minimum and not r["theme"] and r["samples"]
+                and not mem.match(r["address"], themes, statuses)][:top]
+        ask, model_note = get_model(cfg, request, ask)
+        if progress:
+            progress(0, 0, {"model": model_note})
+        examples, done = mem.examples(), []
+        with connect(cfg, gmail_factory) as gmail:
+            gmail.open(scan_info["mailbox"])
+            for i, r in enumerate(todo, 1):
+                mails = gmail.fetch(r["samples"], cfg["behavior"]["body_chars"])
+                results = [classify.classify(m, ask, cfg, examples=examples) for m in mails]
+                if results and all(x.provider_error for x in results) and not done:
+                    raise models.ModelError(f"The model {model_note.split(' · ')[0]} did not answer: "
+                                            f"{results[0].error}")
+                link = next((m.unsubscribe for m in mails if m.unsubscribe), "")
+                if link:
+                    store.set_link(r["address"], link)
+                vote = senders.majority(results)
+                if vote:
+                    store.suggest(r["address"], *vote)
+                    done.append(r["address"])
+                if progress:
+                    progress(i, len(todo), {})
+        return {"suggested": len(done), "checked": len(todo), "model": model_note, "changes_made": 0,
+                "log": f"suggest: rules proposed for {len(done)} senders ({model_note}), nothing changed"}
+    finally:
+        store.close()
+        mem.close()
+
+
+STEP3.update(scan=scan, senders=list_senders, sender_state=sender_state, suggest=suggest)

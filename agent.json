@@ -2,10 +2,10 @@
   "name": "mail-adagio",
   "version": "0.2.0",
   "description": "Sorts Gmail: gives each mail one theme and one status, using an AI model you choose. Never deletes mail.",
-  "status": "Step 3: sorts the inbox by batches (labels + out of the Inbox), with approval, undo and resume.",
+  "status": "Step 3: sorts the inbox by batches (labels + out of the Inbox), with approval, undo and resume. Senders page: subscriptions and suggested rules.",
   "how_to_call": "python adagio.py call   (one JSON request on stdin, one JSON result on stdout)",
   "input": {
-    "action": "check | hardware | preview | estimate | plan | apply | discard | undo | status | correct | rules | delete_rule",
+    "action": "check | hardware | preview | estimate | plan | apply | discard | undo | status | correct | rules | delete_rule | add_rule | scan | senders | sender_state | suggest",
     "scope": "estimate/plan: {kind: count|days|all, value: N}",
     "batch_size": "estimate/plan: mails per batch, 50 to 1000 (default from config)",
     "act_alone": "plan: true = apply the batch right away (default from config)",
@@ -15,7 +15,13 @@
     "limit": "preview: number of recent mails (default 20)",
     "since_days": "preview: only mails from the last N days (optional)",
     "correct": "{gm_msgid, sender, subject, theme, status, remember: none|sender|domain}",
-    "config": "path to config.yaml (optional)"
+    "config": "path to config.yaml (optional)",
+    "where": "scan: all (All Mail, default) | inbox",
+    "days": "scan: only mails from the last N days (optional)",
+    "top": "suggest: number of senders to check (default 20)",
+    "min_mails": "suggest: only senders with at least N mails (default 5)",
+    "add_rule": "{kind: sender|domain, value, theme, status}",
+    "sender_state": "{address, state: ''|opened|hidden}"
   },
   "output": {
     "ok": "true or false",
@@ -27,10 +33,14 @@
     "apply": "{applied, moved, skipped, changes_made, progress}",
     "undo": "{undone, back_in_inbox, changes_made, progress}",
     "status": "{progress, plan, last, act_alone, batch_size, archive, labels}",
-    "preview": "{processed, changes_made: 0, by_theme, by_status, fallbacks, mails}"
+    "preview": "{processed, changes_made: 0, by_theme, by_status, fallbacks, mails}",
+    "scan": "{mailbox, mails, senders, with_unsubscribe, changes_made: 0}",
+    "senders": "{scan, with_unsubscribe, senders: [{address, name, domain, mails, last_date, unsubscribe, state, theme, status, votes, rule}]}",
+    "suggest": "{suggested, checked, model, changes_made: 0}"
   },
   "never": [
     "delete mail",
-    "store mail content (only id, date, sender, subject and tags)"
+    "store mail content (only id, date, sender, subject and tags)",
+    "unsubscribe on its own (it only gives you the link)"
   ]
 }

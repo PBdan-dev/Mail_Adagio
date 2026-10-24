@@ -163,6 +163,21 @@ class App:
                 self.error = r["error"]
         return self.start("apply", work)
 
+    def start_simple(self, kind, request):
+        """Scan or suggest: one call in the background, with progress."""
+        cfg = self.cfg()
+        if self.demo:
+            request["model_note"] = "demo-model · demo"
+
+        def work():
+            r = self.call(request, progress=self.progress, cfg=cfg)
+            if r["ok"]:
+                self.notice = {"kind": kind, **{k: r[k] for k in ("mails", "senders", "with_unsubscribe",
+                                                                  "suggested", "checked") if k in r}}
+            else:
+                self.error = r["error"]
+        return self.start(kind, work)
+
     def start_undo(self):
         cfg = self.cfg()
 
@@ -209,6 +224,8 @@ def make_handler(app, port):
                 return self.send(200, app.model_info())
             if self.path == "/api/rules":
                 return self.send(200, app.call({"action": "rules"}))
+            if self.path == "/api/senders":
+                return self.send(200, app.call({"action": "senders"}))
             if self.path == "/api/hardware":
                 return self.send(200, core.handle({"action": "hardware"}))
             self.send(404, {"error": "not found"})
@@ -240,7 +257,8 @@ def make_handler(app, port):
 
         def post(self, body):
             simple = {"/api/correct": "correct", "/api/rules/delete": "delete_rule",
-                      "/api/estimate": "estimate", "/api/discard": "discard"}
+                      "/api/estimate": "estimate", "/api/discard": "discard",
+                      "/api/sender": "sender_state", "/api/rule": "add_rule"}
             if self.path in simple:
                 return self.send(200, app.call({**body, "action": simple[self.path]}))
             if self.path == "/api/check":
@@ -257,7 +275,10 @@ def make_handler(app, port):
                 app.job["stop"] = True
                 return self.send(200, {"ok": True})
             starters = {"/api/plan": lambda: app.start_plan(body), "/api/apply": lambda: app.start_apply(body),
-                        "/api/undo": app.start_undo}
+                        "/api/undo": app.start_undo,
+                        "/api/scan": lambda: app.start_simple("scan", {"action": "scan"}),
+                        "/api/suggest": lambda: app.start_simple("suggest", {"action": "suggest",
+                                                                             "top": body.get("top") or 20})}
             if self.path in starters:
                 started = starters[self.path]()
                 return self.send(200, {"ok": started, **({} if started else {"error": "Busy, try again in a moment"})})

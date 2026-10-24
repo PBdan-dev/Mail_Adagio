@@ -420,6 +420,81 @@ class TestStep3(unittest.TestCase):
             config.check(cfg)
 
 
+class TestSenders(unittest.TestCase):
+    """Senders page: headers-only scan, subscriptions, rule suggestions."""
+
+    def setUp(self):
+        from agent import demo
+        self.demo = demo
+        demo.DELAY = 0
+        demo.FakeIMAP.reset(copies=8)  # 112 mails, 13 senders
+        self.tmp = Path(tempfile.mkdtemp())
+        core.MEMORY_PATH = self.tmp / "adagio.db"
+        self.cfg = cfg_with()
+
+    def tearDown(self):
+        core.MEMORY_PATH = ":memory:"
+        shutil.rmtree(self.tmp)
+
+    def run_(self, **request):
+        return core.handle(request, cfg=self.cfg, gmail_factory=self.demo.gmail_factory, ask=self.demo.ask)
+
+    def test_scan_counts_senders_and_links_without_changing_anything(self):
+        before = {u: set(m["labels"]) for u, m in self.demo.FakeIMAP.mails.items()}
+        r = self.run_(action="scan")
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertEqual((r["mails"], r["senders"], r["with_unsubscribe"]), (112, 13, 6))
+        self.assertEqual({u: set(m["labels"]) for u, m in self.demo.FakeIMAP.mails.items()}, before)
+        self.assertEqual({c[0] for c in self.demo.FakeIMAP.commands} - {"SEARCH", "FETCH"}, set())
+        rows = {s["address"]: s for s in self.run_(action="senders")["senders"]}
+        self.assertEqual(rows["jobs@careers.example"]["mails"], 16)
+        self.assertEqual(rows["hello@ainotes.example"]["unsubscribe"], "https://ainotes.example/unsubscribe?u=demo")
+        self.assertEqual(rows["mum@family.example"]["unsubscribe"], "")
+
+    def test_suggest_accept_and_state(self):
+        self.assertFalse(self.run_(action="suggest")["ok"])  # scan first
+        self.run_(action="scan")
+        r = self.run_(action="suggest", top=20, min_mails=5)
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertEqual(r["suggested"], 13)
+        rows = {s["address"]: s for s in self.run_(action="senders")["senders"]}
+        jobs = rows["jobs@careers.example"]
+        self.assertEqual((jobs["theme"], jobs["status"], jobs["votes"]), ("Job Search", "Info", "3 of 3 mails"))
+        self.assertEqual(self.run_(action="suggest")["checked"], 0)  # not asked twice
+
+        self.assertFalse(self.run_(action="add_rule", kind="sender", value="x@y.z", theme="Nope", status="Info")["ok"])
+        self.run_(action="add_rule", kind="sender", value="jobs@careers.example", theme="Job Search", status="Info")
+        rows = {s["address"]: s for s in self.run_(action="senders")["senders"]}
+        self.assertEqual(rows["jobs@careers.example"]["rule"]["theme"], "Job Search")
+
+        self.run_(action="sender_state", address="promo@pizzanow.example", state="opened")
+        rows = {s["address"]: s for s in self.run_(action="senders")["senders"]}
+        self.assertEqual(rows["promo@pizzanow.example"]["state"], "opened")
+        self.assertFalse(self.run_(action="sender_state", address="a@b.c", state="deleted")["ok"])
+        self.run_(action="scan")  # a new scan keeps what you did
+        rows = {s["address"]: s for s in self.run_(action="senders")["senders"]}
+        self.assertEqual((rows["promo@pizzanow.example"]["state"], rows["jobs@careers.example"]["votes"]),
+                         ("opened", "3 of 3 mails"))
+
+    def test_accepted_rule_updates_the_pending_plan(self):
+        plan = self.run_(action="plan", scope={"kind": "count", "value": 30}, batch_size=30)
+        self.run_(action="add_rule", kind="domain", value="family.example", theme="Admin", status="Info")
+        mails = self.run_(action="status")["plan"]["mails"]
+        mum = [m for m in mails if "family.example" in m["sender"]]
+        self.assertTrue(mum and all((m["theme"], m["status"]) == ("Admin", "Info") for m in mum))
+        self.assertTrue(plan["ok"])
+
+    def test_unsubscribe_parsing(self):
+        self.assertEqual(mail.unsubscribe_header("<mailto:a@b.c>, <https://b.c/u?x=1>"), "https://b.c/u?x=1")
+        self.assertEqual(mail.unsubscribe_header("<mailto:a@b.c>"), "mailto:a@b.c")
+        self.assertEqual(mail.unsubscribe_header(""), "")
+        msg = mail.email.message_from_bytes(raw_mail(
+            "News", "N <n@news.com>", html='<p><a href="https://news.com/read">Read</a> '
+            '<a href="https://news.com/u?a=1&amp;b=2"><span>Se d\u00e9sabonner</span></a></p>'),
+            policy=mail.email.policy.default)
+        self.assertEqual(mail.unsubscribe_link(msg), "https://news.com/u?a=1&b=2")
+
+
 class TestWeb(unittest.TestCase):
     """Starts the local server in demo mode and talks to it like the page does."""
 

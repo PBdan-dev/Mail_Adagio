@@ -41,10 +41,16 @@ SAMPLES = [
 ]
 
 
-def _raw(sender, subject, text, when):
+BULK = {"Newsletters", "Promotions", "Job Search", "Social & Notifications", "Shopping & Deliveries"}
+
+
+def _raw(sender, subject, text, when, theme=""):
     m = EmailMessage()
     m["From"], m["Subject"], m["To"] = sender, subject, "you@gmail.com"
     m["Date"] = format_datetime(when)
+    if theme in BULK and "talent" not in sender:  # mailing lists carry an unsubscribe link
+        site = sender.split("@")[1].rstrip(">")
+        m["List-Unsubscribe"] = f"<mailto:leave@{site}>, <https://{site}/unsubscribe?u=demo>"
     m.set_content(text)
     return m.as_bytes()
 
@@ -63,11 +69,11 @@ class FakeIMAP:
         cls.mails, start = {}, datetime(2026, 10, 24, 9, 0, tzinfo=timezone.utc)
         n = 0
         for week in range(copies or cls.COPIES):
-            for sender, subject, text, _t, _s, day in SAMPLES:
+            for sender, subject, text, theme, _s, day in SAMPLES:
                 n += 1
                 when = start - timedelta(days=24 - day + 7 * week)
                 cls.mails[5000 + 10_000 - n] = {"gm": str(1879950646965534236 + n), "labels": {"\\Inbox"},
-                                                "raw": _raw(sender, subject, text, when), "date": when}
+                                                "raw": _raw(sender, subject, text, when, theme), "date": when}
 
     def __init__(self, host):
         if FakeIMAP.mails is None:
