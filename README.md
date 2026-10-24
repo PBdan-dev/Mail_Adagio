@@ -2,7 +2,7 @@
 
 An agent that sorts your Gmail. Each mail gets **one theme** (Finance, Travel, …) and **one status**
 (Important, To Do, Info). The AI model only chooses the two tags; plain code does everything else.
-It **never deletes** a mail.
+It **never deletes a mail on its own**: only you can send the mails it labels "To delete" to the Trash.
 
 > **Current version: step 3.** The agent sorts your inbox by batches. For each batch it shows a plan;
 > you untick what you want to keep as is, then apply. Each mail gets its theme and status labels and
@@ -71,6 +71,27 @@ without asking. Progress is saved in `adagio.db`: after a stop or a crash, it re
 Gmail reserves the name *Important*, so that status uses the label **Priority** (change it with
 `label:` in `config.yaml`). Set `archive: false` to keep the mails in the Inbox.
 
+## Labels: order, numbers, colours
+
+- **Order and numbers** (Labels in Gmail > Order and numbers): drag the labels into the order you
+  want. With numbering on, Gmail lists them in that order: statuses `01 - Priority`, `02 - To Do`,
+  `03 - Info`, themes `11 - Health` ... `21 - Promotions`, `98 - To delete`, `99 - Other`. Applying
+  renames the labels in Gmail (mails and colours stay), `config.yaml` (`label_order:`) and `adagio.db`.
+- **Colours**: each theme and status has one of Gmail's label colours (`color:` in `config.yaml`).
+  IMAP cannot colour a label, so pick the same colour once in Gmail (the app lists them).
+
+## Low-interest mails and "To delete"
+
+- **Mark low-interest mails as read** (off by default, `mark_read`): mails of the chosen themes
+  (Newsletters, Promotions, Social & Notifications by default) with the status Info are marked as read
+  when a batch is applied. Undo makes them unread again (only those that were unread).
+- **To delete** (`to_delete: true`): the model may propose a mail with no lasting value (expired
+  promotion, old notification), only when its status is Info. It gets the label `To delete`
+  (`98 - To delete` when numbered); untick it in the plan with ×. The agent never trashes anything on
+  its own, even when it acts alone. In the **To delete** card you check the mails in Gmail, then click
+  **Move to Trash** and confirm the count. Gmail keeps the Trash 30 days; **Restore** brings the last
+  ones back. Nothing is ever deleted for good (no EXPUNGE).
+
 ## Senders: subscriptions and ready-made rules
 
 The **Senders** tab of the interface:
@@ -110,7 +131,7 @@ in the theme. Keep one theme named `Other` (used when nothing fits). Same for `s
 ```
 adagio.py            command line (door 1) and JSON mode (door 2)
 agent/core.py        handle(request) -> result: the single entry point
-agent/mail.py        Gmail over IMAP: read, add/remove labels (never deletes)
+agent/mail.py        Gmail over IMAP: read, labels, read flag, Trash on request (never expunges)
 agent/batches.py     progress of the sort and what was done to each mail, in adagio.db
 agent/classify.py    prompt, answer check, retry, fallback
 agent/models.py      Anthropic, OpenRouter, Ollama adapters

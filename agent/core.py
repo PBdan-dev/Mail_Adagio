@@ -11,10 +11,11 @@ from . import batches, classify, config, hardware, memory, models, senders
 from .mail import Gmail, MailError, chunks
 
 AGENT = "mail-adagio"
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 ACTIONS = ("check", "hardware", "preview", "correct", "rules", "delete_rule",
            "estimate", "plan", "apply", "discard", "undo", "status",
-           "scan", "senders", "sender_state", "suggest", "add_rule")
+           "scan", "senders", "sender_state", "suggest", "add_rule", "label_order",
+           "keep", "to_delete", "trash", "restore")
 LOG_PATH = config.ROOT / "adagio.log"  # readable journal of every run; None turns it off
 MEMORY_PATH = config.ROOT / "adagio.db"  # rules and examples learned from your corrections
 
@@ -56,9 +57,9 @@ def summary_line(r):
         return (f"preview: read {r['processed']} mails, {r['fallbacks']} not classified, "
                 f"0 changes in Gmail ({r['model']})")
     if r["action"] in ("correct", "rules", "delete_rule", "estimate", "status", "discard", "senders",
-                       "sender_state", "add_rule"):
+                       "sender_state", "add_rule", "keep", "to_delete"):
         return ""
-    if r["action"] in ("plan", "apply", "undo", "scan", "suggest"):
+    if r["action"] in ("plan", "apply", "undo", "scan", "suggest", "label_order", "trash", "restore"):
         return r.get("log", "")
     if r["action"] == "check":
         return f"check: connected to {r['email']}, {r['total_in_mailbox']} mails in {r['mailbox']}"
@@ -234,7 +235,7 @@ def sort_mails(cfg, mails, ask, model_note, progress=None):
                 "sender": mail.sender, "subject": mail.subject,
                 "gmail_url": gmail_url(mail.gm_msgid),
                 "existing_labels": [x for x in mail.labels if not x.startswith("\\")],
-                "theme": r.theme, "status": r.status, "classified": r.ok,
+                "theme": r.theme, "status": r.status, "classified": r.ok, "to_delete": r.to_delete,
                 "rule": f"{rule['kind']}: {rule['value']}" if rule else "",
                 **({"error": r.error} if not r.ok else {}),
             })
@@ -284,7 +285,7 @@ def summarize(cfg, rows):
 #
 # estimate -> plan (analyse the next batch, nothing changes in Gmail) -> apply (labels + out of
 # the Inbox) -> plan ... and undo (puts the last applied batch back as it was).
-# Only labels are added or removed. A mail is never deleted.
+# Only labels are added or removed. A mail is never deleted (see "To delete" below for the Trash).
 
 INBOX = "\\Inbox"
 SECONDS_PER_CALL = {"anthropic": 1.2, "openrouter": 2.0, "ollama": 1.5}  # until we have measured
@@ -354,6 +355,9 @@ def plan_result(cfg, store, batch):
             "labelled": sum(r["state"] == "applied" for r in rows),
             "moved": sum(r["archived"] for r in rows),
             "labels": labels, "archive": cfg["behavior"]["archive"],
+            "low_interest": sum(config.low_interest(cfg, r["theme"], r["status"]) for r in rows),
+            "marked_read": sum(r["marked_read"] for r in rows),
+            "to_delete": sum(r["to_delete"] for r in rows), "delete_label": config.delete_label(cfg),
             **summarize(cfg, rows), "mails": rows}
 
 
@@ -437,12 +441,14 @@ def apply(cfg, request, gmail_factory, ask=None, progress=None):
         todo = [r for r in rows if r["gm_msgid"] not in skip]
         names = config.labels(cfg)
         archive = cfg["behavior"]["archive"]
-        done = moved = 0
+        done = moved = read = 0
         try:
             with connect(cfg, gmail_factory) as gmail:
                 folders = gmail.folders()
                 known = {f.lower() for f in folders}
-                for label in sorted({names[r["theme"]] for r in todo} | {names[r["status"]] for r in todo}):
+                dlabel = config.delete_label(cfg)
+                wanted = {names[r["theme"]] for r in todo} | {names[r["status"]] for r in todo}
+                for label in sorted(wanted | ({dlabel} if any(r["to_delete"] for r in todo) else set())):
                     if label.lower() not in known:
                         gmail.create_label(label)
                 gmail.open(gmail.all_mail(folders), readonly=False)
@@ -454,20 +460,25 @@ def apply(cfg, request, gmail_factory, ask=None, progress=None):
                     if uid is None:  # deleted or moved to Trash/Spam meanwhile
                         store.mark(r["gm_msgid"], "skipped")
                         continue
-                    groups.setdefault((names[r["theme"]], names[r["status"]]), []).append((r, uid))
+                    key = (names[r["theme"]], names[r["status"]]) + ((dlabel,) if r["to_delete"] else ())
+                    groups.setdefault(key, []).append((r, uid))
                 for labels, items in groups.items():
                     uids = [uid for _, uid in items]
                     gmail.change_labels(uids, add=labels)
                     in_inbox = [uid for uid in uids if INBOX in current.get(uid, ("", []))[1]]
                     if archive:
                         gmail.change_labels(in_inbox, remove=[INBOX])
+                    low = [uid for r, uid in items if config.low_interest(cfg, r["theme"], r["status"])]
+                    unread = gmail.unread(low) if low else set()
+                    gmail.mark_read(unread)
                     for r, uid in items:
                         have = {x.lower() for x in current.get(uid, ("", []))[1]}
                         added = [x for x in labels if x.lower() not in have]
                         archived = archive and uid in in_inbox
-                        store.mark(r["gm_msgid"], "applied", added, archived)
+                        store.mark(r["gm_msgid"], "applied", added, archived, uid in unread)
                         done += 1
                         moved += archived
+                        read += uid in unread
         finally:
             for r in rows:
                 if r["gm_msgid"] in skip:
@@ -480,10 +491,11 @@ def apply(cfg, request, gmail_factory, ask=None, progress=None):
         prog = progress_of(store, job, size)
         number = prog["batch_no"] - 1 if prog else batch["id"]
         line = (f"apply: batch {number}: {done} mails labelled, {moved} moved out of the Inbox, "
-                f"{len(skip & {r['gm_msgid'] for r in rows})} left as they were")
+                + (f"{read} marked as read, " if read else "")
+                + f"{len(skip & {r['gm_msgid'] for r in rows})} left as they were")
         if not done:  # every mail left as it was: nothing to undo
             store.set_state(batch["id"], "skipped")
-        return {"applied": done, "moved": moved, "skipped": len(rows) - done, "batch_id": batch["id"],
+        return {"applied": done, "moved": moved, "read": read, "skipped": len(rows) - done, "batch_id": batch["id"],
                 "changes_made": done, "progress": prog, "log": line, "plan": None}
     finally:
         store.close()
@@ -522,6 +534,8 @@ def undo(cfg, request, gmail_factory, ask=None, progress=None):
                 gmail.change_labels(uids, remove=labels)
             back = [found[r["gm_msgid"]] for r in rows if r["archived"] and r["gm_msgid"] in found]
             gmail.change_labels(back, add=[INBOX])
+            unread = [found[r["gm_msgid"]] for r in rows if r["marked_read"] and r["gm_msgid"] in found]
+            gmail.mark_read(unread, read=False)  # unread again, as they were
         for r in rows:
             store.mark(r["gm_msgid"], "undone")
         store.set_state(batch["id"], "undone")
@@ -529,7 +543,7 @@ def undo(cfg, request, gmail_factory, ask=None, progress=None):
         return {"undone": len(rows), "back_in_inbox": len(back), "batch_id": batch["id"],
                 "changes_made": len(rows), "progress": prog,
                 "log": f"undo: batch applied at {batch['applied'][11:16]}: labels removed from {len(rows)} mails, "
-                       f"{len(back)} put back in the Inbox"}
+                       f"{len(back)} put back in the Inbox" + (f", {len(unread)} unread again" if unread else "")}
     finally:
         store.close()
 
@@ -544,7 +558,8 @@ def status(cfg, request, gmail_factory=None, ask=None, progress=None):
                 "plan": plan_result(cfg, store, pending) if pending else None,
                 "last": plan_result(cfg, store, last) if last else None,
                 "act_alone": cfg["behavior"]["act_alone"], "batch_size": cfg["behavior"]["batch_size"],
-                "archive": cfg["behavior"]["archive"], "labels": config.labels(cfg)}
+                "archive": cfg["behavior"]["archive"], "labels": config.labels(cfg),
+                "mark_read": cfg["behavior"]["mark_read"], "mark_read_themes": cfg["behavior"]["mark_read_themes"]}
     finally:
         store.close()
 
@@ -653,4 +668,133 @@ def suggest(cfg, request, gmail_factory, ask=None, progress=None):
         mem.close()
 
 
-STEP3.update(scan=scan, senders=list_senders, sender_state=sender_state, suggest=suggest)
+def keep(cfg, request, gmail_factory=None, ask=None, progress=None):
+    """Untick "To delete" on a mail of the plan waiting for approval."""
+    store = batches.Store(MEMORY_PATH)
+    try:
+        store.keep(request.get("gm_msgid"))
+        batch = store.pending()
+        return {"plan": plan_result(cfg, store, batch) if batch else None}
+    finally:
+        store.close()
+
+
+# --- "To delete": the model proposes, you check in Gmail, you send them to the Trash ----------
+#
+# Never automatic, even when the agent acts alone. The Trash is emptied by Gmail after 30 days;
+# until then "restore" brings the mails back. Nothing is ever deleted for good (no EXPUNGE).
+
+def to_delete(cfg, request, gmail_factory, ask=None, progress=None):
+    """How many mails carry the "To delete" label, and the last trash that can be restored."""
+    label = config.delete_label(cfg)
+    with connect(cfg, gmail_factory) as gmail:
+        count = gmail.open(label) if label.lower() in {f.lower() for f in gmail.folders()} else 0
+    store = batches.Store(MEMORY_PATH)
+    try:
+        last = store.last_trash()
+    finally:
+        store.close()
+    return {"label": label, "count": count,
+            "last_trash": {k: last[k] for k in ("trash_id", "created", "n")} if last else None}
+
+
+def trash(cfg, request, gmail_factory, ask=None, progress=None):
+    """Move every mail labelled "To delete" to Gmail's Trash. Only on your click, with the count you saw."""
+    label = config.delete_label(cfg)
+    with connect(cfg, gmail_factory) as gmail:
+        if label.lower() not in {f.lower() for f in gmail.folders()}:
+            raise ValueError(f"No label '{label}' in Gmail yet")
+        gmail.open(label, readonly=False)
+        uids = gmail.recent_uids()
+        if int(request.get("confirm", -1)) != len(uids):
+            raise ValueError(f"The label now holds {len(uids)} mails. Refresh and confirm again.")
+        meta = gmail.meta(uids)
+        gmail.to_trash(uids)
+    store = batches.Store(MEMORY_PATH)
+    try:
+        trash_id = store.add_trash(m[0] for m in meta.values())
+    finally:
+        store.close()
+    return {"trashed": len(uids), "trash_id": trash_id, "changes_made": len(uids),
+            "log": f"trash: {len(uids)} mails labelled '{label}' moved to Gmail Trash "
+                   f"(you asked; recoverable for 30 days)"}
+
+
+def restore(cfg, request, gmail_factory, ask=None, progress=None):
+    """Bring back from the Trash the mails of the last "Move to Trash", with their "To delete" label."""
+    label = config.delete_label(cfg)
+    store = batches.Store(MEMORY_PATH)
+    try:
+        last = store.last_trash()
+        if not last:
+            raise ValueError("Nothing to restore")
+        with connect(cfg, gmail_factory) as gmail:
+            folders = gmail.folders()
+            gmail.open(gmail.special("\\Trash", "[Gmail]/Trash", folders), readonly=False)
+            found = gmail.find(last["gm_msgids"])
+            gmail.copy(found.values(), label)
+            trash_folder = gmail.special("\\Trash", "[Gmail]/Trash", folders)
+            gmail.open(trash_folder)
+            still = gmail.find(found)  # check: Gmail should have taken them out of the Trash
+        store.restored(last["trash_id"])
+        missing = len(last["gm_msgids"]) - len(found)
+        back = len(found) - len(still)
+        result = {"restored": back, "still_in_trash": len(still), "missing": missing, "changes_made": back,
+                  "log": f"restore: {back} mails back from the Trash with the label '{label}'"
+                         + (f", {missing} no longer in the Trash" if missing else "")
+                         + (f", {len(still)} still in the Trash (restore them in Gmail)" if still else "")}
+        if still:
+            result["warning"] = (f"{len(still)} mails are still in the Trash. In Gmail: open the Trash, "
+                                 f"select them, then 'Move to' > Inbox.")
+        return result
+    finally:
+        store.close()
+
+
+def label_order(cfg, request, gmail_factory, ask=None, progress=None):
+    """Order and number the labels ("01 - Priority"); with apply, rename them in Gmail.
+
+    Gmail keeps the mails and the colour of a renamed label. Without apply, only shows what would change.
+    """
+    statuses, themes = config.order(cfg)
+    wanted = request.get("order") or statuses + themes
+    numbered = request.get("numbered", True)
+    new_cfg = {**cfg, "label_order": [n for n in wanted if n in statuses + themes] if numbered else None}
+    config.check(new_cfg)
+    old, new = config.labels(cfg), config.labels(new_cfg)
+    old[config.TO_DELETE], new[config.TO_DELETE] = config.delete_label(cfg), config.delete_label(new_cfg)
+    renames = [{"name": n, "old": old[n], "new": new[n]} for n in old if old[n] != new[n]]
+    s2, t2 = config.order(new_cfg)
+    result = {"numbered": numbered, "statuses": s2, "themes": t2, "labels": new, "renames": renames,
+              "renamed": 0, "changes_made": 0}
+    if not request.get("apply"):
+        return result
+    done = []
+    if renames:
+        with connect(cfg, gmail_factory) as gmail:
+            existing = {k.lower() for k in gmail.folders()}
+            clash = [r["new"] for r in renames if r["new"].lower() in existing and r["old"].lower() in existing]
+            if clash:
+                raise ValueError(f"A label named '{clash[0]}' already exists in Gmail. Rename or delete it first")
+            try:
+                for r in renames:
+                    if r["old"].lower() in existing:  # a label never used yet is created later with the new name
+                        gmail.rename_label(r["old"], r["new"])
+                        done.append(r)
+            except MailError:
+                for r in reversed(done):  # put back what was already renamed
+                    gmail.rename_label(r["new"], r["old"])
+                raise
+    if request.get("save", True):
+        config.save_order(request.get("config") or config.DEFAULT_PATH, new_cfg["label_order"])
+    store = batches.Store(MEMORY_PATH)
+    try:
+        store.rename_labels({r["old"]: r["new"] for r in renames})
+    finally:
+        store.close()
+    lines = [f"labels: {len(done)} renamed in Gmail" + (" (numbered)" if numbered else " (numbers removed)")]
+    lines += [f"  {r['old']} -> {r['new']}" for r in done]
+    return {**result, "renamed": len(done), "changes_made": len(done), "log": "\n".join(lines)}
+
+
+STEP3.update(keep=keep, to_delete=to_delete, trash=trash, restore=restore, label_order=label_order, scan=scan, senders=list_senders, sender_state=sender_state, suggest=suggest)

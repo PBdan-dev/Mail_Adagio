@@ -73,7 +73,8 @@ class FakeIMAP:
                 n += 1
                 when = start - timedelta(days=24 - day + 7 * week)
                 cls.mails[5000 + 10_000 - n] = {"gm": str(1879950646965534236 + n), "labels": {"\\Inbox"},
-                                                "raw": _raw(sender, subject, text, when, theme), "date": when}
+                                                "raw": _raw(sender, subject, text, when, theme), "date": when,
+                                                "seen": n % 3 == 0}
 
     def __init__(self, host):
         if FakeIMAP.mails is None:
@@ -88,7 +89,8 @@ class FakeIMAP:
 
     def list(self, *a):
         names = {label for m in self.mails.values() for label in m["labels"] if not label.startswith("\\")}
-        lines = [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\All) "/" "[Gmail]/All Mail"']
+        lines = [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\All) "/" "[Gmail]/All Mail"',
+                 b'(\\HasNoChildren \\Trash) "/" "[Gmail]/Trash"']
         lines += [f'(\\HasNoChildren) "/" "{utf7_encode(n)}"'.encode() for n in sorted(names | self.created)]
         return "OK", lines
 
@@ -99,15 +101,30 @@ class FakeIMAP:
         FakeIMAP.created.add(utf7_decode(name.strip('"')))
         return "OK", [b"Success"]
 
+    def rename(self, old, new):
+        FakeIMAP.commands.append(("RENAME", old, new))
+        old, new = utf7_decode(old.strip('"')), utf7_decode(new.strip('"'))
+        for m in self.mails.values():
+            if old in m["labels"]:
+                m["labels"] = (m["labels"] - {old}) | {new}
+        if old in FakeIMAP.created:
+            FakeIMAP.created = (FakeIMAP.created - {old}) | {new}
+        return "OK", [b"Success"]
+
     def select(self, mailbox, readonly=False):
         self.folder = utf7_decode(mailbox.strip('"'))
         return "OK", [str(len(self.visible())).encode()]
 
     def visible(self):
         """{uid in this folder: mail}"""
+        live = {u: m for u, m in self.mails.items() if "\\Trash" not in m["labels"]}
         if self.folder == "INBOX":
-            return {u - 5000: m for u, m in self.mails.items() if "\\Inbox" in m["labels"]}
-        return dict(self.mails)
+            return {u - 5000: m for u, m in live.items() if "\\Inbox" in m["labels"]}
+        if self.folder == "[Gmail]/Trash":
+            return {u: m for u, m in self.mails.items() if "\\Trash" in m["labels"]}
+        if self.folder == "[Gmail]/All Mail":
+            return live
+        return {u: m for u, m in live.items() if self.folder in m["labels"]}  # a label
 
     commands = []  # every IMAP command received, so tests can check nothing is ever deleted
 
@@ -124,6 +141,17 @@ class FakeIMAP:
                 hits = list(box)
             return "OK", [" ".join(map(str, sorted(hits))).encode()]
         uids = [int(x) for x in args[0].split(",")]
+        if command == "COPY":  # out of the Trash, back with this label
+            label = utf7_decode(args[1].strip('"'))
+            for u in uids:
+                if u in box:
+                    box[u]["labels"] = (box[u]["labels"] - {"\\Trash"}) | {label}
+            return "OK", []
+        if command == "STORE" and "FLAGS" in args[1]:
+            for u in uids:
+                if u in box:
+                    box[u]["seen"] = args[1][0] == "+"
+            return "OK", []
         if command == "STORE":
             op, value = args[1], args[2]
             labels = {utf7_decode(q or b) for q, b in re.findall(r'"([^"]*)"|(\\?[^\s()"]+)', value)}
@@ -138,6 +166,9 @@ class FakeIMAP:
                 continue
             labels = " ".join(f'"{x}"' if x.startswith("\\") else f'"{utf7_encode(x)}"'
                               for x in sorted(m["labels"])).replace("\\", "\\\\")
+            if args[1] == "(FLAGS)":
+                out.append(f"{i} (FLAGS ({'\\Seen' if m['seen'] else ''}) UID {u})".encode())
+                continue
             head = f"{i} (X-GM-MSGID {m['gm']} X-GM-LABELS ({labels}) UID {u}"
             if "BODY" in args[1]:
                 out += [(f"{head} BODY[]<0> {{{len(m['raw'])}}}".encode(), m["raw"]), b")"]
@@ -157,5 +188,5 @@ def ask(system, user, schema):
     time.sleep(DELAY)  # feel of a real model
     for sender, subject, _text, theme, status, _day in SAMPLES:
         if subject in user:
-            return json.dumps({"theme": theme, "status": status})
+            return json.dumps({"theme": theme, "status": status, "to_delete": theme == "Promotions"})
     return "{}"

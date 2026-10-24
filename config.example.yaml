@@ -17,6 +17,9 @@ model:
 behavior:
   act_alone: false          # true = apply each batch without asking (you can always undo the last one)
   batch_size: 100           # mails per batch, 50 to 1000
+  to_delete: true           # the model may label useless mails "To delete"; only you move them to the Trash
+  mark_read: false          # true = mark low-interest mails as read (themes below, status Info only)
+  mark_read_themes: ["Newsletters", "Promotions", "Social & Notifications"]
   archive: true             # true = move sorted mails out of the Inbox (they stay in their theme label)
   body_chars: 1500          # how many characters of each mail the model reads
 

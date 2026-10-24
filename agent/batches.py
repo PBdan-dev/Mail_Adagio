@@ -45,7 +45,15 @@ CREATE TABLE IF NOT EXISTS mails (
     corrected  INTEGER NOT NULL DEFAULT 0,
     state      TEXT NOT NULL,            -- planned | applied | skipped | undone
     added      TEXT NOT NULL DEFAULT '[]', -- labels the agent added (JSON list)
-    archived   INTEGER NOT NULL DEFAULT 0  -- 1 = the agent moved it out of the Inbox
+    archived   INTEGER NOT NULL DEFAULT 0, -- 1 = the agent moved it out of the Inbox
+    marked_read INTEGER NOT NULL DEFAULT 0, -- 1 = it was unread and the agent marked it as read
+    to_delete  INTEGER NOT NULL DEFAULT 0  -- 1 = proposed for deletion (label "To delete")
+);
+CREATE TABLE IF NOT EXISTS trash (
+    gm_msgid TEXT NOT NULL,
+    trash_id INTEGER NOT NULL,           -- one id per click on "Move to Trash"
+    created  TEXT NOT NULL,
+    restored INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -59,6 +67,11 @@ class Store:
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        columns = {r["name"] for r in self.db.execute("PRAGMA table_info(mails)")}
+        for column in ("marked_read", "to_delete"):  # adagio.db made by an older version
+            if column not in columns:
+                with self.db:
+                    self.db.execute(f"ALTER TABLE mails ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0")
 
     def close(self):
         self.db.close()
@@ -110,10 +123,11 @@ class Store:
             for r in rows:
                 self.db.execute(
                     "INSERT OR REPLACE INTO mails (gm_msgid, batch_id, uid, date, sender, subject, "
-                    "theme, status, classified, rule, error, state) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planned')",
+                    "theme, status, classified, rule, error, state, to_delete) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?)",
                     (r["gm_msgid"], cur.lastrowid, r["uid"], r["date"], r["sender"], r["subject"][:300],
-                     r["theme"], r["status"], int(r["classified"]), r.get("rule", ""), r.get("error", "")))
+                     r["theme"], r["status"], int(r["classified"]), r.get("rule", ""), r.get("error", ""),
+                     int(bool(r.get("to_delete")))))
         return cur.lastrowid
 
     def mails(self, batch_id):
@@ -122,6 +136,7 @@ class Store:
             r["added"] = json.loads(r["added"])
             r["classified"], r["corrected"], r["archived"] = (bool(r["classified"]), bool(r["corrected"]),
                                                               bool(r["archived"]))
+            r["marked_read"], r["to_delete"] = bool(r["marked_read"]), bool(r["to_delete"])
         return rows
 
     def set_state(self, batch_id, state):
@@ -143,22 +158,57 @@ class Store:
     def correct(self, gm_msgid, theme, status):
         with self.db:
             self.db.execute("UPDATE mails SET theme = ?, status = ?, classified = 1, error = '', "
-                            "corrected = 1, rule = '' WHERE gm_msgid = ? AND state = 'planned'",
+                            "corrected = 1, rule = '', to_delete = 0 WHERE gm_msgid = ? AND state = 'planned'",
                             (theme, status, str(gm_msgid)))
 
     def apply_rule(self, gm_msgid, theme, status, rule):
         with self.db:
             self.db.execute("UPDATE mails SET theme = ?, status = ?, classified = 1, error = '', "
-                            "rule = ? WHERE gm_msgid = ? AND state = 'planned' AND corrected = 0",
+                            "rule = ?, to_delete = 0 WHERE gm_msgid = ? AND state = 'planned' AND corrected = 0",
                             (theme, status, rule, gm_msgid))
 
-    def mark(self, gm_msgid, state, added=None, archived=None):
+    def mark(self, gm_msgid, state, added=None, archived=None, read=False):
         with self.db:
             if added is None:
                 self.db.execute("UPDATE mails SET state = ? WHERE gm_msgid = ?", (state, gm_msgid))
             else:
-                self.db.execute("UPDATE mails SET state = ?, added = ?, archived = ? WHERE gm_msgid = ?",
-                                (state, json.dumps(added), int(archived), gm_msgid))
+                self.db.execute("UPDATE mails SET state = ?, added = ?, archived = ?, marked_read = ? "
+                                "WHERE gm_msgid = ?", (state, json.dumps(added), int(archived), int(read), gm_msgid))
+
+    def keep(self, gm_msgid):
+        """You un-ticked "To delete" on a mail of the plan."""
+        with self.db:
+            self.db.execute("UPDATE mails SET to_delete = 0 WHERE gm_msgid = ? AND state = 'planned'", (str(gm_msgid),))
+
+    # trash: only when you click "Move to Trash" ---------------------------------
+    def add_trash(self, gm_msgids):
+        row = self.one("SELECT COALESCE(MAX(trash_id), 0) + 1 AS n FROM trash")
+        with self.db:
+            self.db.executemany("INSERT INTO trash (gm_msgid, trash_id, created) VALUES (?, ?, ?)",
+                                [(str(g), row["n"], now()) for g in gm_msgids])
+        return row["n"]
+
+    def last_trash(self):
+        row = self.one("SELECT trash_id, MIN(created) AS created, COUNT(*) AS n FROM trash WHERE restored = 0 "
+                       "GROUP BY trash_id ORDER BY trash_id DESC LIMIT 1")
+        if not row:
+            return None
+        row["gm_msgids"] = [r["gm_msgid"] for r in self.all("SELECT gm_msgid FROM trash WHERE trash_id = ? "
+                                                            "AND restored = 0", row["trash_id"])]
+        return row
+
+    def restored(self, trash_id):
+        with self.db:
+            self.db.execute("UPDATE trash SET restored = 1 WHERE trash_id = ?", (trash_id,))
+
+    def rename_labels(self, renamed):
+        """Labels renamed in Gmail: keep the undo list right."""
+        with self.db:
+            for row in self.db.execute("SELECT gm_msgid, added FROM mails WHERE added != '[]'").fetchall():
+                added = json.loads(row["added"])
+                new = [renamed.get(x, x) for x in added]
+                if new != added:
+                    self.db.execute("UPDATE mails SET added = ? WHERE gm_msgid = ?", (json.dumps(new), row["gm_msgid"]))
 
     def seconds_per_call(self, model):
         """Average time of one model call for this model, from past batches (None if unknown)."""

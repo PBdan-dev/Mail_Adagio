@@ -41,10 +41,12 @@ def check(cfg):
         raise ConfigError("Theme and status names must be unique")
     if set(themes) & set(statuses):
         raise ConfigError("A theme and a status cannot share a name (both become Gmail labels)")
-    labels = [label_of(e) for e in cfg["themes"] + cfg["statuses"]]
-    if len({x.lower() for x in labels}) != len(labels):
-        raise ConfigError("Two themes or statuses would get the same Gmail label")
-    for label in labels:
+    if not isinstance(cfg.get("label_order") or [], list):
+        raise ConfigError("label_order must be a list of theme and status names")
+    all_labels = list(labels(cfg).values()) + [delete_label(cfg)]
+    if len({x.lower() for x in all_labels}) != len(all_labels):
+        raise ConfigError(f"Two themes or statuses would get the same Gmail label (\"{TO_DELETE}\" is taken)")
+    for label in all_labels:
         if label.lower() in GMAIL_RESERVED or label.startswith("[Gmail]"):
             raise ConfigError(f"Gmail does not allow a label named '{label}'. "
                               f"Add a 'label:' line with another name under it in config.yaml")
@@ -58,7 +60,30 @@ def check(cfg):
     cfg["behavior"].setdefault("act_alone", False)
     cfg["behavior"].setdefault("batch_size", 100)
     cfg["behavior"].setdefault("archive", True)
+    cfg["behavior"].setdefault("to_delete", True)
+    cfg["behavior"].setdefault("mark_read", False)
+    cfg["behavior"].setdefault("mark_read_themes", list(LOW_INTEREST))
+    if not isinstance(cfg["behavior"]["mark_read_themes"], list):
+        raise ConfigError("behavior.mark_read_themes must be a list of theme names")
     cfg.setdefault("local_models", [])
+
+
+# Low interest: mails of these themes with the status Info can be marked as read (behavior.mark_read).
+LOW_INTEREST = ("Newsletters", "Promotions", "Social & Notifications")
+LOW_STATUS = "Info"
+
+
+TO_DELETE = "To delete"  # label for mails the model finds useless; only you send them to the Trash
+
+
+def delete_label(cfg):
+    """Gmail label of the mails proposed for deletion: "98 - To delete" when labels are numbered."""
+    return f"98 - {TO_DELETE}" if numbered(cfg) else TO_DELETE
+
+
+def low_interest(cfg, theme, status):
+    b = cfg["behavior"]
+    return bool(b["mark_read"]) and status == LOW_STATUS and theme in b["mark_read_themes"]
 
 
 def names(entries):
@@ -84,9 +109,9 @@ DEFAULT_COLORS = {
     "health": "Teal", "finance": "Green", "admin": "Dark Blue", "work & projects": "Blue",
     "job search": "Purple", "shopping & deliveries": "Orange", "travel": "Mint", "family & friends": "Pink",
     "newsletters": "Dark Green", "promotions": "Gray", "social & notifications": "Light Gray",
-    "other": "Brown", "important": "Red", "to do": "Yellow", "info": "Dark Gray",
+    "other": "Brown", "important": "Red", "to do": "Yellow", "info": "Dark Gray", "to delete": "Dark Red",
 }
-SPARE_COLORS = ["Dark Purple", "Dark Pink", "Dark Orange", "Dark Red", "Black"]  # for your own themes
+SPARE_COLORS = ["Dark Purple", "Dark Pink", "Dark Orange", "Black"]  # for your own themes
 
 
 def color_of(entry, spare=0):
@@ -101,6 +126,7 @@ def colors(cfg):
         name = color_of(e, spare)
         spare += not e.get("color") and e["name"].lower() not in DEFAULT_COLORS
         out[e["name"]] = {"gmail": name, "hex": GMAIL_COLORS.get(name, "#666666")}
+    out[TO_DELETE] = {"gmail": "Dark Red", "hex": GMAIL_COLORS["Dark Red"]}
     return out
 
 
@@ -109,14 +135,62 @@ def label_of(entry):
     return entry.get("label") or DEFAULT_LABELS.get(entry["name"].lower(), entry["name"])
 
 
+# Numbered labels ("01 - Priority"): statuses 01, 02..., themes 11, 12..., Other always 99.
+# Two digits, so Gmail's alphabetical list shows them in this order.
+RECOMMENDED_ORDER = ["important", "to do", "info", "health", "finance", "admin", "family & friends",
+                     "work & projects", "job search", "travel", "shopping & deliveries",
+                     "social & notifications", "newsletters", "promotions", "other"]
+
+
+def order(cfg):
+    """(statuses, themes) names in label order: your saved order, else the recommended one."""
+    saved = [n for n in (cfg.get("label_order") or [])]
+
+    def key(item):
+        i, name = item
+        if name in saved:
+            return (0, saved.index(name))
+        if name.lower() in RECOMMENDED_ORDER:
+            return (1, RECOMMENDED_ORDER.index(name.lower()))
+        return (2, i)
+
+    def sort(entries):
+        out = [n for _, n in sorted(enumerate(names(entries)), key=key)]
+        return [n for n in out if n.lower() != "other"] + [n for n in out if n.lower() == "other"]
+    return sort(cfg["statuses"]), sort(cfg["themes"])
+
+
+def numbers(cfg):
+    """{name: number} used in front of the Gmail labels."""
+    statuses, themes = order(cfg)
+    out = {n: i for i, n in enumerate(statuses, 1)}
+    out.update({n: (99 if n.lower() == "other" else i) for i, n in enumerate(themes, 11)})
+    return out
+
+
+def numbered(cfg):
+    return bool(cfg.get("label_order"))
+
+
 def labels(cfg):
     """{theme or status name: Gmail label}"""
-    return {e["name"]: label_of(e) for e in cfg["themes"] + cfg["statuses"]}
+    plain = {e["name"]: label_of(e) for e in cfg["themes"] + cfg["statuses"]}
+    if not numbered(cfg):
+        return plain
+    nums = numbers(cfg)
+    return {name: f"{nums[name]:02d} - {label}" for name, label in plain.items()}
+
+
+BEHAVIOR_KEYS = ("act_alone", "batch_size", "archive", "mark_read", "mark_read_themes", "to_delete")
 
 
 def set_value(text, key, value):
     """Replace the first `key: ...` line in the YAML text, keeping its comment."""
     pattern = re.compile(rf"^(\s*{re.escape(key)}:\s*)(\"[^\"]*\"|[^#\n]*?)(\s*#.*)?$", re.M)
+    if not pattern.search(text) and key in BEHAVIOR_KEYS and re.search(r"(?m)^behavior:\s*$", text):
+        # an older config.yaml without this option: add it to the behavior section
+        return re.sub(r"(?m)^behavior:\s*$", lambda m: f"behavior:\n  {key}: {json.dumps(value, ensure_ascii=False)}",
+                      text, count=1)
     if not pattern.search(text):
         raise ConfigError(f"Key '{key}' not found in config file")
     return pattern.sub(lambda m: m.group(1) + json.dumps(value) + (m.group(3) or ""), text, count=1)
@@ -148,10 +222,28 @@ def ensure_file(path=DEFAULT_PATH):
     return True
 
 
-def save_behavior(path, act_alone=None, batch_size=None):
-    """The two run options shown on the page."""
+def save_order(path, names_in_order=None):
+    """Write (or remove, with None) the `label_order:` line at the end of config.yaml."""
+    ensure_file(path)
+    path = Path(path)
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(r"(?m)^# Order and numbering of the Gmail labels.*\n", "", text)
+    text = re.sub(r"(?m)^label_order:.*\n?", "", text).rstrip("\n") + "\n"
+    if names_in_order:
+        text += ("\n# Order and numbering of the Gmail labels (01 - ..., 11 - ...). Change it in the app: "
+                 "Labels in Gmail > Order.\nlabel_order: " + json.dumps(list(names_in_order), ensure_ascii=False) + "\n")
+    path.write_text(text, encoding="utf-8")
+    return load(path)
+
+
+def save_behavior(path, act_alone=None, batch_size=None, mark_read=None, mark_read_themes=None):
+    """The run options shown on the page."""
     ensure_file(path)
     values = {}
+    if mark_read is not None:
+        values["mark_read"] = bool(mark_read)
+    if mark_read_themes is not None:
+        values["mark_read_themes"] = [str(x) for x in mark_read_themes]
     if act_alone is not None:
         values["act_alone"] = bool(act_alone)
     if batch_size is not None:

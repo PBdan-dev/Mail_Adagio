@@ -85,6 +85,26 @@ main { padding-top: 24px; padding-bottom: 48px; display: grid; gap: 20px;
 .seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .banner { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; padding: 12px 16px;
   border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-weight: 550; }
+#orderDlg { width: min(640px, calc(100vw - 32px)); }
+.olists { display: grid; grid-template-columns: 1fr 1.4fr; gap: 16px; margin-top: 16px; }
+.olists h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+.olist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.olist li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border);
+  border-radius: 9px; background: var(--surface-2); font-size: 13.5px; user-select: none; }
+.olist li[draggable="true"] { cursor: grab; }
+.olist li.dragging { opacity: .4; }
+.olist li.over { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.olist li.fixed { opacity: .75; }
+.olist .grip { color: var(--faint); font-size: 14px; line-height: 1; }
+.olist .onum { font-variant-numeric: tabular-nums; font-weight: 650; color: var(--muted); min-width: 20px; }
+.olist .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.olist .mv { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+.olist .mv:hover:not(:disabled) { background: var(--surface); color: var(--text); }
+.olist .mv:disabled { opacity: .25; cursor: default; }
+.opreview { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13px; color: var(--muted); max-height: 160px; overflow: auto; }
+.opreview b { color: var(--text); }
+.opreview div { display: flex; gap: 6px; padding: 1px 0; }
+@media (max-width: 560px) { .olists { grid-template-columns: 1fr; } }
 details.colors { margin-top: 6px; }
 details.colors summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 550; }
 details.colors small { display: block; margin: 6px 0; }
@@ -146,6 +166,13 @@ details.colors small { display: block; margin: 6px 0; }
 .mail a.open:hover, .mail button.fix:hover { color: var(--accent); background: var(--accent-soft); }
 .mini { font-size: 11px; font-weight: 650; padding: 1px 7px; border-radius: 6px; margin-left: 8px; background: var(--accent-soft); color: var(--accent); }
 .mini.ok { background: var(--green-soft); color: var(--green); }
+.mini.del { background: var(--red-soft); color: var(--red); display: inline-flex; align-items: center; gap: 4px; }
+.mini.del .keep { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0 2px; font-size: 13px; line-height: 1; }
+.delcount { display: flex; align-items: baseline; gap: 8px; margin: 12px 0; color: var(--muted); font-size: 13px; }
+.delcount > b { font-size: 28px; color: var(--text); letter-spacing: -.02em; }
+.delcount span b { color: var(--text); }
+.delacts { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn.primary.danger-fill { background: var(--red); }
 .badge { font-size: 11.5px; font-weight: 650; padding: 3px 8px; border-radius: 6px; text-align: center; white-space: nowrap; }
 .b-0 { background: var(--red-soft); color: var(--red); }
 .b-1 { background: var(--amber-soft); color: var(--amber); }
@@ -203,6 +230,8 @@ dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
 .rule button { border: 0; background: transparent; color: var(--faint); cursor: pointer; border-radius: 7px; height: 26px; }
 .rule button:hover { color: var(--red); background: var(--red-soft); }
 .chooser { display: flex; flex-wrap: wrap; gap: 6px; }
+#markReadThemes { margin-top: 8px; }
+#markReadThemes button { font-size: 12.5px; padding: 4px 9px; display: inline-flex; align-items: center; gap: 6px; }
 .chooser button { border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 5px 11px;
   cursor: pointer; display: inline-flex; align-items: center; gap: 7px; font-size: 13px; }
 .chooser button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
@@ -363,6 +392,10 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
             <input type="range" id="batchRange" min="50" max="1000" step="50" value="100"><span class="rangeval" id="batchVal">100 mails</span></div>
           <label class="switch"><input type="checkbox" id="actAlone"><span class="knob"></span>
             <span><b>Let the agent act alone</b><small>Applies each batch without asking, one after the other. The last batch can always be undone.</small></span></label>
+          <label class="switch"><input type="checkbox" id="markRead"><span class="knob"></span>
+            <span><b>Mark low-interest mails as read</b><small><span id="markReadWhat"></span> · status Info only. Undo makes them unread again.
+              <a href="#" id="markReadEdit">Change themes</a></small>
+              <span class="chooser hidden" id="markReadThemes"></span></span></label>
         </div>
         <div class="estimate" id="estimate"></div>
         <div class="model-chip" id="modelChip"><i></i><span>Sorting model</span> <b id="chipName">…</b> <small id="chipHow"></small></div>
@@ -478,11 +511,23 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
         Undo last batch</button>
       <div class="action"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></div>
         <div><b>Labels in Gmail</b><small id="labelNote">Each theme and status becomes a Gmail label.</small>
+          <button type="button" class="btn sm" id="orderBtn" style="margin-top:8px">Order and numbers</button>
           <details class="colors"><summary>Same colours in Gmail</summary>
             <small>Gmail does not let the agent colour labels. Once, in Gmail: hover a label, click ⋮ &gt; Label colour, pick the colour shown here.</small>
             <div id="colorList"></div></details></div></div>
       <div class="action"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/><path d="M4 4l16 16"/></svg></div>
-        <div><b>Never deletes</b><small>Adds labels and moves mails out of the Inbox. Nothing else.</small></div></div>
+        <div><b>Never deletes on its own</b><small>Adds labels and moves mails out of the Inbox. Only you can send the "To delete" mails to the Trash.</small></div></div>
+    </section>
+
+    <section class="card hidden" id="delCard">
+      <h2>To delete</h2>
+      <p class="sub">The model labels mails with no lasting value. Check them in Gmail, then send them to the Trash here. Never automatic.</p>
+      <div class="delcount"><b id="delCount">–</b><span>mails labelled <b id="delLabel"></b></span></div>
+      <div class="delacts">
+        <a class="btn sm" id="delOpen" target="_blank" rel="noopener">Check in Gmail ↗</a>
+        <button type="button" class="btn sm danger" id="trashBtn" disabled>Move to Trash</button>
+      </div>
+      <button type="button" class="btn sm hidden" id="restoreBtn" style="margin-top:10px"></button>
     </section>
 
     <section class="card">
@@ -541,6 +586,31 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
   <div class="foot">
     <button type="button" class="btn" id="fixCancel">Cancel</button>
     <button type="submit" class="btn primary">Save</button>
+  </div>
+</form></dialog>
+
+<dialog id="orderDlg"><form class="dlg" id="orderForm" method="dialog">
+  <h2>Label order</h2>
+  <p class="sub">Drag a label, or use the arrows. Gmail lists labels alphabetically, so a number in front keeps them in this order.</p>
+  <label class="switch" style="margin-top:14px"><input type="checkbox" id="orderNum"><span class="knob"></span>
+    <span><b>Number the labels in Gmail</b><small>Statuses 01, 02, 03 · themes 11, 12... · Other always 99.</small></span></label>
+  <div class="olists">
+    <div><h3>Statuses</h3><ol class="olist" id="olStatuses"></ol></div>
+    <div><h3>Themes</h3><ol class="olist" id="olThemes"></ol></div>
+  </div>
+  <div class="opreview" id="orderPreview"></div>
+  <div class="foot">
+    <button type="button" class="btn" id="orderCancel">Cancel</button>
+    <button type="submit" class="btn primary" id="orderApply">Apply</button>
+  </div>
+</form></dialog>
+
+<dialog id="confirmDlg"><form class="dlg" method="dialog">
+  <h2 id="confirmTitle"></h2>
+  <p class="sub" id="confirmText"></p>
+  <div class="foot">
+    <button type="button" class="btn" id="confirmNo">Cancel</button>
+    <button type="button" class="btn primary danger-fill" id="confirmYes"></button>
   </div>
 </form></dialog>
 
@@ -615,15 +685,132 @@ function renderModel(runningNote) {
 async function refresh() {
   S = await api("/api/state");
   if (!inited && S.sort) initControls();
+  if (S.sort) drawMarkRead();
   render();
   if (S.job.running && !polling) polling = setInterval(refresh, 600);
   if (!S.job.running && (polling || waiting)) { clearInterval(polling); polling = null; waiting = false; jobEnded(); }
 }
+/* label order: drag and drop, numbers, rename in Gmail */
+let ord = null, ordTimer = null, ordPreview = null;
+$("#orderBtn").onclick = () => {
+  ord = { statuses: [...S.order.statuses], themes: [...S.order.themes], numbered: true };  // numbering proposed by default
+  $("#orderNum").checked = ord.numbered;
+  drawOrder(); $("#orderDlg").showModal();
+};
+$("#orderCancel").onclick = () => $("#orderDlg").close();
+$("#orderNum").onchange = e => { ord.numbered = e.target.checked; drawOrder(); };
+const isOther = n => n.toLowerCase() === "other";
+function drawOrder() {
+  const nums = {};
+  ord.statuses.forEach((n, i) => nums[n] = i + 1);
+  ord.themes.forEach((n, i) => nums[n] = isOther(n) ? 99 : i + 11);
+  const row = (list, n, i) => {
+    const fixed = isOther(n), last = list.length - 1 - (list.some(isOther) ? 1 : 0);
+    const label = ((S.sort?.labels || {})[n] || n).replace(/^\d{2} - /, "");
+    return `<li draggable="${!fixed}" data-n="${esc(n)}" class="${fixed ? "fixed" : ""}">
+      <span class="grip">${fixed ? "" : "⠿"}</span>
+      <span class="onum">${ord.numbered ? String(nums[n]).padStart(2, "0") : i + 1}</span>
+      <span class="dot" style="background:${color(n)}"></span><span class="nm">${esc(label)}</span>
+      <button type="button" class="mv" data-mv="-1" ${fixed || i === 0 ? "disabled" : ""} aria-label="Move up">▲</button>
+      <button type="button" class="mv" data-mv="1" ${fixed || i >= last ? "disabled" : ""} aria-label="Move down">▼</button></li>`;
+  };
+  $("#olStatuses").innerHTML = ord.statuses.map((n, i) => row(ord.statuses, n, i)).join("");
+  const del = `<li class="fixed"><span class="grip"></span><span class="onum">${ord.numbered ? "98" : ""}</span>
+      <span class="dot" style="background:${S.colors?.["To delete"]?.hex || "#822111"}"></span><span class="nm">To delete</span></li>`;
+  $("#olThemes").innerHTML = ord.themes.map((n, i) => (isOther(n) ? del : "") + row(ord.themes, n, i)).join("");
+  for (const [el, key] of [[$("#olStatuses"), "statuses"], [$("#olThemes"), "themes"]]) {
+    el.querySelectorAll("li[data-n]").forEach(li => {
+      const n = li.dataset.n;
+      li.querySelectorAll(".mv").forEach(b => b.onclick = () => move(key, n, ord[key].indexOf(n) + +b.dataset.mv));
+      li.ondragstart = e => { e.dataTransfer.setData("text/plain", key + "|" + n); li.classList.add("dragging"); };
+      li.ondragend = () => li.classList.remove("dragging");
+      li.ondragover = e => { e.preventDefault(); li.classList.add("over"); };
+      li.ondragleave = () => li.classList.remove("over");
+      li.ondrop = e => {
+        e.preventDefault(); li.classList.remove("over");
+        const [k, from] = e.dataTransfer.getData("text/plain").split("|");
+        if (k === key) move(key, from, ord[key].indexOf(n));
+      };
+    });
+  }
+  clearTimeout(ordTimer);
+  $("#orderApply").disabled = true;
+  ordTimer = setTimeout(previewOrder, 150);
+}
+function move(key, name, to) {
+  const list = ord[key].filter(x => x !== name);
+  const max = list.length - (list.some(isOther) ? 1 : 0);  // Other stays last
+  list.splice(Math.max(0, Math.min(to, max)), 0, name);
+  ord[key] = list; drawOrder();
+}
+async function previewOrder() {
+  const r = await api("/api/order", { order: [...ord.statuses, ...ord.themes], numbered: ord.numbered });
+  ordPreview = r;
+  if (!r.ok) { $("#orderPreview").textContent = r.error; return; }
+  const n = r.renames.length;
+  $("#orderPreview").innerHTML = n
+    ? `<b>${n} label${n > 1 ? "s" : ""} will be renamed in Gmail.</b> Mails and colours stay.` +
+      r.renames.map(x => `<div><span>${esc(x.old)}</span><span>→</span><b>${esc(x.new)}</b></div>`).join("")
+    : "Nothing to change in Gmail.";
+  $("#orderApply").disabled = !n;
+}
+$("#orderForm").onsubmit = async e => {
+  e.preventDefault();
+  $("#orderApply").disabled = true;
+  const r = await api("/api/order", { order: [...ord.statuses, ...ord.themes], numbered: ord.numbered, apply: true });
+  if (!r.ok) { $("#orderApply").disabled = false; return toast(r.error, true); }
+  $("#orderDlg").close();
+  toast(`${r.renamed} label${r.renamed === 1 ? "" : "s"} renamed in Gmail. Mails and colours kept.`);
+  refresh().then(loadDelete);
+};
+
+/* To delete: you check in Gmail, you send them to the Trash */
+let DEL = null;
+async function loadDelete() {
+  if (!S?.configured) return;
+  const r = await api("/api/todelete");
+  $("#delCard").classList.toggle("hidden", !r.ok);
+  if (!r.ok) return;
+  DEL = r;
+  $("#delCount").textContent = fmt(r.count);
+  $("#delLabel").textContent = r.label;
+  $("#delOpen").href = "https://mail.google.com/mail/u/0/#label/" + encodeURIComponent(r.label).replace(/%20/g, "+");
+  $("#trashBtn").disabled = !r.count;
+  $("#trashBtn").textContent = r.count ? `Move ${fmt(r.count)} to Trash` : "Move to Trash";
+  const last = r.last_trash;
+  $("#restoreBtn").classList.toggle("hidden", !last);
+  if (last) $("#restoreBtn").textContent = `Restore the ${fmt(last.n)} mails trashed at ${last.created.slice(11, 16)}`;
+}
+function confirmBox(title, text, yes) {
+  $("#confirmTitle").textContent = title; $("#confirmText").textContent = text; $("#confirmYes").textContent = yes;
+  $("#confirmDlg").showModal();
+  return new Promise(ok => {
+    $("#confirmYes").onclick = () => { $("#confirmDlg").close(); ok(true); };
+    $("#confirmNo").onclick = () => { $("#confirmDlg").close(); ok(false); };
+  });
+}
+$("#trashBtn").onclick = async () => {
+  const n = DEL.count;
+  if (!await confirmBox(`Move ${fmt(n)} mails to the Trash?`,
+    `Every mail with the label "${DEL.label}" goes to Gmail's Trash. Gmail keeps them 30 days: you can restore them until then, here or in Gmail.`,
+    `Move ${fmt(n)} to Trash`)) return;
+  const r = await api("/api/trash", { confirm: n });
+  if (!r.ok) { loadDelete(); return toast(r.error, true); }
+  toast(`${fmt(r.trashed)} mails moved to the Trash. Restorable for 30 days.`); loadDelete(); refresh();
+};
+$("#restoreBtn").onclick = async () => {
+  const r = await api("/api/restore", {});
+  if (!r.ok) return toast(r.error, true);
+  if (r.warning) toast(r.warning, true);
+  else toast(`${fmt(r.restored)} mails back from the Trash, with their "To delete" label.`);
+  loadDelete(); refresh();
+};
+
 function jobEnded() {
-  loadModel(); loadRules();
+  loadModel(); loadRules(); loadDelete();
   if (S.error) return toast(S.error, true);
   const n = S.notice;
-  if (n && n.kind === "apply") toast(`Done: ${fmt(n.applied)} mails labelled, ${fmt(n.moved)} moved out of the Inbox.`);
+  if (n && n.kind === "apply") toast(`Done: ${fmt(n.applied)} mails labelled, ${fmt(n.moved)} moved out of the Inbox` + (n.read ? `, ${fmt(n.read)} marked as read.` : "."));
   if (n && n.kind === "undo") toast(`Undone: ${fmt(n.undone)} mails back as they were.`);
   if (n && n.kind === "scan") toast(`${fmt(n.mails)} mails from ${fmt(n.senders)} senders · ${fmt(n.with_unsubscribe)} with an unsubscribe link.`);
   if (n && n.kind === "suggest") toast(`Rules proposed for ${fmt(n.suggested)} senders.`);
@@ -637,6 +824,17 @@ function initControls() {
   batchSize = S.sort.batch_size;
   $("#actAlone").checked = S.sort.act_alone;
   drawScope(); estimate();
+}
+function drawMarkRead() {
+  const on = S.sort.mark_read_themes || [];
+  $("#markRead").checked = S.sort.mark_read;
+  $("#markReadWhat").textContent = on.length ? on.join(", ") : "No theme chosen";
+  $("#markReadThemes").innerHTML = S.themes.map(t => `<button type="button" data-t="${esc(t)}" class="${on.includes(t) ? "on" : ""}"><span class="dot" style="background:${color(t)}"></span>${esc(t)}</button>`).join("");
+  $("#markReadThemes").querySelectorAll("button").forEach(b => b.onclick = async e => {
+    e.preventDefault(); e.stopPropagation();
+    const t = b.dataset.t, list = on.includes(t) ? on.filter(x => x !== t) : [...on, t];
+    await api("/api/behavior", { mark_read_themes: list }); refresh();
+  });
 }
 function drawScope() {
   $("#scopeSeg").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.k === scope.kind));
@@ -688,7 +886,7 @@ function render() {
   $("#stopBtn").classList.toggle("hidden", !(busy && job.kind === "auto"));
   $("#stopBtn").disabled = S.stopping; $("#stopBtn").textContent = S.stopping ? "Stopping after this batch…" : "Stop after this batch";
   $("#restartBtn").classList.toggle("hidden", busy || !!plan || !p || !p.done);
-  ["#scopeSeg button", "#scopeVal", "#batchRange", "#actAlone"].forEach(q => document.querySelectorAll(q).forEach(el => el.disabled = busy));
+  ["#scopeSeg button", "#scopeVal", "#batchRange", "#actAlone", "#markRead"].forEach(q => document.querySelectorAll(q).forEach(el => el.disabled = busy));
 
   // progress
   const showBar = busy || (p && p.done);
@@ -720,8 +918,9 @@ function render() {
   $("#undoBtn").disabled = busy || !last;
   $("#undoSub").textContent = last ? `Last batch: ${fmt(last.labelled)} mails labelled, ${fmt(last.moved)} moved out of the Inbox, at ${(last.applied || "").slice(11, 16)}. Undo removes those labels and puts the mails back.`
                                    : "Nothing applied yet.";
-  const odd = Object.entries(sort.labels || {}).filter(([k, v]) => k !== v);
-  $("#labelNote").textContent = "Each theme and status becomes a Gmail label." + (odd.length ? " " + odd.map(([k, v]) => `${k} uses the label "${v}"`).join(", ") + " (Gmail reserves the name)." : "");
+  const odd = Object.entries(sort.labels || {}).filter(([k, v]) => k !== v.replace(/^\d{2} - /, ""));
+  $("#labelNote").textContent = (S.numbered ? "Each theme and status becomes a numbered Gmail label (01 - Priority, 11 - Health...)." : "Each theme and status becomes a Gmail label.") +
+    (odd.length ? " " + odd.map(([k, v]) => `${k} uses the label "${v.replace(/^\d{2} - /, "")}"`).join(", ") + " (Gmail reserves the name)." : "");
   $("#colorList").innerHTML = Object.entries(S.colors || {}).map(([k, c]) =>
     `<div><span class="dot" style="background:${c.hex}"></span>${esc((sort.labels || {})[k] || k)}<em>${esc(c.gmail)}</em></div>`).join("");
 
@@ -794,10 +993,18 @@ function renderResult() {
   });
   box.querySelectorAll(".mail input").forEach(cb => cb.onchange = () => { cb.checked ? skip.delete(cb.dataset.id) : skip.add(cb.dataset.id); renderResult(); });
   box.querySelectorAll("button.fix").forEach(b => b.onclick = () => openFix(r.mails.find(m => m.gm_msgid === b.dataset.id)));
+  box.querySelectorAll("button.keep").forEach(b => b.onclick = async e => {
+    e.preventDefault(); e.stopPropagation();
+    const k = await api("/api/keep", { gm_msgid: b.dataset.keep });
+    if (!k.ok) return toast(k.error, true);
+    toast("Kept: this mail will not get the \"To delete\" label."); refresh();
+  });
   if (plan) {
     const n = r.processed - [...skip].filter(id => r.mails.some(m => m.gm_msgid === id)).length;
     $("#applyCount").textContent = `${n} of ${r.processed} mails selected`;
-    $("#applyWhat").textContent = (sort.archive ? "Adds the theme and status labels, and moves them out of the Inbox into their theme." : "Adds the theme and status labels.") + " Unticked mails stay as they are.";
+    $("#applyWhat").textContent = (sort.archive ? "Adds the theme and status labels, and moves them out of the Inbox into their theme." : "Adds the theme and status labels.") +
+      (sort.mark_read && r.low_interest ? ` ${r.low_interest} low-interest mails will be marked as read.` : "") +
+      (r.to_delete ? ` ${r.to_delete} get the label "${r.delete_label}" (nothing goes to the Trash).` : "") + " Unticked mails stay as they are.";
     $("#applyBtn").textContent = n === r.processed ? `Apply to all ${n}` : `Apply to ${n} mails`;
     $("#applyBtn").disabled = S.job.running;
     $("#discardBtn").disabled = S.job.running;
@@ -947,6 +1154,7 @@ function mailRow(m, t, selectable) {
   const badge = m.classified ? `<span class="badge b-${Math.min(si, 2)}">${esc(m.status)}</span>` : `<span class="badge b-x" title="${esc(m.error || "")}">Not sorted</span>`;
   const name = (m.sender.split("<")[0].replace(/"/g, "").trim()) || m.sender;
   const tags = (m.corrected ? `<span class="mini ok">corrected</span>` : m.rule ? `<span class="mini" title="${esc(m.rule)}">rule</span>` : "")
+    + (m.to_delete ? `<span class="mini del" title="Gets the label for mails to delete. Only you send them to the Trash.">to delete${selectable ? `<button class="keep" data-keep="${esc(m.gm_msgid)}" title="Keep this mail" aria-label="Keep this mail">×</button>` : ""}</span>` : "")
     + (!selectable ? `<span class="state ${esc(m.state)}">${{ applied: m.archived ? "filed" : "labelled", skipped: "left as is", undone: "undone" }[m.state] || ""}</span>` : "");
   const url = /^https:\/\/mail\.google\.com\//.test(m.gmail_url) ? m.gmail_url : "";
   const off = selectable && skip.has(m.gm_msgid);
@@ -976,6 +1184,13 @@ async function setAlone(on) {
   refresh();
 }
 $("#actAlone").onchange = e => setAlone(e.target.checked);
+$("#markRead").onchange = async e => {
+  const r = await api("/api/behavior", { mark_read: e.target.checked });
+  if (!r.ok) return toast(r.error, true);
+  toast(e.target.checked ? "Low-interest mails will be marked as read when a batch is applied." : "Mails keep their read or unread state.");
+  refresh();
+};
+$("#markReadEdit").onclick = e => { e.preventDefault(); e.stopPropagation(); $("#markReadThemes").classList.toggle("hidden"); };
 $("#autoHintBtn").onclick = () => { hintHidden = true; setAlone(true); };
 async function start(path, body) {
   const r = await api(path, body);
@@ -1058,7 +1273,7 @@ $("#settingsForm").onsubmit = async e => {
 };
 
 page = store.get("adagio-page") || "sort";
-refresh().then(() => { loadModel(); loadRules(); loadSenders(); });
+refresh().then(() => { loadModel(); loadRules(); loadSenders(); loadDelete(); });
 </script>
 </body>
 </html>

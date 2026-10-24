@@ -416,7 +416,7 @@ class TestStep3(unittest.TestCase):
         cfg = cfg_with()
         c = config.colors(cfg)
         self.assertEqual((c["Job Search"]["gmail"], c["Important"]["hex"]), ("Purple", "#fb4c2f"))
-        self.assertEqual(len({v["gmail"] for v in c.values()}), 15)  # all different
+        self.assertEqual(len({v["gmail"] for v in c.values()}), 16)  # all different, "To delete" included
         cfg["themes"].insert(0, {"name": "Music"})
         self.assertEqual(config.colors(cfg)["Music"]["gmail"], "Dark Purple")
         cfg["themes"][0]["color"] = "Neon"
@@ -504,6 +504,155 @@ class TestSenders(unittest.TestCase):
             '<a href="https://news.com/u?a=1&amp;b=2"><span>Se d\u00e9sabonner</span></a></p>'),
             policy=mail.email.policy.default)
         self.assertEqual(mail.unsubscribe_link(msg), "https://news.com/u?a=1&b=2")
+
+
+class TestLabelOrder(unittest.TestCase):
+    """Numbered labels (01 - Priority, 11 - Health...), reordered and renamed in Gmail."""
+
+    def setUp(self):
+        from agent import demo
+        self.demo = demo
+        demo.DELAY = 0
+        demo.FakeIMAP.reset(copies=2)  # 28 mails
+        self.tmp = Path(tempfile.mkdtemp())
+        core.MEMORY_PATH = self.tmp / "adagio.db"
+        self.cfg = cfg_with()
+
+    def tearDown(self):
+        core.MEMORY_PATH = ":memory:"
+        shutil.rmtree(self.tmp)
+
+    def run_(self, **request):
+        return core.handle(request, cfg=self.cfg, gmail_factory=self.demo.gmail_factory, ask=self.demo.ask)
+
+    def test_numbers_and_recommended_order(self):
+        cfg = {**self.cfg, "label_order": ["Important"]}
+        labels = config.labels(cfg)
+        self.assertEqual((labels["Important"], labels["Info"], labels["Health"], labels["Family & Friends"],
+                          labels["Promotions"], labels["Other"]),
+                         ("01 - Priority", "03 - Info", "11 - Health", "14 - Family & Friends",
+                          "21 - Promotions", "99 - Other"))
+        cfg["label_order"] = ["Travel", "Health", "Other", "Finance"]  # Other always stays last
+        self.assertEqual(config.order(cfg)[1][:3] + config.order(cfg)[1][-1:], ["Travel", "Health", "Finance", "Other"])
+        self.assertEqual(config.labels(self.cfg)["Health"], "Health")  # not numbered until asked
+
+    def test_rename_in_gmail_keeps_mails_and_undo(self):
+        before = {u: set(m["labels"]) for u, m in self.demo.FakeIMAP.mails.items()}
+        plan = self.run_(action="plan", scope={"kind": "all"}, batch_size=50)
+        self.run_(action="apply", batch_id=plan["plan"]["batch_id"], skip=[])
+        preview = self.run_(action="label_order", numbered=True)
+        self.assertTrue(preview["ok"], preview.get("error"))
+        self.assertEqual(preview["renamed"], 0)
+        self.assertIn({"name": "Job Search", "old": "Job Search", "new": "16 - Job Search"}, preview["renames"])
+        self.assertIn("Job Search", {x for m in self.demo.FakeIMAP.mails.values() for x in m["labels"]})  # preview only
+
+        r = self.run_(action="label_order", numbered=True, apply=True, save=False)
+        self.assertTrue(r["ok"], r.get("error"))
+        names = {x for m in self.demo.FakeIMAP.mails.values() for x in m["labels"]}
+        self.assertTrue({"16 - Job Search", "01 - Priority", "11 - Health"} <= names)
+        self.assertFalse({"Job Search", "Priority"} & names)
+        self.cfg["label_order"] = r["statuses"] + r["themes"]
+        undo = self.run_(action="undo")  # removes the renamed labels
+        self.assertTrue(undo["ok"], undo.get("error"))
+        self.assertEqual({u: set(m["labels"]) for u, m in self.demo.FakeIMAP.mails.items()}, before)
+
+    def test_save_order_keeps_the_file(self):
+        path = self.tmp / "config.yaml"
+        shutil.copy(config.EXAMPLE, path)
+        cfg = config.save_order(path, ["Info", "Important", "To Do"])
+        self.assertEqual(config.labels(cfg)["Info"], "01 - Info")
+        cfg = config.save_order(path, ["Important", "To Do", "Info"])
+        text = path.read_text(encoding="utf-8")
+        self.assertEqual(text.count("label_order:"), 1)
+        self.assertIn("hint: doctors", text)  # comments and the rest kept
+        self.assertFalse(config.numbered(config.save_order(path, None)))
+
+
+class TestToDeleteAndRead(unittest.TestCase):
+    """"To delete" label, Trash only on request (restorable), and low-interest mails marked as read."""
+
+    def setUp(self):
+        from agent import demo
+        self.demo = demo
+        demo.DELAY = 0
+        demo.FakeIMAP.reset(copies=2)  # 28 mails, 4 promotions
+        self.tmp = Path(tempfile.mkdtemp())
+        core.MEMORY_PATH = self.tmp / "adagio.db"
+        self.cfg = cfg_with()
+
+    def tearDown(self):
+        core.MEMORY_PATH = ":memory:"
+        shutil.rmtree(self.tmp)
+
+    def run_(self, **request):
+        return core.handle(request, cfg=self.cfg, gmail_factory=self.demo.gmail_factory, ask=self.demo.ask)
+
+    def mails(self):
+        return self.demo.FakeIMAP.mails.values()
+
+    def test_model_answer(self):
+        self.assertEqual(classify.parse('{"theme": "Promotions", "status": "Info", "to_delete": true}', self.cfg),
+                         ("Promotions", "Info", True))
+        self.assertFalse(classify.parse('{"theme": "Finance", "status": "To Do", "to_delete": true}', self.cfg)[2])
+        self.assertIn("to_delete", classify.schema(self.cfg)["required"])
+        self.cfg["behavior"]["to_delete"] = False
+        self.assertNotIn("to_delete", classify.system_prompt(self.cfg))
+
+    def test_label_trash_restore_and_undo(self):
+        plan = self.run_(action="plan", scope={"kind": "all"}, batch_size=50)
+        self.assertEqual(plan["plan"]["to_delete"], 4)  # the promotions
+        keep = next(m for m in plan["plan"]["mails"] if m["to_delete"])
+        self.assertEqual(self.run_(action="keep", gm_msgid=keep["gm_msgid"])["plan"]["to_delete"], 3)
+        self.run_(action="apply", batch_id=plan["plan"]["batch_id"], skip=[])
+        labelled = [m for m in self.mails() if "To delete" in m["labels"]]
+        self.assertEqual(len(labelled), 3)
+        self.assertEqual(self.run_(action="to_delete")["count"], 3)
+        self.assertFalse(self.run_(action="trash", confirm=2)["ok"])  # the count you saw must still be true
+        self.assertFalse(any("\\Trash" in m["labels"] for m in self.mails()))
+        r = self.run_(action="trash", confirm=3)
+        self.assertEqual(r["trashed"], 3)
+        self.assertEqual(sum("\\Trash" in m["labels"] for m in self.mails()), 3)
+        self.assertEqual(self.run_(action="to_delete")["count"], 0)
+        back = self.run_(action="restore")
+        self.assertEqual(back["restored"], 3)
+        self.assertFalse(any("\\Trash" in m["labels"] for m in self.mails()))
+        self.assertEqual(self.run_(action="to_delete")["count"], 3)
+        self.run_(action="undo")
+        self.assertFalse(any("To delete" in m["labels"] for m in self.mails()))
+        sent = " ".join(" ".join(map(str, c)) for c in self.demo.FakeIMAP.commands)
+        self.assertNotIn("Deleted", sent)
+        self.assertNotIn("EXPUNGE", sent)
+
+    def test_act_alone_never_trashes(self):
+        r = self.run_(action="plan", scope={"kind": "all"}, batch_size=50, act_alone=True)
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertFalse(any("\\Trash" in m["labels"] for m in self.mails()))
+
+    def test_mark_read_and_undo(self):
+        self.cfg["behavior"]["mark_read"] = True
+        low = [m for m in self.mails() if b"Newsletters" in m["raw"] or b"promo@" in m["raw"]]
+        unread_before = {m["gm"] for m in self.mails() if not m["seen"]}
+        plan = self.run_(action="plan", scope={"kind": "all"}, batch_size=50)
+        self.assertGreater(plan["plan"]["low_interest"], 0)
+        done = self.run_(action="apply", batch_id=plan["plan"]["batch_id"], skip=[])
+        expected = sum(1 for m in plan["plan"]["mails"]
+                       if m["theme"] in ("Newsletters", "Promotions", "Social & Notifications")
+                       and m["status"] == "Info" and m["gm_msgid"] in unread_before)
+        self.assertEqual(done["read"], expected)
+        self.assertGreater(expected, 0)
+        finance = [m for m in self.mails() if b"northbank" in m["raw"]]
+        self.assertTrue(all(m["seen"] == (m["gm"] not in unread_before) for m in finance))  # untouched
+        self.run_(action="undo")
+        self.assertEqual({m["gm"] for m in self.mails() if not m["seen"]}, unread_before)
+        self.assertTrue(low)
+
+    def test_old_config_gets_new_options(self):
+        path = self.tmp / "config.yaml"
+        text = config.EXAMPLE.read_text(encoding="utf-8")
+        path.write_text("\n".join(x for x in text.splitlines()
+                                  if not x.strip().startswith(("mark_read", "to_delete", "archive"))), encoding="utf-8")
+        cfg = config.save_behavior(path, mark_read=True, mark_read_themes=["Promotions"])
+        self.assertEqual((cfg["behavior"]["mark_read"], cfg["behavior"]["mark_read_themes"]), (True, ["Promotions"]))
 
 
 class TestWeb(unittest.TestCase):

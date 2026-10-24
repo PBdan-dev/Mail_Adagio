@@ -145,10 +145,34 @@ class Gmail:
                 return name
         return "[Gmail]/All Mail"
 
+    def special(self, flag, default, folders=None):
+        """Name of a special folder ("\\Trash"...), which depends on the Gmail language."""
+        for name, flags in (folders or self.folders()).items():
+            if flag in flags.split():
+                return name
+        return default
+
+    def to_trash(self, uids):
+        """Move to Gmail's Trash (Gmail empties it after 30 days). Never a permanent delete."""
+        self.change_labels(uids, add=["\\Trash"])
+
+    def copy(self, uids, label):
+        """Copy to a label: out of the Trash, a mail goes back with this label."""
+        for chunk in chunks(sorted(uids), 200):
+            status, _ = self.imap.uid("COPY", ",".join(map(str, chunk)), quote(label))
+            if status != "OK":
+                raise MailError(f"Gmail refused to copy mails to '{label}'")
+
     def create_label(self, name):
         status, data = self.imap.create(quote(name))
         if status != "OK" and b"ALREADYEXISTS" not in b" ".join(d or b"" for d in data).upper():
             raise MailError(f"Cannot create the label '{name}'")
+
+    def rename_label(self, old, new):
+        """Gmail keeps the mails and the colour of a renamed label."""
+        status, data = self.imap.rename(quote(old), quote(new))
+        if status != "OK":
+            raise MailError(f"Cannot rename the label '{old}' to '{new}'")
 
     def find(self, gm_msgids):
         """{gm_msgid: uid} in the open folder (open All Mail to find a mail wherever it is)."""
@@ -176,6 +200,26 @@ class Gmail:
                     out[int(uid.group(1))] = (msgid.group(1) if msgid else "",
                                               parse_labels(labels.group(1)) if labels else [])
         return out
+
+    def unread(self, uids):
+        """The mails among `uids` (open folder) that are not read yet."""
+        out = set()
+        for chunk in chunks(sorted(uids), 500):
+            status, data = self.imap.uid("FETCH", ",".join(map(str, chunk)), "(FLAGS)")
+            if status != "OK":
+                raise MailError("Fetch failed")
+            for item in data:
+                line = (item[0] if isinstance(item, tuple) else item or b"").decode("utf-8", "replace")
+                uid, flags = re.search(r"UID (\d+)", line), re.search(r"FLAGS \((.*?)\)", line)
+                if uid and flags is not None and "\\Seen" not in flags.group(1).split():
+                    out.add(int(uid.group(1)))
+        return out
+
+    def mark_read(self, uids, read=True):
+        for chunk in chunks(sorted(uids), 200):
+            status, _ = self.imap.uid("STORE", ",".join(map(str, chunk)), "+FLAGS" if read else "-FLAGS", "(\\Seen)")
+            if status != "OK":
+                raise MailError("Gmail refused to mark mails as read")
 
     def change_labels(self, uids, add=(), remove=()):
         """Add or remove labels on mails of the open folder. "\\Inbox" removed = archived."""

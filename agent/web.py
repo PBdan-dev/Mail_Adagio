@@ -38,6 +38,7 @@ class App:
         self.error = ""      # why the last background job failed
         self.notice = None   # what the last apply/undo did
         self.demo_behavior = {"act_alone": False, "batch_size": 50}
+        self.demo_order = None
         self.page = PAGE.read_text(encoding="utf-8")  # read once: the page always matches this code
         self.stamp = code_stamp()
         self.server = None
@@ -48,6 +49,7 @@ class App:
             cfg["gmail"].update(email="demo@gmail.com", app_password="demo")
             cfg["model"].update(provider="ollama", model_name="demo-model")
             cfg["behavior"].update(self.demo_behavior)
+            cfg["label_order"] = self.demo_order
             config.check(cfg)
             return cfg
         return config.load(self.config_path)
@@ -78,9 +80,11 @@ class App:
             "provider": m.get("provider", "anthropic"), "model_name": m.get("model_name", ""),
             "base_url": m.get("base_url", ""),
             "has_api_key": bool(m.get("api_key")),
-            "themes": config.names(cfg["themes"]) if cfg else [],
-            "statuses": config.names(cfg["statuses"]) if cfg else [],
+            "themes": config.order(cfg)[1] if cfg else [],      # in label order
+            "statuses": config.order(cfg)[0] if cfg else [],
             "colors": config.colors(cfg) if cfg else {},
+            "order": dict(zip(("statuses", "themes"), config.order(cfg))) if cfg else None,
+            "numbered": config.numbered(cfg) if cfg else False,
             "default_models": config.DEFAULT_MODELS,
             "job": job, "stopping": stopping, "error": error, "notice": notice,
             "sort": sort if sort and sort.get("ok") else None,
@@ -112,8 +116,25 @@ class App:
                 self.demo_behavior["act_alone"] = bool(body["act_alone"])
             if body.get("batch_size"):
                 self.demo_behavior["batch_size"] = max(50, min(int(body["batch_size"]), 1000))
+            if "mark_read" in body:
+                self.demo_behavior["mark_read"] = bool(body["mark_read"])
+            if isinstance(body.get("mark_read_themes"), list):
+                self.demo_behavior["mark_read_themes"] = [str(x) for x in body["mark_read_themes"]]
             return
-        config.save_behavior(self.config_path, body.get("act_alone"), body.get("batch_size"))
+        config.save_behavior(self.config_path, body.get("act_alone"), body.get("batch_size"),
+                             body.get("mark_read"), body.get("mark_read_themes"))
+
+    def label_order(self, body):
+        """Preview, or apply, a new order and numbering of the labels."""
+        with self.lock:
+            if self.job["running"]:
+                return {"ok": False, "error": "Wait for the current job to finish"}
+        request = {"action": "label_order", "order": body.get("order"), "numbered": bool(body.get("numbered")),
+                   "apply": bool(body.get("apply")), "save": not self.demo, "config": str(self.config_path)}
+        r = self.call(request)
+        if r["ok"] and request["apply"] and self.demo:
+            self.demo_order = [*r["statuses"], *r["themes"]] if r["numbered"] else None
+        return r
 
     def start(self, kind, work):
         """Run `work` in the background; the page follows it through /api/state."""
@@ -160,7 +181,7 @@ class App:
                 if not auto:
                     return
                 if r.get("applied") is not None:
-                    self.notice = {"kind": "apply", **{k: r[k] for k in ("applied", "moved", "skipped")}}
+                    self.notice = {"kind": "apply", **{k: r[k] for k in ("applied", "moved", "skipped", "read")}}
                 if self.job["stop"] or not r.get("progress") or r["progress"].get("finished"):
                     return
         return self.start("auto" if auto else "plan", work)
@@ -172,7 +193,7 @@ class App:
             r = self.call({"action": "apply", "batch_id": body.get("batch_id"), "skip": body.get("skip") or [],
                            "batch_size": cfg["behavior"]["batch_size"]}, cfg=cfg)
             if r["ok"]:
-                self.notice = {"kind": "apply", **{k: r[k] for k in ("applied", "moved", "skipped")}}
+                self.notice = {"kind": "apply", **{k: r[k] for k in ("applied", "moved", "skipped", "read")}}
             else:
                 self.error = r["error"]
         return self.start("apply", work)
@@ -240,6 +261,8 @@ def make_handler(app, port):
                 return self.send(200, app.call({"action": "rules"}))
             if self.path == "/api/senders":
                 return self.send(200, app.call({"action": "senders"}))
+            if self.path == "/api/todelete":
+                return self.send(200, app.call({"action": "to_delete"}))
             if self.path == "/api/hardware":
                 return self.send(200, core.handle({"action": "hardware"}))
             self.send(404, {"error": "not found"})
@@ -272,7 +295,8 @@ def make_handler(app, port):
         def post(self, body):
             simple = {"/api/correct": "correct", "/api/rules/delete": "delete_rule",
                       "/api/estimate": "estimate", "/api/discard": "discard",
-                      "/api/sender": "sender_state", "/api/rule": "add_rule"}
+                      "/api/sender": "sender_state", "/api/rule": "add_rule", "/api/keep": "keep",
+                      "/api/trash": "trash", "/api/restore": "restore"}
             if self.path in simple:
                 return self.send(200, app.call({**body, "action": simple[self.path]}))
             if self.path == "/api/check":
@@ -285,6 +309,8 @@ def make_handler(app, port):
             if self.path == "/api/behavior":
                 app.save_behavior(body)
                 return self.send(200, {"ok": True})
+            if self.path == "/api/order":
+                return self.send(200, app.label_order(body))
             if self.path == "/api/stop":
                 app.job["stop"] = True
                 return self.send(200, {"ok": True})
