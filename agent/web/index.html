@@ -85,6 +85,7 @@ main { padding-top: 24px; padding-bottom: 48px; display: grid; gap: 20px;
 .seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .banner { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; padding: 12px 16px;
   border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-weight: 550; }
+.cardtop { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 #orderDlg { width: min(640px, calc(100vw - 32px)); }
 .olists { display: grid; grid-template-columns: 1fr 1.4fr; gap: 16px; margin-top: 16px; }
 .olists h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
@@ -405,7 +406,7 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
           <span>Analyze next batch</span>
         </button>
-        <button class="btn hidden" id="stopBtn">Stop after this batch</button>
+        <button class="btn danger hidden" id="stopBtn" title="Stops after the mail in progress. The mails already analysed wait in the plan; the others come next time.">Stop</button>
         <button class="btn ghost hidden" id="restartBtn" title="Start again from the newest mail">Start a new sort</button>
       </div>
       <div class="hint hidden" id="autoHint">
@@ -427,8 +428,9 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
     </section>
 
     <section class="card">
-      <h2>By theme</h2>
-      <p class="sub">Click a theme to show only its mails.</p>
+      <div class="cardtop"><div><h2>By theme</h2>
+        <p class="sub">Click a theme to show only its mails.</p></div>
+        <button type="button" class="btn sm" id="orderBtn2">Label order and numbers</button></div>
       <div class="themes" id="themes"></div>
     </section>
 
@@ -697,6 +699,7 @@ $("#orderBtn").onclick = () => {
   $("#orderNum").checked = ord.numbered;
   drawOrder(); $("#orderDlg").showModal();
 };
+$("#orderBtn2").onclick = () => $("#orderBtn").click();
 $("#orderCancel").onclick = () => $("#orderDlg").close();
 $("#orderNum").onchange = e => { ord.numbered = e.target.checked; drawOrder(); };
 const isOther = n => n.toLowerCase() === "other";
@@ -811,6 +814,7 @@ function jobEnded() {
   if (S.error) return toast(S.error, true);
   const n = S.notice;
   if (n && n.kind === "apply") toast(`Done: ${fmt(n.applied)} mails labelled, ${fmt(n.moved)} moved out of the Inbox` + (n.read ? `, ${fmt(n.read)} marked as read.` : "."));
+  if (n && n.kind === "stopped") toast(n.analysed ? `Stopped. ${fmt(n.analysed)} mails analysed wait in the plan below; the others come next time.` : "Stopped. Nothing was analysed yet.");
   if (n && n.kind === "undo") toast(`Undone: ${fmt(n.undone)} mails back as they were.`);
   if (n && n.kind === "scan") toast(`${fmt(n.mails)} mails from ${fmt(n.senders)} senders · ${fmt(n.with_unsubscribe)} with an unsubscribe link.`);
   if (n && n.kind === "suggest") toast(`Rules proposed for ${fmt(n.suggested)} senders.`);
@@ -883,8 +887,8 @@ function render() {
   btn.querySelector("span").textContent = busy ? ({ plan: "Analysing…", auto: "Sorting…", apply: "Applying…", undo: "Undoing…" }[job.kind] || "Working…")
     : plan && !alone ? "Plan ready below" : finished ? "All done" : alone ? (p && !p.finished && sameScope(p) && p.done ? "Continue sorting" : "Start sorting")
     : (p && p.done && sameScope(p) ? "Analyze next batch" : "Analyze first batch");
-  $("#stopBtn").classList.toggle("hidden", !(busy && job.kind === "auto"));
-  $("#stopBtn").disabled = S.stopping; $("#stopBtn").textContent = S.stopping ? "Stopping after this batch…" : "Stop after this batch";
+  $("#stopBtn").classList.toggle("hidden", !(busy && (job.kind === "auto" || job.kind === "plan")));
+  $("#stopBtn").disabled = S.stopping; $("#stopBtn").textContent = S.stopping ? "Stopping…" : "Stop";
   $("#restartBtn").classList.toggle("hidden", busy || !!plan || !p || !p.done);
   ["#scopeSeg button", "#scopeVal", "#batchRange", "#actAlone", "#markRead"].forEach(q => document.querySelectorAll(q).forEach(el => el.disabled = busy));
 

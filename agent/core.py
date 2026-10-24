@@ -239,8 +239,8 @@ def sort_mails(cfg, mails, ask, model_note, progress=None):
                 "rule": f"{rule['kind']}: {rule['value']}" if rule else "",
                 **({"error": r.error} if not r.ok else {}),
             })
-            if progress:
-                progress(i, len(mails), rows[-1])
+            if progress and progress(i, len(mails), rows[-1]) == "stop":
+                break  # Stop: the mails analysed so far make the plan, the others come next time
         return rows, model_calls
     finally:
         mem.close()
@@ -396,14 +396,19 @@ def plan(cfg, request, gmail_factory, ask=None, progress=None):
             mails = gmail.fetch(picked, cfg["behavior"]["body_chars"])
         started = time.time()
         rows, calls = sort_mails(cfg, mails, ask, model_note, progress)
+        stopped = len(rows) < len(mails)
+        if not rows:
+            return {"plan": None, "stopped": True, "progress": progress_of(store, job, size)}
         batch_id = store.add_batch(job["id"], model_note.split(" · ")[0], time.time() - started, calls, rows)
         batch = store.one("SELECT * FROM batches WHERE id = ?", batch_id)
         result = {"plan": plan_result(cfg, store, batch), "progress": progress_of(store, job, size)}
         result["log"] = (f"plan: batch {result['progress']['batch_no']} of {result['progress']['batches']}, "
-                         f"{len(rows)} mails analysed ({model_note}), waiting for approval")
+                         f"{len(rows)} mails analysed ({model_note}), waiting for approval"
+                         + (" (stopped: the other mails come next time)" if stopped else ""))
+        result["stopped"] = stopped
     finally:
         store.close()
-    if act_alone:
+    if act_alone and not stopped:  # stopped: the partial plan waits for you, even when acting alone
         applied = apply(cfg, {"batch_id": batch_id, "batch_size": size}, gmail_factory)
         applied["log"] = result["log"].replace(", waiting for approval", "") + "\n" + applied["log"]
         return applied

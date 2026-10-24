@@ -406,6 +406,20 @@ class TestStep3(unittest.TestCase):
         self.assertFalse(any("\\Inbox" in m["labels"] for m in self.demo.FakeIMAP.mails.values()))
         self.assertIsNone(self.run_(action="plan", scope=scope, batch_size=50)["plan"])
 
+    def test_stop_keeps_a_partial_plan_and_resumes(self):
+        scope = {"kind": "all"}
+        stop_at = lambda i, n, row: "stop" if i == 7 else None
+        r = core.handle({"action": "plan", "scope": scope, "batch_size": 50, "act_alone": True}, cfg=self.cfg,
+                        gmail_factory=self.demo.gmail_factory, ask=self.demo.ask, progress=stop_at)
+        self.assertTrue(r["stopped"])
+        self.assertEqual(r["plan"]["processed"], 7)  # waits for approval, even when acting alone
+        self.assertTrue(all("\\Inbox" in m["labels"] for m in self.demo.FakeIMAP.mails.values()))
+        done = self.run_(action="apply", batch_id=r["plan"]["batch_id"], skip=[])
+        nxt = self.run_(action="plan", scope=scope, batch_size=50)
+        self.assertEqual(nxt["plan"]["processed"], 50)
+        self.assertFalse({m["gm_msgid"] for m in nxt["plan"]["mails"]} & {m["gm_msgid"] for m in r["plan"]["mails"]})
+        self.assertEqual(done["applied"], 7)
+
     def test_estimate(self):
         r = self.run_(action="estimate", scope={"kind": "days", "value": 7}, batch_size=50)
         self.assertTrue(r["ok"], r.get("error"))

@@ -159,6 +159,7 @@ class App:
             self.job["model"] = row["model"]
         else:
             self.job.update(done=i, total=n)
+        return "stop" if self.job["stop"] else None  # Stop: end after the mail in progress
 
     def start_plan(self, body):
         """Analyse the next batch. With "act alone", apply it and go on until the end or Stop."""
@@ -177,6 +178,10 @@ class App:
                 request["restart"] = False
                 if not r["ok"]:
                     self.error = r["error"]
+                    return
+                if r.get("stopped"):
+                    plan = r.get("plan") or {}
+                    self.notice = {"kind": "stopped", "analysed": plan.get("processed", 0)}
                     return
                 if not auto:
                     return
