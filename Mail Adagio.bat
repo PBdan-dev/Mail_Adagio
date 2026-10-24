@@ -1,7 +1,7 @@
 @echo off
 rem Mail Adagio launcher: double-click to start.
 rem First run: creates a private Python environment (.venv), installs the
-rem libraries, then asks for your Gmail details. Nothing is changed in Gmail.
+rem libraries, then opens Mail Adagio in your browser. Nothing is changed in Gmail.
 setlocal
 cd /d "%~dp0"
 chcp 65001 >nul
@@ -31,41 +31,10 @@ if not exist ".venv\installed.txt" (
   echo ok> ".venv\installed.txt"
 )
 
-rem --- 3. Menu --------------------------------------------------------------
-:menu
-cls
-echo.
-echo   Mail Adagio
-echo   -----------------------------------------
-echo   1  Preview: sort the 20 newest mails (read-only)
-echo   2  Preview: choose how many mails
-echo   3  Check the Gmail connection
-echo   4  Settings: Gmail, password, model
-echo   5  Which local model fits this PC
-echo   6  Run the tests
-echo   Q  Quit
-echo.
-set "CHOICE="
-set /p "CHOICE=  Your choice: "
-if /i "%CHOICE%"=="1" "%APP%" adagio.py preview --limit 20 & goto :pause
-if /i "%CHOICE%"=="2" goto :custom
-if /i "%CHOICE%"=="3" "%APP%" adagio.py check & goto :pause
-if /i "%CHOICE%"=="4" "%APP%" adagio.py setup & goto :pause
-if /i "%CHOICE%"=="5" "%APP%" adagio.py hardware & goto :pause
-if /i "%CHOICE%"=="6" "%APP%" -m unittest -v & goto :pause
-if /i "%CHOICE%"=="Q" exit /b 0
-goto :menu
-
-:custom
-set "N=20"
-set /p "N=  How many mails? [20]: "
-"%APP%" adagio.py preview --limit %N%
-goto :pause
-
-:pause
-echo.
-pause
-goto :menu
+rem --- 3. Open the interface in your browser -------------------------------
+"%APP%" adagio.py ui %*
+if errorlevel 1 pause
+exit /b 0
 
 :failed
 echo.

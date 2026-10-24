@@ -4,6 +4,7 @@ The command line and the JSON mode are only doors to `handle()`.
 """
 import time
 from collections import Counter
+from datetime import datetime
 
 from . import classify, config, hardware, models
 from .mail import Gmail, MailError
@@ -11,6 +12,7 @@ from .mail import Gmail, MailError
 AGENT = "mail-adagio"
 VERSION = "0.1.0"
 ACTIONS = ("check", "hardware", "preview")
+LOG_PATH = config.ROOT / "adagio.log"  # readable journal of every run; None turns it off
 
 
 def handle(request, cfg=None, gmail_factory=Gmail, ask=None, progress=None):
@@ -35,7 +37,36 @@ def handle(request, cfg=None, gmail_factory=Gmail, ask=None, progress=None):
         result = {"ok": False, "error": f"Unexpected error: {type(e).__name__}: {e}"}
     result.update(agent=AGENT, version=VERSION, action=action,
                   seconds=round(time.time() - started, 1))
+    log(summary_line(result))
     return result
+
+
+def summary_line(r):
+    if not r["ok"]:
+        return f"{r['action']}: failed: {r['error']}"
+    if r["action"] == "preview":
+        return (f"preview: read {r['processed']} mails, {r['fallbacks']} not classified, "
+                f"0 changes in Gmail ({r['model']})")
+    if r["action"] == "check":
+        return f"check: connected to {r['email']}, {r['total_in_mailbox']} mails in {r['mailbox']}"
+    return f"{r['action']}: ok"
+
+
+def log(line):
+    if LOG_PATH:
+        try:
+            with open(LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  {line}\n")
+        except OSError:
+            pass
+
+
+def read_log(n=30):
+    try:
+        lines = LOG_PATH.read_text(encoding="utf-8").splitlines()
+    except (OSError, AttributeError):
+        return []
+    return lines[-n:][::-1]
 
 
 def hardware_report(cfg=None):
@@ -60,6 +91,11 @@ def resolve_model(cfg):
         m["model_name"] = name
         return m, f"Auto-selected {name} ({reason})"
     return m, f"{m['provider']} / {m['model_name']}"
+
+
+def gmail_url(gm_msgid):
+    """Link that opens the mail in Gmail (Gmail ids are the hexadecimal X-GM-MSGID)."""
+    return f"https://mail.google.com/mail/u/0/#all/{int(gm_msgid):x}" if gm_msgid else ""
 
 
 def connect(cfg, gmail_factory):
@@ -95,6 +131,7 @@ def preview(cfg, request, gmail_factory, ask, progress):
         rows.append({
             "uid": mail.uid, "gm_msgid": mail.gm_msgid, "date": mail.date,
             "sender": mail.sender, "subject": mail.subject,
+            "gmail_url": gmail_url(mail.gm_msgid),
             "existing_labels": [x for x in mail.labels if not x.startswith("\\")],
             "theme": r.theme, "status": r.status, "classified": r.ok,
             **({"error": r.error} if not r.ok else {}),

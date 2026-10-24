@@ -25,8 +25,10 @@ python adagio.py setup
 ```
 
 **On Windows, the simplest way**: double-click `Mail Adagio.bat`. The first time, it prepares a private
-Python environment, installs the libraries and opens the setup. Then it shows a menu (preview, check,
-settings…). Python must be installed (<https://www.python.org/downloads/>).
+Python environment and installs the libraries. Then it opens Mail Adagio in your browser, where you
+enter your details and run the sort. Keep the black window open while you use it.
+`Mail Adagio - demo.bat` opens the same interface with made-up mails, no Gmail account needed.
+Python must be installed (<https://www.python.org/downloads/>).
 
 `setup` asks for your Gmail address, the app password (hidden while you type), the model provider
 and its API key. Everything is saved in `config.yaml`, on your computer only (it is in `.gitignore`).
@@ -34,6 +36,8 @@ and its API key. Everything is saved in `config.yaml`, on your computer only (it
 ## Use
 
 ```bash
+python adagio.py ui                     # web interface in your browser (127.0.0.1 only)
+python adagio.py ui --demo              # same, with made-up mails
 python adagio.py check                  # test the Gmail connection
 python adagio.py preview --limit 20     # classify the 20 newest mails, change nothing
 python adagio.py preview --since 7      # mails from the last 7 days
@@ -78,6 +82,9 @@ agent/models.py      Anthropic, OpenRouter, Ollama adapters
 agent/hardware.py    graphics memory detection, local model choice
 agent/config.py      config.yaml loading and first-run setup
 agent/ui.py          terminal display
+agent/web.py         local web server (127.0.0.1 only) for the interface
+agent/web/index.html the interface: one page, no external files
+agent/demo.py        made-up mails for the demo mode
 tests/               python -m unittest   (fake Gmail, fake model)
 ```
 

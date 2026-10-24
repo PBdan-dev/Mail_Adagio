@@ -6,6 +6,8 @@ import sys
 from agent import config, core, ui
 
 EXAMPLES = """examples:
+  python adagio.py ui                    open the web interface (default for the .bat)
+  python adagio.py ui --demo             same, with made-up mails, no Gmail needed
   python adagio.py setup                 first run: Gmail address, app password, model
   python adagio.py check                 test the Gmail connection
   python adagio.py preview --limit 20    classify the 20 newest mails, change nothing
@@ -27,7 +29,18 @@ def main(argv=None):
     p.add_argument("--since", type=int, metavar="DAYS", help="only mails from the last DAYS days")
     p.add_argument("--json", action="store_true", help="print the JSON result instead")
     sub.add_parser("call", help="read one JSON request on stdin, write the JSON result on stdout")
+    u = sub.add_parser("ui", help="open the web interface in your browser")
+    u.add_argument("--demo", action="store_true", help="made-up mails, no Gmail account needed")
+    u.add_argument("--port", type=int, default=8765)
+    u.add_argument("--no-browser", action="store_true", help="do not open the browser")
     args = parser.parse_args(argv)
+
+    if args.command == "ui":
+        from agent import web
+        if args.demo:
+            core.LOG_PATH = config.ROOT / "adagio-demo.log"
+        web.serve(args.config, port=args.port, demo_mode=args.demo, open_browser=not args.no_browser)
+        return 0
 
     if args.command == "call":
         return call_mode(args.config)

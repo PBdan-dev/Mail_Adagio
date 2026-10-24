@@ -73,11 +73,40 @@ def save_values(path, values):
         pass
 
 
+DEFAULT_MODELS = {"anthropic": "claude-haiku-5-5", "openrouter": "anthropic/claude-haiku-5.5",
+                  "ollama": ""}
+
+
+def ensure_file(path=DEFAULT_PATH):
+    """Create config.yaml from the example if it does not exist yet. True if created."""
+    path = Path(path)
+    if path.exists():
+        return False
+    shutil.copy(EXAMPLE, path)
+    return True
+
+
+def save_settings(path, email, provider, model_name="", app_password="", api_key=""):
+    """Used by the web page. Empty password or key fields keep the saved value."""
+    if provider not in PROVIDERS:
+        raise ConfigError(f"Unknown provider '{provider}'")
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip()):
+        raise ConfigError("This does not look like an e-mail address")
+    ensure_file(path)
+    values = {"email": email.strip(), "provider": provider,
+              "model_name": model_name.strip() or DEFAULT_MODELS[provider]}
+    if app_password.strip():
+        values["app_password"] = app_password.replace(" ", "").strip()
+    if api_key.strip():
+        values["api_key"] = api_key.strip()
+    save_values(path, values)
+    return load(path)
+
+
 def setup(path=DEFAULT_PATH, ask=input, ask_secret=getpass, say=print):
     """Interactive first run: create config.yaml and ask for what is missing."""
     path = Path(path)
-    if not path.exists():
-        shutil.copy(EXAMPLE, path)
+    if ensure_file(path):
         say(f"Created {path.name} from the example.")
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     values = {}

@@ -10,6 +10,7 @@ import yaml
 
 from agent import classify, config, core, hardware, mail
 
+core.LOG_PATH = None  # tests do not write the journal
 EXAMPLE_CFG = yaml.safe_load(config.EXAMPLE.read_text(encoding="utf-8"))
 
 
@@ -194,6 +195,7 @@ class TestCore(unittest.TestCase):
         self.assertEqual(result["mails"][0]["status"], "Important")  # important first
         self.assertEqual(result["by_status"], {"Important": 1, "Info": 2})
         self.assertEqual(result["mails"][0]["existing_labels"], ["Voyages été"])
+        self.assertEqual(result["mails"][0]["gmail_url"], "https://mail.google.com/mail/u/0/#all/238e")
         json.dumps(result)  # the result must be plain JSON
 
     def test_errors_come_back_as_json(self):
@@ -202,6 +204,59 @@ class TestCore(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIn("app password", result["error"])
         self.assertFalse(core.handle({"action": "delete"})["ok"])
+
+
+class TestWeb(unittest.TestCase):
+    """Starts the local server in demo mode and talks to it like the page does."""
+
+    @classmethod
+    def setUpClass(cls):
+        import threading
+        from http.server import ThreadingHTTPServer
+        from agent import web
+        cls.tmp = Path(tempfile.mkdtemp())
+        cls.app = web.App(cls.tmp / "config.yaml", demo_mode=True)
+        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), None)
+        port = cls.server.server_address[1]
+        cls.server.RequestHandlerClass = web.make_handler(cls.app, port)
+        cls.base = f"http://127.0.0.1:{port}"
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        shutil.rmtree(cls.tmp)
+
+    def call(self, path, body=None, token=True):
+        import urllib.request
+        req = urllib.request.Request(self.base + path, method="POST" if body is not None else "GET",
+                                     data=json.dumps(body).encode() if body is not None else None,
+                                     headers={"X-Adagio-Token": self.app.token} if token else {})
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, r.read()
+        except Exception as e:
+            return e.code, e.read()
+
+    def test_page_and_token(self):
+        code, html = self.call("/", token=False)
+        self.assertEqual(code, 200)
+        self.assertIn(self.app.token.encode(), html)
+        self.assertEqual(self.call("/api/state", token=False)[0], 403)
+        self.assertEqual(self.call("/api/preview", {"limit": 3}, token=False)[0], 403)
+
+    def test_preview_flow_and_no_password_leak(self):
+        import time
+        code, body = self.call("/api/preview", {"limit": 5})
+        self.assertTrue(json.loads(body)["ok"])
+        for _ in range(100):
+            state = json.loads(self.call("/api/state")[1])
+            if not state["job"]["running"] and state["last"]:
+                break
+            time.sleep(0.1)
+        self.assertEqual(state["last"]["processed"], 5)
+        self.assertNotIn("app_password", json.dumps(state))
+        self.assertTrue(state["configured"])
 
 
 if __name__ == "__main__":
