@@ -1,0 +1,115 @@
+"""Model adapters. Each one turns (system, user, schema) into the model's text answer.
+
+The rest of the code only calls `ask(system, user, schema)` and never knows which model answered.
+"""
+import json
+import urllib.error
+import urllib.request
+
+DEFAULT_URLS = {
+    "openrouter": "https://openrouter.ai/api/v1",
+    "ollama": "http://localhost:11434",
+}
+
+
+class ModelError(Exception):
+    pass
+
+
+def make_ask(model_cfg):
+    """Return a function ask(system, user, schema) -> str for the configured provider."""
+    provider = model_cfg["provider"]
+    name = model_cfg.get("model_name")
+    key = model_cfg.get("api_key") or None
+    url = (model_cfg.get("base_url") or DEFAULT_URLS.get(provider, "")).rstrip("/")
+    if not name:
+        raise ModelError("No model chosen (model.model_name is empty)")
+    if provider == "anthropic":
+        return _anthropic(name, key, url or None)
+    if provider == "openrouter":
+        return _openai_compatible(name, key, url)
+    if provider == "ollama":
+        return _ollama(name, url)
+    raise ModelError(f"Unknown provider '{provider}'")
+
+
+def _anthropic(name, key, url):
+    try:
+        import anthropic
+    except ImportError as e:
+        raise ModelError("The 'anthropic' package is missing: pip install -r requirements.txt") from e
+    client = anthropic.Anthropic(api_key=key, base_url=url, max_retries=3)
+
+    def ask(system, user, schema):
+        try:
+            response = client.messages.create(
+                model=name,
+                max_tokens=1024,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+                output_config={"effort": "low",
+                               "format": {"type": "json_schema", "schema": schema}},
+            )
+        except anthropic.AuthenticationError as e:
+            raise ModelError("Anthropic refused the API key") from e
+        except anthropic.APIStatusError as e:
+            raise ModelError(f"Anthropic error {e.status_code}: {e.message}") from e
+        except anthropic.APIConnectionError as e:
+            raise ModelError(f"Cannot reach Anthropic: {e}") from e
+        if response.stop_reason == "refusal":
+            raise ModelError("The model declined to classify this mail")
+        return next((b.text for b in response.content if b.type == "text"), "")
+    return ask
+
+
+def _openai_compatible(name, key, url):
+    """OpenRouter, and any server that speaks the OpenAI chat format."""
+    def ask(system, user, schema):
+        body = {
+            "model": name,
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": user}],
+            "response_format": {"type": "json_schema", "json_schema": {
+                "name": "classification", "strict": True, "schema": schema}},
+            "temperature": 0,
+        }
+        data = _post(f"{url}/chat/completions", body, {"Authorization": f"Bearer {key}"})
+        try:
+            return data["choices"][0]["message"]["content"] or ""
+        except (KeyError, IndexError, TypeError) as e:
+            raise ModelError(f"Unexpected answer: {str(data)[:200]}") from e
+    return ask
+
+
+def _ollama(name, url):
+    """Ollama's own API: the `format` field forces an answer that fits the JSON schema."""
+    def ask(system, user, schema):
+        body = {
+            "model": name,
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": user}],
+            "format": schema,
+            "stream": False,
+            "think": False,
+            "options": {"temperature": 0},
+        }
+        data = _post(f"{url}/api/chat", body, {}, timeout=300)
+        try:
+            return data["message"]["content"]
+        except (KeyError, TypeError) as e:
+            raise ModelError(f"Unexpected answer: {str(data)[:200]}") from e
+    return ask
+
+
+def _post(url, body, headers, timeout=60):
+    request = urllib.request.Request(
+        url, data=json.dumps(body).encode(), method="POST",
+        headers={"Content-Type": "application/json", **headers})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:300]
+        raise ModelError(f"HTTP {e.code} from {url}: {detail}") from e
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise ModelError(f"Cannot reach {url}: {e}") from e

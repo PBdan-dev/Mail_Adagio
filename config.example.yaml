@@ -1,0 +1,70 @@
+# Mail Adagio configuration.
+# `python adagio.py setup` copies this file to config.yaml and fills in your details.
+# config.yaml stays on your computer: it is never committed and never sent anywhere.
+
+gmail:
+  email: ""                 # your Gmail address
+  app_password: ""          # Google app password (16 letters). Asked on first run if empty.
+  imap_host: imap.gmail.com
+  mailbox: INBOX            # which mailbox the agent reads
+
+model:
+  provider: anthropic       # anthropic | openrouter | ollama
+  model_name: claude-haiku-5-5   # for ollama, leave "" to pick a model from your hardware
+  api_key: ""               # not needed for ollama
+  base_url: ""              # "" = provider default
+
+behavior:
+  act_alone: false          # "Allow the agent to act on its own" (used from step 3)
+  batch_size: 100           # mails per batch, 50 to 1000 (used from step 3)
+  body_chars: 1500          # how many characters of each mail the model reads
+
+# Themes: one per mail. Add, rename or remove freely.
+# "hint" tells the model what belongs there. Keep a theme named "Other".
+themes:
+  - name: Health
+    hint: doctors, hospitals, pharmacy, health insurance, medical results
+  - name: Finance
+    hint: bank, cards, payments, invoices, taxes, investments, salary
+  - name: Admin
+    hint: government, utilities, contracts, insurance (non-health), housing, official paperwork
+  - name: Work & Projects
+    hint: job, colleagues, clients, personal projects, professional tools
+  - name: Shopping & Deliveries
+    hint: orders, receipts, shipping and delivery updates, returns
+  - name: Travel
+    hint: flights, trains, hotels, rentals, bookings, itineraries
+  - name: Family & Friends
+    hint: personal mail written by people you know
+  - name: Newsletters
+    hint: content you subscribed to (articles, digests, blogs)
+  - name: Promotions
+    hint: marketing, sales, discounts, ads
+  - name: Social & Notifications
+    hint: social networks, app and service notifications, security alerts, forums
+  - name: Other
+    hint: anything that does not clearly fit another theme
+
+# Statuses: one per mail, independent from the theme.
+statuses:
+  - name: Important
+    hint: needs your attention soon (deadline, money at stake, security, personal and urgent)
+  - name: To Do
+    hint: asks you to do something (reply, pay, sign, book, confirm) but is not urgent
+  - name: Info
+    hint: for information only, nothing to do
+
+# Used when the model fails twice to give a valid answer.
+fallback:
+  theme: Other
+  status: To Do
+
+# Local models (provider: ollama, model_name: ""): first row your machine meets wins.
+# Model names change fast: check https://ollama.com/library before relying on them.
+local_models:
+  - min_vram_gb: 20
+    use: qwen3.6:27b
+  - min_vram_gb: 8
+    use: qwen3.5:4b
+  - min_vram_gb: 0
+    use: qwen3.5:2b

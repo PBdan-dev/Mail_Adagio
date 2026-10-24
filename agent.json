@@ -1,0 +1,28 @@
+{
+  "name": "mail-adagio",
+  "version": "0.1.0",
+  "description": "Sorts Gmail: gives each mail one theme and one status, using an AI model you choose. Never deletes mail.",
+  "status": "Steps 1-2: read-only. Reads and classifies, changes nothing in Gmail yet.",
+  "how_to_call": "python adagio.py call   (one JSON request on stdin, one JSON result on stdout)",
+  "input": {
+    "action": "check | hardware | preview",
+    "limit": "preview only: number of recent mails (default 20)",
+    "since_days": "preview only: only mails from the last N days (optional)",
+    "config": "path to config.yaml (optional)"
+  },
+  "output": {
+    "ok": "true or false",
+    "error": "present when ok is false",
+    "agent": "mail-adagio",
+    "action": "the action that ran",
+    "preview": {
+      "processed": "number of mails read",
+      "changes_made": "always 0 in this version",
+      "by_theme": "{theme: count}",
+      "by_status": "{status: count}",
+      "fallbacks": "mails the model could not classify",
+      "mails": "[{uid, gm_msgid, date, sender, subject, existing_labels, theme, status, classified}] Important first"
+    }
+  },
+  "never": ["delete mail", "store mail content"]
+}
