@@ -452,8 +452,7 @@ def apply(cfg, request, gmail_factory, ask=None, progress=None):
                 folders = gmail.folders()
                 known = {f.lower() for f in folders}
                 dlabel = config.delete_label(cfg)
-                wanted = {names[r["theme"]] for r in todo} | {names[r["status"]] for r in todo}
-                for label in sorted(wanted | ({dlabel} if any(r["to_delete"] for r in todo) else set())):
+                for label in all_labels(cfg):  # every label, even empty ones: the list in Gmail is complete
                     if label.lower() not in known:
                         gmail.create_label(label)
                 gmail.open(gmail.all_mail(folders), readonly=False)
@@ -673,6 +672,14 @@ def suggest(cfg, request, gmail_factory, ask=None, progress=None):
         mem.close()
 
 
+def all_labels(cfg):
+    """Every label the agent uses, in order: statuses, themes, "To delete"."""
+    names = config.labels(cfg)
+    statuses, themes = config.order(cfg)
+    out = [names[n] for n in statuses + themes]
+    return out[:-1] + [config.delete_label(cfg)] + out[-1:] if out else out
+
+
 def keep(cfg, request, gmail_factory=None, ask=None, progress=None):
     """Untick "To delete" on a mail of the plan waiting for approval."""
     store = batches.Store(MEMORY_PATH)
@@ -790,6 +797,11 @@ def label_order(cfg, request, gmail_factory, ask=None, progress=None):
                 for r in reversed(done):  # put back what was already renamed
                     gmail.rename_label(r["new"], r["old"])
                 raise
+    with connect(cfg, gmail_factory) as gmail:  # and the labels never used yet, so the list is complete
+        existing = {k.lower() for k in gmail.folders()}
+        created = [x for x in all_labels(new_cfg) if x.lower() not in existing]
+        for label in created:
+            gmail.create_label(label)
     if request.get("save", True):
         config.save_order(request.get("config") or config.DEFAULT_PATH, new_cfg["label_order"])
     store = batches.Store(MEMORY_PATH)
@@ -799,7 +811,9 @@ def label_order(cfg, request, gmail_factory, ask=None, progress=None):
         store.close()
     lines = [f"labels: {len(done)} renamed in Gmail" + (" (numbered)" if numbered else " (numbers removed)")]
     lines += [f"  {r['old']} -> {r['new']}" for r in done]
-    return {**result, "renamed": len(done), "changes_made": len(done), "log": "\n".join(lines)}
+    lines += [f"  created: {x}" for x in created]
+    return {**result, "renamed": len(done), "created": created, "changes_made": len(done) + len(created),
+            "log": "\n".join(lines)}
 
 
 STEP3.update(keep=keep, to_delete=to_delete, trash=trash, restore=restore, label_order=label_order, scan=scan, senders=list_senders, sender_state=sender_state, suggest=suggest)

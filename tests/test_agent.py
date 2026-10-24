@@ -565,6 +565,8 @@ class TestLabelOrder(unittest.TestCase):
         names = {x for m in self.demo.FakeIMAP.mails.values() for x in m["labels"]}
         self.assertTrue({"16 - Job Search", "01 - Priority", "11 - Health"} <= names)
         self.assertFalse({"Job Search", "Priority"} & names)
+        created = {utf7 for utf7 in self.demo.FakeIMAP.created}
+        self.assertTrue({"98 - To delete", "17 - Travel"} <= created | names)  # empty labels exist too
         self.cfg["label_order"] = r["statuses"] + r["themes"]
         undo = self.run_(action="undo")  # removes the renamed labels
         self.assertTrue(undo["ok"], undo.get("error"))

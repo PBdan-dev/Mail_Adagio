@@ -754,8 +754,8 @@ async function previewOrder() {
   $("#orderPreview").innerHTML = n
     ? `<b>${n} label${n > 1 ? "s" : ""} will be renamed in Gmail.</b> Mails and colours stay.` +
       r.renames.map(x => `<div><span>${esc(x.old)}</span><span>→</span><b>${esc(x.new)}</b></div>`).join("")
-    : "Nothing to change in Gmail.";
-  $("#orderApply").disabled = !n;
+    : "Nothing to rename in Gmail. Apply creates any missing label.";
+  $("#orderApply").disabled = false;
 }
 $("#orderForm").onsubmit = async e => {
   e.preventDefault();
@@ -763,7 +763,7 @@ $("#orderForm").onsubmit = async e => {
   const r = await api("/api/order", { order: [...ord.statuses, ...ord.themes], numbered: ord.numbered, apply: true });
   if (!r.ok) { $("#orderApply").disabled = false; return toast(r.error, true); }
   $("#orderDlg").close();
-  toast(`${r.renamed} label${r.renamed === 1 ? "" : "s"} renamed in Gmail. Mails and colours kept.`);
+  toast(`${r.renamed} label${r.renamed === 1 ? "" : "s"} renamed in Gmail` + (r.created?.length ? `, ${r.created.length} created` : "") + ". Mails and colours kept.");
   refresh().then(loadDelete);
 };
 
