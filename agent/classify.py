@@ -33,6 +33,7 @@ class Result:
     ok: bool          # False when we used the fallback
     attempts: int
     error: str = ""
+    provider_error: bool = False  # the model could not be reached, as opposed to a bad answer
 
 
 def schema(cfg):
@@ -77,14 +78,16 @@ def parse(text, cfg):
 def classify(mail, ask, cfg, tries=2):
     """Classify one mail. Bad answer: one more try. Still bad: fallback theme and status."""
     system, user, sch = system_prompt(cfg), user_prompt(mail), schema(cfg)
-    error = ""
+    error, provider_error = "", False
     for attempt in range(1, tries + 1):
         try:
-            answer = parse(ask(system, user, sch), cfg)
+            text = ask(system, user, sch)
+            answer, error, provider_error = parse(text, cfg), "", False
+            if not answer:
+                error = f"invalid answer: {str(text)[:120]!r}"
         except Exception as e:  # network or provider error: same treatment as a bad answer
-            answer, error = None, str(e)
+            answer, error, provider_error = None, str(e), True
         if answer:
             return Result(answer[0], answer[1], True, attempt)
-        error = error or "invalid answer"
     fb = cfg["fallback"]
-    return Result(fb["theme"], fb["status"], False, tries, error)
+    return Result(fb["theme"], fb["status"], False, tries, error, provider_error)

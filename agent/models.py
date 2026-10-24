@@ -81,8 +81,19 @@ def _openai_compatible(name, key, url):
     return ask
 
 
+def ollama_models(url=None):
+    """What Ollama has: {'installed': [names], 'running': [names loaded in memory]}."""
+    url = (url or DEFAULT_URLS["ollama"]).rstrip("/")
+    installed = _get(f"{url}/api/tags").get("models") or []
+    running = _get(f"{url}/api/ps").get("models") or []
+    return {"installed": [m.get("name") or m.get("model") for m in installed],
+            "running": [m.get("name") or m.get("model") for m in running]}
+
+
 def _ollama(name, url):
     """Ollama's own API: the `format` field forces an answer that fits the JSON schema."""
+    no_think = {"on": True}  # models without a thinking mode refuse the "think" field
+
     def ask(system, user, schema):
         body = {
             "model": name,
@@ -90,15 +101,33 @@ def _ollama(name, url):
                          {"role": "user", "content": user}],
             "format": schema,
             "stream": False,
-            "think": False,
             "options": {"temperature": 0},
         }
-        data = _post(f"{url}/api/chat", body, {}, timeout=300)
+        if no_think["on"]:
+            body["think"] = False
+        try:
+            data = _post(f"{url}/api/chat", body, {}, timeout=300)
+        except ModelError as e:
+            if not (no_think["on"] and "think" in str(e).lower()):
+                raise
+            no_think["on"] = False
+            body.pop("think")
+            data = _post(f"{url}/api/chat", body, {}, timeout=300)
         try:
             return data["message"]["content"]
         except (KeyError, TypeError) as e:
             raise ModelError(f"Unexpected answer: {str(data)[:200]}") from e
     return ask
+
+
+def _get(url, timeout=5):
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as e:
+        raise ModelError(f"HTTP {e.code} from {url}") from e
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise ModelError(f"Ollama is not reachable at {url.rsplit('/api', 1)[0]}. Is it running?") from e
 
 
 def _post(url, body, headers, timeout=60):

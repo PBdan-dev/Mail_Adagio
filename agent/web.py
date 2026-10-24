@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from . import config, core, demo
+from . import config, core, demo, models
 from .mail import Gmail
 
 PAGE = Path(__file__).parent / "web" / "index.html"
@@ -25,7 +25,7 @@ class App:
         self.demo = demo_mode
         self.token = secrets.token_urlsafe(24)  # the page must send it back: blocks other sites
         self.lock = threading.Lock()
-        self.job = {"running": False, "done": 0, "total": 0}
+        self.job = {"running": False, "done": 0, "total": 0, "model": ""}
         self.last = None
 
     def cfg(self):
@@ -53,6 +53,7 @@ class App:
             "email": g.get("email", ""), "has_password": bool(g.get("app_password")),
             "mailbox": g.get("mailbox", "INBOX"),
             "provider": m.get("provider", "anthropic"), "model_name": m.get("model_name", ""),
+            "base_url": m.get("base_url", ""),
             "has_api_key": bool(m.get("api_key")),
             "themes": config.names(cfg["themes"]) if cfg else [],
             "statuses": config.names(cfg["statuses"]) if cfg else [],
@@ -61,18 +62,40 @@ class App:
             "log": core.read_log(40),
         }
 
+    def model_info(self):
+        """Which model will sort the mails, or why none can. Also what Ollama has installed."""
+        info = {"ok": True, "note": "", "error": "", "installed": [], "running": []}
+        try:
+            cfg = self.cfg()
+            if self.demo:
+                info["note"] = "demo-model · demo"
+                return info
+            if cfg["model"]["provider"] == "ollama":
+                try:
+                    info.update(models.ollama_models(cfg["model"].get("base_url")))
+                except models.ModelError:
+                    pass
+            info["note"] = core.resolve_model(cfg)[1]
+        except (config.ConfigError, models.ModelError) as e:
+            info.update(ok=False, error=str(e))
+        return info
+
     def start_preview(self, limit):
         with self.lock:
             if self.job["running"]:
                 return False
-            self.job = {"running": True, "done": 0, "total": limit}
+            self.job = {"running": True, "done": 0, "total": limit, "model": ""}
         cfg = self.cfg()
 
         def progress(i, n, row):
-            self.job.update(done=i, total=n)
+            if i == 0:
+                self.job["model"] = row["model"]
+            else:
+                self.job.update(done=i, total=n)
 
         def run():
-            result = core.handle({"action": "preview", "limit": limit}, cfg=cfg,
+            result = core.handle({"action": "preview", "limit": limit,
+                                  "model_note": "demo-model · demo"}, cfg=cfg,
                                  gmail_factory=self.gmail(),
                                  ask=demo.ask if self.demo else None, progress=progress)
             self.last = result
@@ -111,6 +134,8 @@ def make_handler(app, port):
                 return self.send(403, {"error": "forbidden"})
             if self.path == "/api/state":
                 return self.send(200, app.state())
+            if self.path == "/api/model":
+                return self.send(200, app.model_info())
             if self.path == "/api/hardware":
                 return self.send(200, core.handle({"action": "hardware"}))
             self.send(404, {"error": "not found"})
@@ -130,7 +155,7 @@ def make_handler(app, port):
                     config.save_settings(app.config_path, body.get("email", ""),
                                          body.get("provider", "anthropic"),
                                          body.get("model_name", ""), body.get("app_password", ""),
-                                         body.get("api_key", ""))
+                                         body.get("api_key", ""), body.get("base_url"))
                     core.log("settings saved")
                     return self.send(200, {"ok": True})
                 except config.ConfigError as e:

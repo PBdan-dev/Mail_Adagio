@@ -74,7 +74,7 @@ def save_values(path, values):
 
 
 DEFAULT_MODELS = {"anthropic": "claude-haiku-5-5", "openrouter": "anthropic/claude-haiku-5.5",
-                  "ollama": ""}
+                  "ollama": "active"}
 
 
 def ensure_file(path=DEFAULT_PATH):
@@ -86,7 +86,7 @@ def ensure_file(path=DEFAULT_PATH):
     return True
 
 
-def save_settings(path, email, provider, model_name="", app_password="", api_key=""):
+def save_settings(path, email, provider, model_name="", app_password="", api_key="", base_url=None):
     """Used by the web page. Empty password or key fields keep the saved value."""
     if provider not in PROVIDERS:
         raise ConfigError(f"Unknown provider '{provider}'")
@@ -94,11 +94,13 @@ def save_settings(path, email, provider, model_name="", app_password="", api_key
         raise ConfigError("This does not look like an e-mail address")
     ensure_file(path)
     values = {"email": email.strip(), "provider": provider,
-              "model_name": model_name.strip() or DEFAULT_MODELS[provider]}
+              "model_name": model_name.strip().strip("'\"").strip() or DEFAULT_MODELS[provider]}
     if app_password.strip():
         values["app_password"] = app_password.replace(" ", "").strip()
     if api_key.strip():
         values["api_key"] = api_key.strip()
+    if base_url is not None:
+        values["base_url"] = base_url.strip()
     save_values(path, values)
     return load(path)
 
@@ -124,7 +126,7 @@ def setup(path=DEFAULT_PATH, ask=input, ask_secret=getpass, say=print):
         raise ConfigError(f"Unknown provider '{provider}'")
     values["provider"] = provider
     if provider == "ollama":
-        values["model_name"] = ask("  Ollama model ('' = choose from my hardware): ").strip()
+        values["model_name"] = ask("  Ollama model (active / auto / a name) [active]: ").strip() or "active"
     elif provider == "openrouter" and cfg["model"]["model_name"].startswith("claude-"):
         values["model_name"] = ask("  OpenRouter model [anthropic/claude-haiku-5.5]: ").strip() \
             or "anthropic/claude-haiku-5.5"

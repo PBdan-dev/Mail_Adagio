@@ -10,7 +10,7 @@ gmail:
 
 model:
   provider: anthropic       # anthropic | openrouter | ollama
-  model_name: claude-haiku-5-5   # for ollama, leave "" to pick a model from your hardware
+  model_name: claude-haiku-5-5   # for ollama: active (model already loaded), auto (from your graphics card) or a name
   api_key: ""               # not needed for ollama
   base_url: ""              # "" = provider default
 

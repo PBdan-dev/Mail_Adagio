@@ -82,15 +82,40 @@ def default_table():
 
 
 def resolve_model(cfg):
-    """Model settings to use, plus a sentence explaining the choice."""
+    """Model settings to use, plus a short sentence saying which model and why.
+
+    For Ollama, model_name can be "active" (the model already loaded in Ollama),
+    "auto" or "" (chosen from the graphics card), or a model name.
+    """
     m = dict(cfg["model"])
-    if m["provider"] == "ollama" and not m.get("model_name"):
-        name, reason = hardware.pick_model(cfg["local_models"], hardware.detect())
+    name = (m.get("model_name") or "").strip().strip("'\"").strip()
+    if m["provider"] != "ollama":
         if not name:
-            raise models.ModelError(reason)
+            raise models.ModelError("No model name set. Open Settings and choose a model.")
         m["model_name"] = name
-        return m, f"Auto-selected {name} ({reason})"
-    return m, f"{m['provider']} / {m['model_name']}"
+        return m, f"{name} · {m['provider']}"
+    have = models.ollama_models(m.get("base_url"))
+    if name.lower() == "active":
+        if not have["running"]:
+            raise models.ModelError("No model is loaded in Ollama right now. Load one, or pick a "
+                                    "model by name in Settings.")
+        m["model_name"] = have["running"][0]
+        return m, f"{m['model_name']} · Ollama, active model"
+    if name.lower() in ("", "auto"):
+        info = hardware.detect()
+        table = [r for r in cfg["local_models"] if r["use"] in have["installed"]] or cfg["local_models"]
+        pick, reason = hardware.pick_model(table, info)
+        if not pick:
+            raise models.ModelError(reason)
+        if pick not in have["installed"]:
+            raise models.ModelError(f"{pick} fits your PC but is not installed. Run: ollama pull {pick}")
+        m["model_name"] = pick
+        return m, f"{pick} · Ollama, chosen for your PC ({reason.split(' → ')[0]})"
+    if have["installed"] and name not in have["installed"]:
+        raise models.ModelError(f"Ollama has no model named '{name}'. Installed: "
+                                f"{', '.join(have['installed']) or 'none'}")
+    m["model_name"] = name
+    return m, f"{name} · Ollama"
 
 
 def gmail_url(gm_msgid):
@@ -117,8 +142,13 @@ def preview(cfg, request, gmail_factory, ask, progress):
     limit = int(request.get("limit") or 20)
     since = request.get("since_days")
     mailbox = cfg["gmail"].get("mailbox", "INBOX")
-    model_cfg, model_note = resolve_model(cfg)
-    ask = ask or models.make_ask(model_cfg)
+    if ask:
+        model_note = request.get("model_note") or f"{cfg['model'].get('model_name')} · {cfg['model']['provider']}"
+    else:
+        model_cfg, model_note = resolve_model(cfg)
+        ask = models.make_ask(model_cfg)
+    if progress:
+        progress(0, 0, {"model": model_note})
 
     with connect(cfg, gmail_factory) as gmail:
         total = gmail.open(mailbox)
@@ -128,6 +158,9 @@ def preview(cfg, request, gmail_factory, ask, progress):
     rows = []
     for i, mail in enumerate(mails, 1):
         r = classify.classify(mail, ask, cfg)
+        if i == 1 and not r.ok and r.provider_error:
+            # the model cannot answer at all: stop now instead of filing every mail in Other
+            raise models.ModelError(f"The model {model_note.split(' · ')[0]} did not answer: {r.error}")
         rows.append({
             "uid": mail.uid, "gm_msgid": mail.gm_msgid, "date": mail.date,
             "sender": mail.sender, "subject": mail.subject,
@@ -149,5 +182,6 @@ def preview(cfg, request, gmail_factory, ask, progress):
         "by_status": {s: n for s, n in sorted(Counter(r["status"] for r in rows).items(),
                                               key=lambda kv: status_order[kv[0]])},
         "fallbacks": sum(not r["classified"] for r in rows),
+        "first_error": next((r["error"] for r in rows if not r["classified"]), ""),
         "mails": rows,
     }

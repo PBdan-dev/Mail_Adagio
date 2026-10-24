@@ -206,6 +206,88 @@ class TestCore(unittest.TestCase):
         self.assertFalse(core.handle({"action": "delete"})["ok"])
 
 
+class TestModelChoice(unittest.TestCase):
+    def setUp(self):
+        from agent import models
+        self.models = models
+        self.saved = models.ollama_models
+        models.ollama_models = lambda url=None: {"installed": ["qwen3.6:27b", "gemma4:e4b"],
+                                                 "running": ["gemma4:e4b"]}
+
+    def tearDown(self):
+        self.models.ollama_models = self.saved
+
+    def cfg(self, name):
+        cfg = cfg_with()
+        cfg["model"].update(provider="ollama", model_name=name)
+        return cfg
+
+    def test_active_auto_and_name(self):
+        m, note = core.resolve_model(self.cfg("active"))
+        self.assertEqual(m["model_name"], "gemma4:e4b")
+        self.assertIn("active model", note)
+        m, _ = core.resolve_model(self.cfg("'qwen3.6:27b'"))  # stray quotes are ignored
+        self.assertEqual(m["model_name"], "qwen3.6:27b")
+        with self.assertRaises(self.models.ModelError):
+            core.resolve_model(self.cfg("llama9"))
+
+    def test_auto_uses_installed_models_only(self):
+        saved = hardware.detect
+        hardware.detect = lambda: {"gpu": "RTX 3090", "vram_gb": 24.0, "ram_gb": 64}
+        try:
+            m, note = core.resolve_model(self.cfg("auto"))
+            self.assertEqual(m["model_name"], "qwen3.6:27b")
+            self.assertIn("RTX 3090", note)
+        finally:
+            hardware.detect = saved
+
+    def test_no_active_model(self):
+        self.models.ollama_models = lambda url=None: {"installed": ["x"], "running": []}
+        with self.assertRaises(self.models.ModelError):
+            core.resolve_model(self.cfg("active"))
+
+    def test_unreachable_model_stops_the_run(self):
+        def down(*a):
+            raise self.models.ModelError("Ollama is not reachable")
+        result = core.handle({"action": "preview", "limit": 3}, cfg=cfg_with(),
+                             gmail_factory=fake_gmail, ask=down)
+        self.assertFalse(result["ok"])
+        self.assertIn("did not answer", result["error"])
+
+    def test_ollama_adapter_retries_without_think(self):
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        bodies = []
+
+        class FakeOllama(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                bodies.append(body)
+                if "think" in body:
+                    self.send_response(400)
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"model does not support thinking"}')
+                    return
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(json.dumps({"message": {"content": '{"theme":"Finance","status":"Info"}'}}).encode())
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), FakeOllama)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            ask = self.models.make_ask({"provider": "ollama", "model_name": "m",
+                                        "base_url": f"http://127.0.0.1:{server.server_address[1]}"})
+            self.assertIn("Finance", ask("s", "u", {}))
+            self.assertIn("Finance", ask("s", "u", {}))
+            self.assertEqual(["think" in b for b in bodies], [True, False, False])
+        finally:
+            server.shutdown()
+            server.server_close()
+
+
 class TestWeb(unittest.TestCase):
     """Starts the local server in demo mode and talks to it like the page does."""
 
@@ -225,6 +307,7 @@ class TestWeb(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
+        cls.server.server_close()
         shutil.rmtree(cls.tmp)
 
     def call(self, path, body=None, token=True):

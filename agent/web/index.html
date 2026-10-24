@@ -183,6 +183,20 @@ dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
 .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.err { background: var(--red); color: #fff; }
 .hidden { display: none !important; }
+.model-chip { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 6px 12px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--border); font-size: 13px; max-width: 100%; }
+.model-chip b { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.model-chip small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.model-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; }
+.model-chip.err { border-color: color-mix(in srgb, var(--red) 40%, transparent); background: var(--red-soft); color: var(--red); }
+.model-chip.err i { background: var(--red); }
+.running i { animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+.alert { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; margin-bottom: 14px;
+  background: var(--red-soft); color: var(--red); font-size: 13px; }
+.alert b { display: block; }
+.alert span { color: var(--text); opacity: .85; word-break: break-word; }
+.kv dd.err { color: var(--red); white-space: normal; }
 </style>
 </head>
 <body>
@@ -233,6 +247,7 @@ dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
             <button data-n="20" class="on">20</button><button data-n="50">50</button><button data-n="100">100</button><button data-n="200">200</button>
           </div>
         </div>
+        <div class="model-chip" id="modelChip"><i></i><span>Sorting model</span> <b id="chipName">…</b> <small id="chipHow"></small></div>
       </div>
       <button class="btn primary" id="runBtn">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
@@ -260,6 +275,10 @@ dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
     <section class="card">
       <div class="row" style="justify-content:space-between;margin-bottom:12px">
         <div><h2>Mails</h2><p class="sub" style="margin:0" id="mailsSub">Run a preview to see your mails here.</p></div>
+      </div>
+      <div class="alert hidden" id="sortAlert">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex:none;margin-top:1px"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        <div><b id="sortAlertTitle"></b><span id="sortAlertText"></span></div>
       </div>
       <div class="tools">
         <div class="seg" id="statusSeg"><button data-s="" class="on">All</button></div>
@@ -311,9 +330,16 @@ dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
     <small>Not your usual password. <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">Create one ↗</a> (2-step verification and IMAP must be on).</small></div>
   <div class="field"><label>AI model</label>
     <div class="seg" id="provSeg"><button type="button" data-p="anthropic" class="on">Claude (Anthropic)</button><button type="button" data-p="openrouter">OpenRouter</button><button type="button" data-p="ollama">Ollama (local)</button></div></div>
-  <div class="field"><label for="fModel">Model name</label>
-    <input class="input" id="fModel" placeholder="claude-haiku-5-5">
+  <div class="field hidden" id="ollamaField"><label>Which Ollama model</label>
+    <div class="seg" id="ollSeg"><button type="button" data-o="active" class="on">Active model</button><button type="button" data-o="name">By name</button><button type="button" data-o="auto">Automatic</button></div>
+    <small id="ollHint"></small></div>
+  <div class="field" id="modelField"><label for="fModel">Model name</label>
+    <input class="input" id="fModel" placeholder="claude-haiku-5-5" list="installedList">
+    <datalist id="installedList"></datalist>
     <small id="modelHint">Leave as is unless you want another model.</small></div>
+  <div class="field hidden" id="urlField"><label for="fUrl">Ollama address</label>
+    <input class="input" id="fUrl" placeholder="http://localhost:11434">
+    <small>Leave empty unless Ollama runs on another address.</small></div>
   <div class="field" id="keyField"><label for="fKey">API key</label>
     <input class="input" id="fKey" type="password" placeholder="sk-…" autocomplete="off"></div>
   <div class="foot">
@@ -329,6 +355,7 @@ const TOKEN = "__TOKEN__";
 const PALETTE = ["#4f7df3","#1f9d63","#e0a106","#d6457a","#8e6cef","#14a3b8","#f07a3c","#5b8db8","#9aa93a","#e05d5d","#7a869a","#2bb3a3","#c06bd6","#3f9b4f"];
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let M = null, ollMode = "active";
 let S = null, limit = 20, themeFilter = "", statusFilter = "", query = "", provider = "anthropic", polling = null, lastTotal = null;
 
 async function api(path, body) {
@@ -354,11 +381,39 @@ const color = name => PALETTE[Math.max(0, (S?.themes || []).indexOf(name)) % PAL
   };
 })();
 
+async function loadModel() {
+  M = await api("/api/model");
+  renderModel();
+}
+function renderModel(runningNote) {
+  const chip = $("#modelChip"), note = runningNote || (M && M.note) || "";
+  const [name, how] = note.split(" · ");
+  chip.classList.toggle("err", !!(M && !M.ok) && !runningNote);
+  chip.classList.toggle("running", !!runningNote);
+  if (M && !M.ok && !runningNote) {
+    $("#chipName").textContent = "No model available";
+    $("#chipHow").textContent = "";
+    chip.title = M.error;
+    $("#kModel").textContent = M.error; $("#kModel").className = "err";
+  } else {
+    $("#chipName").textContent = name || "…";
+    $("#chipHow").textContent = how ? "· " + how : "";
+    chip.title = note;
+    $("#kModel").textContent = note || "…"; $("#kModel").className = "";
+  }
+  $("#chipName").previousElementSibling.textContent = runningNote ? "Sorting with" : "Sorting model";
+}
+
 async function refresh() {
   S = await api("/api/state");
   render();
   if (S.job.running && !polling) polling = setInterval(refresh, 500);
-  if (!S.job.running && polling) { clearInterval(polling); polling = null; if (S.last && !S.last.ok) toast(S.last.error, true); }
+  if (!S.job.running && polling) { clearInterval(polling); polling = null; if (S.last && !S.last.ok) toast(S.last.error, true); loadModel(); }
+  if (S.last && !S.last.ok && !S.job.running) {
+    $("#sortAlert").classList.remove("hidden");
+    $("#sortAlertTitle").textContent = "The sort did not run.";
+    $("#sortAlertText").textContent = S.last.error;
+  }
 }
 
 function render() {
@@ -375,8 +430,6 @@ function render() {
   $("#kMailbox").textContent = S.mailbox;
   const total = S.last?.total_in_mailbox ?? lastTotal;
   $("#kTotal").textContent = total != null ? total.toLocaleString() : "–";
-  $("#kModel").textContent = (S.provider === "ollama" && !S.model_name) ? "Ollama (auto)" : `${S.model_name}`;
-  $("#kModel").title = S.provider;
 
   // progress
   const run = S.job.running;
@@ -386,8 +439,10 @@ function render() {
   if (run) {
     const pct = S.job.total ? Math.round(100 * S.job.done / S.job.total) : 3;
     $("#barFill").style.width = Math.max(pct, 3) + "%";
-    $("#progressText").textContent = S.job.done ? `${S.job.done} of ${S.job.total} mails sorted` : "Reading Gmail…";
+    const who = S.job.model ? ` with ${S.job.model.split(" · ")[0]}` : "";
+    $("#progressText").textContent = S.job.done ? `${S.job.done} of ${S.job.total} mails sorted${who}` : (S.job.model ? `Reading Gmail, then sorting${who}…` : "Checking the model…");
   }
+  renderModel(run ? S.job.model : "");
 
   $("#log").textContent = S.log.length ? S.log.join("\n") : "Nothing yet.";
   renderResult();
@@ -428,7 +483,12 @@ function renderResult() {
   const q = query.toLowerCase();
   const rows = r.mails.filter(m => (!themeFilter || m.theme === themeFilter) && (!statusFilter || m.status === statusFilter)
     && (!q || (m.sender + " " + m.subject).toLowerCase().includes(q)));
-  $("#mailsSub").textContent = `${rows.length} of ${r.processed} · Important first · ${r.fallbacks ? r.fallbacks + " could not be sorted · " : ""}nothing changed in Gmail`;
+  $("#mailsSub").textContent = `${rows.length} of ${r.processed} · sorted by ${(r.model || "").split(" · ")[0]} · nothing changed in Gmail`;
+  $("#sortAlert").classList.toggle("hidden", !r.fallbacks);
+  if (r.fallbacks) {
+    $("#sortAlertTitle").textContent = `${r.fallbacks} of ${r.processed} mails could not be sorted (put in ${S.themes.includes("Other") ? "Other" : "the fallback theme"}).`;
+    $("#sortAlertText").textContent = "Reason: " + (r.first_error || "unknown");
+  }
   const groups = order.map(t => [t, rows.filter(m => m.theme === t)]).filter(([, l]) => l.length);
   box.innerHTML = groups.length ? groups.map(([t, list]) => `
     <div class="group">
@@ -472,33 +532,58 @@ $("#search").oninput = e => { query = e.target.value; renderResult(); };
 
 function setProvider(p) {
   provider = p;
+  const oll = p === "ollama";
   $("#provSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x.dataset.p === p));
-  $("#keyField").classList.toggle("hidden", p === "ollama");
-  $("#fModel").placeholder = S.default_models[p] || "empty = chosen from your graphics card";
-  $("#modelHint").textContent = p === "ollama" ? "Leave empty: the agent picks a model that fits your graphics card." : "Leave as is unless you want another model.";
+  $("#keyField").classList.toggle("hidden", oll);
+  $("#ollamaField").classList.toggle("hidden", !oll);
+  $("#urlField").classList.toggle("hidden", !oll);
+  $("#fModel").placeholder = S.default_models[p] || "";
+  $("#modelHint").textContent = "Leave as is unless you want another model.";
+  setOll(oll ? ollMode : null);
 }
-$("#provSeg").querySelectorAll("button").forEach(b => b.onclick = () => { if (provider !== b.dataset.p) $("#fModel").value = ""; setProvider(b.dataset.p); });
+function setOll(mode) {
+  if (mode) ollMode = mode;
+  $("#ollSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x.dataset.o === ollMode));
+  const oll = provider === "ollama";
+  $("#modelField").classList.toggle("hidden", oll && ollMode !== "name");
+  const run = (M && M.running || []), inst = (M && M.installed || []);
+  $("#installedList").innerHTML = inst.map(n => `<option value="${esc(n)}">`).join("");
+  if (oll && ollMode === "name") { $("#fModel").placeholder = inst[0] || "qwen3.6:27b"; $("#modelHint").textContent = inst.length ? "Installed: " + inst.join(", ") : "Type the name shown by: ollama list"; }
+  $("#ollHint").textContent = !oll ? "" : ollMode === "active"
+    ? (run.length ? `Uses the model already loaded in Ollama: ${run[0]}.` : "Uses the model loaded in Ollama when you run the sort (none loaded right now).")
+    : ollMode === "auto" ? "Picks the best installed model for your graphics card, from the table in config.yaml." : "";
+}
+$("#ollSeg").querySelectorAll("button").forEach(b => b.onclick = () => setOll(b.dataset.o));
+$("#provSeg").querySelectorAll("button").forEach(b => b.onclick = async () => {
+  if (provider !== b.dataset.p) $("#fModel").value = "";
+  setProvider(b.dataset.p);
+});
 function openSettings() {
   $("#fEmail").value = S.email || "";
   $("#fPass").value = ""; $("#fPass").placeholder = S.has_password ? "Saved · type to replace" : "16 letters";
   $("#fKey").value = ""; $("#fKey").placeholder = S.has_api_key ? "Saved · type to replace" : "sk-…";
+  const mn = (S.model_name || "").replace(/^['"]+|['"]+$/g, "");
+  ollMode = S.provider !== "ollama" ? "active" : (mn === "active" ? "active" : (!mn || mn === "auto") ? "auto" : "name");
   setProvider(S.provider || "anthropic");
-  $("#fModel").value = S.model_name || "";
+  $("#fModel").value = (S.provider === "ollama" && ollMode !== "name") ? "" : mn;
+  $("#fUrl").value = S.base_url || "";
   $("#settings").showModal();
 }
-$("#settingsBtn").onclick = openSettings;
-$("#welcomeBtn").onclick = openSettings;
+const openFresh = async () => { openSettings(); await loadModel(); setOll(); };
+$("#settingsBtn").onclick = openFresh;
+$("#welcomeBtn").onclick = openFresh;
 $("#cancelBtn").onclick = () => $("#settings").close();
 $("#settingsForm").onsubmit = async e => {
   e.preventDefault();
+  const model_name = provider === "ollama" && ollMode !== "name" ? ollMode : $("#fModel").value;
   const r = await api("/api/settings", { email: $("#fEmail").value, app_password: $("#fPass").value,
-    provider, model_name: $("#fModel").value, api_key: $("#fKey").value });
+    provider, model_name, api_key: $("#fKey").value, base_url: provider === "ollama" ? $("#fUrl").value : undefined });
   if (!r.ok) return toast(r.error, true);
   $("#settings").close(); toast("Saved. Testing the connection…");
-  await refresh(); $("#checkBtn").click();
+  await refresh(); await loadModel(); $("#checkBtn").click();
 };
 
-refresh();
+refresh().then(loadModel);
 </script>
 </body>
 </html>

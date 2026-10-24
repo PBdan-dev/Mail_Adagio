@@ -79,7 +79,7 @@ def main(argv=None):
     ui.show_preview_intro(note, args.limit)
     colors = ui.theme_colors(cfg)
     result = core.handle(request, cfg=cfg,
-                         progress=lambda i, n, row: ui.progress(i, n, row, colors))
+                         progress=lambda i, n, row: i and ui.progress(i, n, row, colors))
     return finish(result, lambda r: ui.show_preview(r, cfg))
 
 
