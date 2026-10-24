@@ -167,7 +167,8 @@ class FakeIMAP:
             labels = " ".join(f'"{x}"' if x.startswith("\\") else f'"{utf7_encode(x)}"'
                               for x in sorted(m["labels"])).replace("\\", "\\\\")
             if args[1] == "(FLAGS)":
-                out.append(f"{i} (FLAGS ({'\\Seen' if m['seen'] else ''}) UID {u})".encode())
+                flags = "\\Seen" if m["seen"] else ""
+                out.append(f"{i} (FLAGS ({flags}) UID {u})".encode())
                 continue
             head = f"{i} (X-GM-MSGID {m['gm']} X-GM-LABELS ({labels}) UID {u}"
             if "BODY" in args[1]:
