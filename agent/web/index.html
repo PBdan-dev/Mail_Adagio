@@ -85,6 +85,11 @@ main { padding-top: 24px; padding-bottom: 48px; display: grid; gap: 20px;
 .seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .banner { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; padding: 12px 16px;
   border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-weight: 550; }
+details.colors { margin-top: 6px; }
+details.colors summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 550; }
+details.colors small { display: block; margin: 6px 0; }
+#colorList div { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 2px 0; }
+#colorList em { margin-left: auto; font-style: normal; color: var(--muted); font-size: 12px; }
 .banner.warn { background: var(--amber-soft); color: var(--amber); }
 .banner svg { flex: none; }
 
@@ -472,7 +477,10 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
         Undo last batch</button>
       <div class="action"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></div>
-        <div><b>Labels in Gmail</b><small id="labelNote">Each theme and status becomes a Gmail label.</small></div></div>
+        <div><b>Labels in Gmail</b><small id="labelNote">Each theme and status becomes a Gmail label.</small>
+          <details class="colors"><summary>Same colours in Gmail</summary>
+            <small>Gmail does not let the agent colour labels. Once, in Gmail: hover a label, click ⋮ &gt; Label colour, pick the colour shown here.</small>
+            <div id="colorList"></div></details></div></div>
       <div class="action"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/><path d="M4 4l16 16"/></svg></div>
         <div><b>Never deletes</b><small>Adds labels and moves mails out of the Inbox. Nothing else.</small></div></div>
     </section>
@@ -568,7 +576,7 @@ function toast(msg, err) {
   const t = $("#toast"); t.textContent = msg; t.className = "toast on" + (err ? " err" : "");
   clearTimeout(t._h); t._h = setTimeout(() => t.className = "toast", err ? 6000 : 2800);
 }
-const color = name => PALETTE[Math.max(0, (S?.themes || []).indexOf(name)) % PALETTE.length];
+const color = name => S?.colors?.[name]?.hex || PALETTE[Math.max(0, (S?.themes || []).indexOf(name)) % PALETTE.length];
 
 /* theme toggle, remembered on this browser */
 (function () {
@@ -714,6 +722,8 @@ function render() {
                                    : "Nothing applied yet.";
   const odd = Object.entries(sort.labels || {}).filter(([k, v]) => k !== v);
   $("#labelNote").textContent = "Each theme and status becomes a Gmail label." + (odd.length ? " " + odd.map(([k, v]) => `${k} uses the label "${v}"`).join(", ") + " (Gmail reserves the name)." : "");
+  $("#colorList").innerHTML = Object.entries(S.colors || {}).map(([k, c]) =>
+    `<div><span class="dot" style="background:${c.hex}"></span>${esc((sort.labels || {})[k] || k)}<em>${esc(c.gmail)}</em></div>`).join("");
 
   const alert = S.error && !busy;
   $("#sortAlert").classList.toggle("hidden", !alert);

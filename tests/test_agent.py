@@ -412,6 +412,17 @@ class TestStep3(unittest.TestCase):
         self.assertTrue(0 < r["mails"] < 50 and r["batches"] == 1)
         self.assertIn("$", r["cost_note"])
 
+    def test_colors_are_gmail_colors(self):
+        cfg = cfg_with()
+        c = config.colors(cfg)
+        self.assertEqual((c["Job Search"]["gmail"], c["Important"]["hex"]), ("Purple", "#fb4c2f"))
+        self.assertEqual(len({v["gmail"] for v in c.values()}), 15)  # all different
+        cfg["themes"].insert(0, {"name": "Music"})
+        self.assertEqual(config.colors(cfg)["Music"]["gmail"], "Dark Purple")
+        cfg["themes"][0]["color"] = "Neon"
+        with self.assertRaises(config.ConfigError):
+            config.check(cfg)
+
     def test_gmail_reserved_label_names(self):
         self.assertEqual(config.labels(self.cfg)["Important"], "Priority")
         cfg = cfg_with()

@@ -80,6 +80,7 @@ class App:
             "has_api_key": bool(m.get("api_key")),
             "themes": config.names(cfg["themes"]) if cfg else [],
             "statuses": config.names(cfg["statuses"]) if cfg else [],
+            "colors": config.colors(cfg) if cfg else {},
             "default_models": config.DEFAULT_MODELS,
             "job": job, "stopping": stopping, "error": error, "notice": notice,
             "sort": sort if sort and sort.get("ok") else None,

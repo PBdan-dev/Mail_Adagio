@@ -23,30 +23,45 @@ behavior:
 # Themes: one per mail. Add, rename or remove freely. Each theme is a Gmail label (a "folder").
 # "hint" tells the model what belongs there. Keep a theme named "Other".
 # Optional "label": Gmail label name when it must differ from the name.
+# Optional "color": one of Gmail's label colours (Red, Orange, Yellow, Green, Mint, Teal, Blue, Purple,
+# Pink, Brown, Dark Red, Dark Orange, Dark Green, Dark Blue, Dark Purple, Dark Pink, Gray, Light Gray,
+# Dark Gray, Black). The app shows it; in Gmail pick the same once (label menu > Label colour).
 themes:
   - name: Health
+    color: Teal
     hint: doctors, hospitals, pharmacy, health insurance, medical results
   - name: Finance
+    color: Green
     hint: bank, cards, payments, invoices, taxes, investments, salary
   - name: Admin
+    color: Dark Blue
     hint: government, utilities, contracts, insurance (non-health), housing, official paperwork
   - name: Work & Projects
+    color: Blue
     hint: your current work, colleagues, clients, personal projects, professional tools
   - name: Job Search
+    color: Purple
     hint: job offers and job alerts (LinkedIn, Indeed...), applications, recruiters, interviews
   - name: Shopping & Deliveries
+    color: Orange
     hint: orders, receipts, shipping and delivery updates, returns
   - name: Travel
+    color: Mint
     hint: flights, trains, hotels, rentals, bookings, itineraries
   - name: Family & Friends
+    color: Pink
     hint: personal mail written by people you know
   - name: Newsletters
+    color: Dark Green
     hint: content you subscribed to (articles, digests, blogs)
   - name: Promotions
+    color: Gray
     hint: marketing, sales, discounts, ads
   - name: Social & Notifications
+    color: Light Gray
     hint: social networks, app and service notifications, security alerts, forums (job alerts go to Job Search)
   - name: Other
+    color: Brown
     hint: anything that does not clearly fit another theme
 
 # Statuses: one per mail, independent from the theme.
@@ -54,10 +69,13 @@ themes:
 statuses:
   - name: Important
     label: Priority
+    color: Red
     hint: needs your attention soon (deadline, money at stake, security, personal and urgent)
   - name: To Do
+    color: Yellow
     hint: asks you to do something (reply, pay, sign, book, confirm) but is not urgent
   - name: Info
+    color: Dark Gray
     hint: for information only, nothing to do
 
 # Used when the model fails twice to give a valid answer.

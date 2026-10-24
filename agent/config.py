@@ -48,6 +48,9 @@ def check(cfg):
         if label.lower() in GMAIL_RESERVED or label.startswith("[Gmail]"):
             raise ConfigError(f"Gmail does not allow a label named '{label}'. "
                               f"Add a 'label:' line with another name under it in config.yaml")
+    for e in cfg["themes"] + cfg["statuses"]:
+        if e.get("color") and e["color"] not in GMAIL_COLORS:
+            raise ConfigError(f"color of '{e['name']}' must be one of Gmail's: {', '.join(GMAIL_COLORS)}")
     if cfg["fallback"]["theme"] not in themes or cfg["fallback"]["status"] not in statuses:
         raise ConfigError("fallback.theme and fallback.status must exist in themes and statuses")
     cfg.setdefault("behavior", {})
@@ -66,6 +69,39 @@ def names(entries):
 GMAIL_RESERVED = {"inbox", "sent", "sent mail", "drafts", "draft", "spam", "trash", "bin", "starred",
                   "important", "chats", "chat", "all mail", "unread", "scheduled", "snoozed"}
 DEFAULT_LABELS = {"important": "Priority"}  # Gmail already has a hidden "Important" label
+
+
+# Gmail's label colours (the API accepts only these). Mail Adagio shows the same ones, so a label
+# looks the same in the app and in Gmail. IMAP cannot colour a label: pick it once in Gmail.
+GMAIL_COLORS = {
+    "Red": "#fb4c2f", "Orange": "#ffad47", "Yellow": "#fad165", "Green": "#16a765", "Mint": "#43d692",
+    "Teal": "#2da2bb", "Blue": "#4a86e8", "Purple": "#a479e2", "Pink": "#f691b2", "Brown": "#7a4706",
+    "Dark Red": "#822111", "Dark Orange": "#a46a21", "Dark Green": "#076239", "Dark Blue": "#1c4587",
+    "Dark Purple": "#41236d", "Dark Pink": "#83334c", "Gray": "#666666", "Light Gray": "#cccccc",
+    "Dark Gray": "#434343", "Black": "#000000",
+}
+DEFAULT_COLORS = {
+    "health": "Teal", "finance": "Green", "admin": "Dark Blue", "work & projects": "Blue",
+    "job search": "Purple", "shopping & deliveries": "Orange", "travel": "Mint", "family & friends": "Pink",
+    "newsletters": "Dark Green", "promotions": "Gray", "social & notifications": "Light Gray",
+    "other": "Brown", "important": "Red", "to do": "Yellow", "info": "Dark Gray",
+}
+SPARE_COLORS = ["Dark Purple", "Dark Pink", "Dark Orange", "Dark Red", "Black"]  # for your own themes
+
+
+def color_of(entry, spare=0):
+    """Gmail colour name of a theme or status: its `color:` if set, else the default."""
+    return entry.get("color") or DEFAULT_COLORS.get(entry["name"].lower(), SPARE_COLORS[spare % len(SPARE_COLORS)])
+
+
+def colors(cfg):
+    """{theme or status name: {"gmail": colour name, "hex": "#..."}}"""
+    out, spare = {}, 0
+    for e in cfg["themes"] + cfg["statuses"]:
+        name = color_of(e, spare)
+        spare += not e.get("color") and e["name"].lower() not in DEFAULT_COLORS
+        out[e["name"]] = {"gmail": name, "hex": GMAIL_COLORS.get(name, "#666666")}
+    return out
 
 
 def label_of(entry):
