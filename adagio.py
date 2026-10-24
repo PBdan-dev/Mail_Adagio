@@ -39,6 +39,7 @@ def main(argv=None):
         from agent import web
         if args.demo:
             core.LOG_PATH = config.ROOT / "adagio-demo.log"
+            core.MEMORY_PATH = config.ROOT / "adagio-demo.db"
         web.serve(args.config, port=args.port, demo_mode=args.demo, open_browser=not args.no_browser)
         return 0
 

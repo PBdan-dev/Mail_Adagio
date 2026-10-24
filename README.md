@@ -85,6 +85,7 @@ agent/ui.py          terminal display
 agent/web.py         local web server (127.0.0.1 only) for the interface
 agent/web/index.html the interface: one page, no external files
 agent/demo.py        made-up mails for the demo mode
+agent/memory.py      what you taught it: rules and corrections, kept in adagio.db
 tests/               python -m unittest   (fake Gmail, fake model)
 ```
 

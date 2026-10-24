@@ -11,6 +11,7 @@ import yaml
 from agent import classify, config, core, hardware, mail
 
 core.LOG_PATH = None  # tests do not write the journal
+core.MEMORY_PATH = ":memory:"  # nor the learned rules
 EXAMPLE_CFG = yaml.safe_load(config.EXAMPLE.read_text(encoding="utf-8"))
 
 
@@ -286,6 +287,56 @@ class TestModelChoice(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+
+
+class TestLearning(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        core.MEMORY_PATH = self.tmp / "adagio.db"
+
+    def tearDown(self):
+        core.MEMORY_PATH = ":memory:"
+        shutil.rmtree(self.tmp)
+
+    def test_rule_by_domain_skips_the_model(self):
+        cfg, calls = cfg_with(), []
+        r = core.handle({"action": "correct", "sender": "Shop <promo@mail.shop.com>", "subject": "Sale",
+                         "theme": "Promotions", "status": "Info", "remember": "domain"}, cfg=cfg)
+        self.assertEqual(r["rules"][0]["value"], "mail.shop.com")
+
+        from agent import memory
+        mem = memory.Memory(core.MEMORY_PATH)
+        names = (config.names(cfg["themes"]), config.names(cfg["statuses"]))
+        self.assertEqual(mem.match("x <other@mail.shop.com>", *names)["theme"], "Promotions")
+        self.assertIsNone(mem.match("x <a@shop.com>", *names))  # parent domain is not covered
+        mem.add_rule("domain", "air.com", "Travel", "Important")
+        mem.close()
+
+        def ask(system, user, schema):
+            calls.append(user)
+            return '{"theme": "Other", "status": "Info"}'
+        result = core.handle({"action": "preview", "limit": 10}, cfg=cfg, gmail_factory=fake_gmail, ask=ask)
+        flight = next(m for m in result["mails"] if m["sender"].startswith("Air"))
+        self.assertEqual((flight["theme"], flight["status"], flight["rule"]), ("Travel", "Important", "domain: air.com"))
+        self.assertEqual(len(calls), 2)  # 3 mails, one handled by the rule
+        self.assertEqual(result["by_rule"], 1)
+
+    def test_corrections_become_examples_in_the_prompt(self):
+        cfg, prompts = cfg_with(), []
+        core.handle({"action": "correct", "sender": "Bank <no-reply@bank.com>", "subject": "Your statement",
+                     "theme": "Finance", "status": "Info", "remember": "none"}, cfg=cfg)
+        core.handle({"action": "preview", "limit": 1}, cfg=cfg, gmail_factory=fake_gmail,
+                    ask=lambda s, u, sch: prompts.append(s) or '{"theme": "Other", "status": "Info"}')
+        self.assertIn('From no-reply@bank.com, subject "Your statement": Finance / Info', prompts[0])
+
+    def test_rules_can_be_deleted_and_bad_themes_refused(self):
+        cfg = cfg_with()
+        r = core.handle({"action": "correct", "sender": "a@b.com", "subject": "s", "theme": "Finance",
+                         "status": "Info", "remember": "sender"}, cfg=cfg)
+        rule_id = r["rules"][0]["id"]
+        self.assertEqual(core.handle({"action": "delete_rule", "id": rule_id}, cfg=cfg)["rules"], [])
+        bad = core.handle({"action": "correct", "sender": "a@b.com", "theme": "Nope", "status": "Info"}, cfg=cfg)
+        self.assertFalse(bad["ok"])
 
 
 class TestWeb(unittest.TestCase):

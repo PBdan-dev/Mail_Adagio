@@ -80,6 +80,34 @@ class App:
             info.update(ok=False, error=str(e))
         return info
 
+    def learn(self, request):
+        """Corrections and rules; a correction also updates the mail in the current results."""
+        result = core.handle(request, cfg=self.cfg())
+        if result["ok"] and request["action"] == "correct" and self.last and self.last.get("ok"):
+            last = self.last
+            for row in last["mails"]:
+                if row["uid"] == request.get("uid"):
+                    row.update(theme=request["theme"], status=request["status"], classified=True,
+                               corrected=True)
+                    row.pop("error", None)
+            # a new rule also applies to the other mails of this sender or domain in the list
+            from .memory import Memory
+            mem = Memory(core.MEMORY_PATH)
+            cfg = self.cfg()
+            for row in last["mails"]:
+                rule = mem.match(row["sender"], config.names(cfg["themes"]), config.names(cfg["statuses"]))
+                if rule and not row.get("corrected"):
+                    row.update(theme=rule["theme"], status=rule["status"], classified=True,
+                               rule=f"{rule['kind']}: {rule['value']}")
+                    row.pop("error", None)
+            mem.close()
+            from collections import Counter
+            last["by_theme"] = dict(Counter(r["theme"] for r in last["mails"]).most_common())
+            last["by_status"] = dict(Counter(r["status"] for r in last["mails"]))
+            last["fallbacks"] = sum(not r["classified"] for r in last["mails"])
+            last["first_error"] = next((r.get("error", "") for r in last["mails"] if not r["classified"]), "")
+        return result
+
     def start_preview(self, limit):
         with self.lock:
             if self.job["running"]:
@@ -136,6 +164,8 @@ def make_handler(app, port):
                 return self.send(200, app.state())
             if self.path == "/api/model":
                 return self.send(200, app.model_info())
+            if self.path == "/api/rules":
+                return self.send(200, app.learn({"action": "rules"}))
             if self.path == "/api/hardware":
                 return self.send(200, core.handle({"action": "hardware"}))
             self.send(404, {"error": "not found"})
@@ -158,6 +188,12 @@ def make_handler(app, port):
                                          body.get("api_key", ""), body.get("base_url"))
                     core.log("settings saved")
                     return self.send(200, {"ok": True})
+                except config.ConfigError as e:
+                    return self.send(200, {"ok": False, "error": str(e)})
+            if self.path in ("/api/correct", "/api/rules/delete"):
+                action = "correct" if self.path == "/api/correct" else "delete_rule"
+                try:
+                    return self.send(200, app.learn({**body, "action": action}))
                 except config.ConfigError as e:
                     return self.send(200, {"ok": False, "error": str(e)})
             if self.path == "/api/check":

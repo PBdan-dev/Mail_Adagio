@@ -6,13 +6,14 @@ import time
 from collections import Counter
 from datetime import datetime
 
-from . import classify, config, hardware, models
+from . import classify, config, hardware, memory, models
 from .mail import Gmail, MailError
 
 AGENT = "mail-adagio"
 VERSION = "0.1.0"
-ACTIONS = ("check", "hardware", "preview")
+ACTIONS = ("check", "hardware", "preview", "correct", "rules", "delete_rule")
 LOG_PATH = config.ROOT / "adagio.log"  # readable journal of every run; None turns it off
+MEMORY_PATH = config.ROOT / "adagio.db"  # rules and examples learned from your corrections
 
 
 def handle(request, cfg=None, gmail_factory=Gmail, ask=None, progress=None):
@@ -28,6 +29,8 @@ def handle(request, cfg=None, gmail_factory=Gmail, ask=None, progress=None):
             cfg = cfg or config.load(request.get("config") or config.DEFAULT_PATH)
             if action == "check":
                 result = check(cfg, gmail_factory)
+            elif action in ("correct", "rules", "delete_rule"):
+                result = learn(cfg, request)
             else:
                 result = preview(cfg, request, gmail_factory, ask, progress)
         result["ok"] = True
@@ -47,13 +50,15 @@ def summary_line(r):
     if r["action"] == "preview":
         return (f"preview: read {r['processed']} mails, {r['fallbacks']} not classified, "
                 f"0 changes in Gmail ({r['model']})")
+    if r["action"] in ("correct", "rules", "delete_rule"):
+        return ""
     if r["action"] == "check":
         return f"check: connected to {r['email']}, {r['total_in_mailbox']} mails in {r['mailbox']}"
     return f"{r['action']}: ok"
 
 
 def log(line):
-    if LOG_PATH:
+    if LOG_PATH and line:
         try:
             with open(LOG_PATH, "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  {line}\n")
@@ -118,6 +123,30 @@ def resolve_model(cfg):
     return m, f"{name} · Ollama"
 
 
+def learn(cfg, request):
+    """Corrections and rules. correct: {sender, subject, theme, status, remember: none|sender|domain}"""
+    mem = memory.Memory(MEMORY_PATH)
+    try:
+        if request["action"] == "correct":
+            theme, status, sender = request.get("theme"), request.get("status"), request.get("sender", "")
+            if theme not in config.names(cfg["themes"]) or status not in config.names(cfg["statuses"]):
+                raise ValueError("Unknown theme or status")
+            mem.add_example(sender, request.get("subject", ""), theme, status)
+            remember = request.get("remember", "none")
+            if remember in ("sender", "domain"):
+                value = memory.address(sender) if remember == "sender" else memory.domain(sender)
+                mem.add_rule(remember, value, theme, status)
+                log(f"rule learned: mails from {value} -> {theme} / {status}")
+            else:
+                log(f"correction: '{request.get('subject', '')[:60]}' -> {theme} / {status}")
+        elif request["action"] == "delete_rule":
+            mem.delete_rule(request["id"])
+            log(f"rule {request['id']} deleted")
+        return {"rules": mem.rules()}
+    finally:
+        mem.close()
+
+
 def gmail_url(gm_msgid):
     """Link that opens the mail in Gmail (Gmail ids are the hexadecimal X-GM-MSGID)."""
     return f"https://mail.google.com/mail/u/0/#all/{int(gm_msgid):x}" if gm_msgid else ""
@@ -155,24 +184,35 @@ def preview(cfg, request, gmail_factory, ask, progress):
         uids = gmail.recent_uids(limit=limit, since_days=since)
         mails = gmail.fetch(uids, cfg["behavior"]["body_chars"])
 
-    rows = []
+    themes, statuses = config.names(cfg["themes"]), config.names(cfg["statuses"])
+    mem = memory.Memory(MEMORY_PATH)
+    examples = mem.examples()
+    rows, model_calls = [], 0
     for i, mail in enumerate(mails, 1):
-        r = classify.classify(mail, ask, cfg)
-        if i == 1 and not r.ok and r.provider_error:
-            # the model cannot answer at all: stop now instead of filing every mail in Other
-            raise models.ModelError(f"The model {model_note.split(' · ')[0]} did not answer: {r.error}")
+        rule = mem.match(mail.sender, themes, statuses)
+        if rule:  # your rule wins: no model call
+            r = classify.Result(rule["theme"], rule["status"], True, 0)
+        else:
+            r = classify.classify(mail, ask, cfg, examples=examples)
+            model_calls += 1
+            if model_calls == 1 and not r.ok and r.provider_error:
+                # the model cannot answer at all: stop now instead of filing every mail in Other
+                mem.close()
+                raise models.ModelError(f"The model {model_note.split(' · ')[0]} did not answer: {r.error}")
         rows.append({
             "uid": mail.uid, "gm_msgid": mail.gm_msgid, "date": mail.date,
             "sender": mail.sender, "subject": mail.subject,
             "gmail_url": gmail_url(mail.gm_msgid),
             "existing_labels": [x for x in mail.labels if not x.startswith("\\")],
             "theme": r.theme, "status": r.status, "classified": r.ok,
+            "rule": f"{rule['kind']}: {rule['value']}" if rule else "",
             **({"error": r.error} if not r.ok else {}),
         })
         if progress:
             progress(i, len(mails), rows[-1])
 
-    status_order = {name: i for i, name in enumerate(config.names(cfg["statuses"]))}
+    mem.close()
+    status_order = {name: i for i, name in enumerate(statuses)}
     rows.sort(key=lambda r: r["date"], reverse=True)          # newest first...
     rows.sort(key=lambda r: status_order[r["status"]])        # ...grouped by status, Important first
     return {
@@ -182,6 +222,7 @@ def preview(cfg, request, gmail_factory, ask, progress):
         "by_status": {s: n for s, n in sorted(Counter(r["status"] for r in rows).items(),
                                               key=lambda kv: status_order[kv[0]])},
         "fallbacks": sum(not r["classified"] for r in rows),
+        "by_rule": sum(bool(r["rule"]) for r in rows),
         "first_error": next((r["error"] for r in rows if not r["classified"]), ""),
         "mails": rows,
     }

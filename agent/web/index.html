@@ -125,23 +125,26 @@ main { padding-top: 24px; padding-bottom: 48px; display: grid; gap: 20px;
 .group:first-child { margin-top: 4px; }
 .ghead { display: flex; align-items: center; gap: 9px; font-weight: 650; margin-bottom: 6px; font-size: 13.5px; }
 .ghead span { color: var(--faint); font-weight: 500; }
-.mail { display: grid; grid-template-columns: 92px 190px minmax(0, 1fr) 56px 28px; gap: 12px; align-items: center;
+.mail { display: grid; grid-template-columns: 92px 190px minmax(0, 1fr) 56px 28px 28px; gap: 10px; align-items: center;
   padding: 10px 10px; border-radius: 10px; border-left: 3px solid transparent; }
 .mail:hover { background: var(--surface-2); }
 .mail .from { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mail .subj { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
 .mail .subj em { font-style: normal; color: var(--faint); margin-left: 8px; font-size: 12px; }
 .mail .date { color: var(--faint); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
-.mail a.open { color: var(--faint); display: grid; place-items: center; border-radius: 7px; height: 26px; }
-.mail a.open:hover { color: var(--accent); background: var(--accent-soft); }
+.mail a.open, .mail button.fix { color: var(--faint); display: grid; place-items: center; border-radius: 7px; height: 26px;
+  border: 0; background: transparent; cursor: pointer; padding: 0; }
+.mail a.open:hover, .mail button.fix:hover { color: var(--accent); background: var(--accent-soft); }
+.mini { font-size: 11px; font-weight: 650; padding: 1px 7px; border-radius: 6px; margin-left: 8px; background: var(--accent-soft); color: var(--accent); }
+.mini.ok { background: var(--green-soft); color: var(--green); }
 .badge { font-size: 11.5px; font-weight: 650; padding: 3px 8px; border-radius: 6px; text-align: center; white-space: nowrap; }
 .b-0 { background: var(--red-soft); color: var(--red); }
 .b-1 { background: var(--amber-soft); color: var(--amber); }
 .b-2 { background: var(--slate-soft); color: var(--slate); }
 .b-x { background: var(--red-soft); color: var(--red); }
 @media (max-width: 760px) {
-  .mail { grid-template-columns: auto minmax(0, 1fr) 28px; grid-template-areas: "b f o" "s s s"; row-gap: 2px; }
-  .mail .badge { grid-area: b; } .mail .from { grid-area: f; } .mail .subj { grid-area: s; } .mail .date { display: none; } .mail a.open { grid-area: o; }
+  .mail { grid-template-columns: auto minmax(0, 1fr) 28px 28px; grid-template-areas: "b f e o" "s s s s"; row-gap: 2px; }
+  .mail .badge { grid-area: b; } .mail .from { grid-area: f; } .mail .subj { grid-area: s; } .mail .date { display: none; } .mail a.open { grid-area: o; } .mail button.fix { grid-area: e; }
 }
 .empty { text-align: center; padding: 36px 12px; color: var(--muted); }
 .empty svg { color: var(--faint); margin-bottom: 8px; }
@@ -183,6 +186,23 @@ dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
 .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.err { background: var(--red); color: #fff; }
 .hidden { display: none !important; }
+.rules { display: grid; gap: 8px; }
+.rule { display: grid; grid-template-columns: minmax(0, 1fr) 28px; gap: 8px; align-items: center; padding: 9px 10px;
+  border: 1px solid var(--border); border-radius: 10px; font-size: 13px; }
+.rule .who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rule .to { color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.rule button { border: 0; background: transparent; color: var(--faint); cursor: pointer; border-radius: 7px; height: 26px; }
+.rule button:hover { color: var(--red); background: var(--red-soft); }
+.chooser { display: flex; flex-wrap: wrap; gap: 6px; }
+.chooser button { border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 5px 11px;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 7px; font-size: 13px; }
+.chooser button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.radio { display: grid; gap: 6px; }
+.radio label { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; font-weight: 500; }
+.radio label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.radio input { accent-color: var(--accent); margin: 0; }
+.fixmail { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 13px; }
+.fixmail b { display: block; } .fixmail span { color: var(--muted); }
 .model-chip { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 6px 12px; border-radius: 10px;
   background: var(--surface); border: 1px solid var(--border); font-size: 13px; max-width: 100%; }
 .model-chip b { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -313,6 +333,12 @@ dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
     </section>
 
     <section class="card">
+      <h2>Learned rules</h2>
+      <p class="sub">Applied before the model, no AI call. Created when you correct a mail.</p>
+      <div class="rules" id="rules"></div>
+    </section>
+
+    <section class="card">
       <h2>Activity log</h2>
       <p class="sub">Everything the agent did, newest first. Also saved in adagio.log.</p>
       <pre class="log" id="log">Nothing yet.</pre>
@@ -345,6 +371,23 @@ dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
   <div class="foot">
     <button type="button" class="btn" id="cancelBtn">Cancel</button>
     <button type="submit" class="btn primary" id="saveBtn">Save and test</button>
+  </div>
+</form></dialog>
+
+<dialog id="fixDlg"><form class="dlg" id="fixForm" method="dialog">
+  <h2>Correct this mail</h2>
+  <div class="fixmail"><b id="fixFrom"></b><span id="fixSubj"></span></div>
+  <div class="field"><label>Theme</label><div class="chooser" id="fixThemes"></div></div>
+  <div class="field"><label>Status</label><div class="seg" id="fixStatus"></div></div>
+  <div class="field"><label>For the next mails</label>
+    <div class="radio">
+      <label><input type="radio" name="remember" value="sender" checked> <span>Always for <b id="fixAddr"></b></span></label>
+      <label id="fixDomainRow"><input type="radio" name="remember" value="domain"> <span>Always for every sender at <b id="fixDomain"></b></span></label>
+      <label><input type="radio" name="remember" value="none"> <span>Only this mail (the model learns from it as an example)</span></label>
+    </div></div>
+  <div class="foot">
+    <button type="button" class="btn" id="fixCancel">Cancel</button>
+    <button type="submit" class="btn primary">Save</button>
   </div>
 </form></dialog>
 
@@ -483,7 +526,7 @@ function renderResult() {
   const q = query.toLowerCase();
   const rows = r.mails.filter(m => (!themeFilter || m.theme === themeFilter) && (!statusFilter || m.status === statusFilter)
     && (!q || (m.sender + " " + m.subject).toLowerCase().includes(q)));
-  $("#mailsSub").textContent = `${rows.length} of ${r.processed} · sorted by ${(r.model || "").split(" · ")[0]} · nothing changed in Gmail`;
+  $("#mailsSub").textContent = `${rows.length} of ${r.processed} · sorted by ${(r.model || "").split(" · ")[0]}${r.by_rule ? ` · ${r.by_rule} by your rules` : ""} · nothing changed in Gmail`;
   $("#sortAlert").classList.toggle("hidden", !r.fallbacks);
   if (r.fallbacks) {
     $("#sortAlertTitle").textContent = `${r.fallbacks} of ${r.processed} mails could not be sorted (put in ${S.themes.includes("Other") ? "Other" : "the fallback theme"}).`;
@@ -495,18 +538,65 @@ function renderResult() {
       <div class="ghead"><span class="dot" style="background:${color(t)}"></span>${esc(t)} <span>${list.length}</span></div>
       ${list.map(m => mailRow(m, t)).join("")}
     </div>`).join("") : `<div class="empty">No mail matches.</div>`;
+  box.querySelectorAll("button.fix").forEach(b => b.onclick = () => openFix(r.mails.find(m => m.uid === +b.dataset.uid)));
 }
+
+/* corrections and rules */
+let fix = null;
+function openFix(m) {
+  fix = { mail: m, theme: m.theme, status: m.status };
+  const addr = (m.sender.match(/<([^>]+)>/) || [, m.sender])[1].trim().toLowerCase();
+  const dom = addr.includes("@") ? addr.split("@")[1] : "";
+  $("#fixFrom").textContent = m.sender; $("#fixSubj").textContent = m.subject || "(no subject)";
+  $("#fixAddr").textContent = addr; $("#fixDomain").textContent = dom;
+  $("#fixDomainRow").classList.toggle("hidden", !dom);
+  $("#fixForm").querySelector('input[value="sender"]').checked = true;
+  drawFix();
+  $("#fixDlg").showModal();
+}
+function drawFix() {
+  $("#fixThemes").innerHTML = S.themes.map(t => `<button type="button" data-t="${esc(t)}" class="${t === fix.theme ? "on" : ""}"><span class="dot" style="background:${color(t)}"></span>${esc(t)}</button>`).join("");
+  $("#fixThemes").querySelectorAll("button").forEach(b => b.onclick = () => { fix.theme = b.dataset.t; drawFix(); });
+  $("#fixStatus").innerHTML = S.statuses.map(st => `<button type="button" data-s="${esc(st)}" class="${st === fix.status ? "on" : ""}">${esc(st)}</button>`).join("");
+  $("#fixStatus").querySelectorAll("button").forEach(b => b.onclick = () => { fix.status = b.dataset.s; drawFix(); });
+}
+$("#fixCancel").onclick = () => $("#fixDlg").close();
+$("#fixForm").onsubmit = async e => {
+  e.preventDefault();
+  const remember = $("#fixForm").querySelector('input[name="remember"]:checked').value;
+  const r = await api("/api/correct", { uid: fix.mail.uid, sender: fix.mail.sender, subject: fix.mail.subject,
+    theme: fix.theme, status: fix.status, remember });
+  if (!r.ok) return toast(r.error, true);
+  $("#fixDlg").close();
+  toast(remember === "none" ? "Corrected. The model will use it as an example." : "Rule saved. Applied to this list and to the next sorts.");
+  drawRules(r.rules); refresh();
+};
+function drawRules(rules) {
+  $("#rules").innerHTML = rules.length ? rules.map(x => `
+    <div class="rule"><div style="min-width:0">
+      <div class="who" title="${esc(x.value)}">${x.kind === "domain" ? "Everyone at " : ""}${esc(x.value)}</div>
+      <div class="to"><span class="dot" style="background:${color(x.theme)}"></span>${esc(x.theme)} · ${esc(x.status)}</div></div>
+      <button data-id="${x.id}" title="Delete this rule"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>`).join("") : `<div style="color:var(--muted);font-size:13px">No rule yet. Click the pencil on a mail to correct it.</div>`;
+  $("#rules").querySelectorAll("button").forEach(b => b.onclick = async () => {
+    const r = await api("/api/rules/delete", { id: +b.dataset.id });
+    if (r.ok) { drawRules(r.rules); toast("Rule deleted."); }
+  });
+}
+async function loadRules() { const r = await api("/api/rules"); if (r.ok) drawRules(r.rules); }
 
 function mailRow(m, t) {
   const si = S.statuses.indexOf(m.status);
   const badge = m.classified ? `<span class="badge b-${Math.min(si, 2)}">${esc(m.status)}</span>` : `<span class="badge b-x" title="${esc(m.error || "")}">Not sorted</span>`;
   const name = (m.sender.split("<")[0].replace(/"/g, "").trim()) || m.sender;
-  const labels = m.existing_labels.length ? `<em>${esc(m.existing_labels.join(" · "))}</em>` : "";
+  const labels = (m.corrected ? `<span class="mini ok">corrected</span>` : m.rule ? `<span class="mini" title="${esc(m.rule)}">rule</span>` : "")
+    + (m.existing_labels.length ? `<em>${esc(m.existing_labels.join(" · "))}</em>` : "");
   const url = /^https:\/\/mail\.google\.com\//.test(m.gmail_url) ? m.gmail_url : "";
   return `<div class="mail" style="border-left-color:${color(t)}">
     ${badge}<div class="from" title="${esc(m.sender)}">${esc(name)}</div>
     <div class="subj" title="${esc(m.subject)}">${esc(m.subject || "(no subject)")}${labels}</div>
     <div class="date">${esc((m.date || "").slice(5).replace("-", "/"))}</div>
+    <button class="fix" data-uid="${m.uid}" title="Correct theme or status"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
     ${url ? `<a class="open" href="${esc(url)}" target="_blank" rel="noopener" title="Open in Gmail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>` : "<span></span>"}
   </div>`;
 }
@@ -583,7 +673,7 @@ $("#settingsForm").onsubmit = async e => {
   await refresh(); await loadModel(); $("#checkBtn").click();
 };
 
-refresh().then(loadModel);
+refresh().then(() => { loadModel(); loadRules(); });
 </script>
 </body>
 </html>
