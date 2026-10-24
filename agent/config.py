@@ -41,15 +41,41 @@ def check(cfg):
         raise ConfigError("Theme and status names must be unique")
     if set(themes) & set(statuses):
         raise ConfigError("A theme and a status cannot share a name (both become Gmail labels)")
+    labels = [label_of(e) for e in cfg["themes"] + cfg["statuses"]]
+    if len({x.lower() for x in labels}) != len(labels):
+        raise ConfigError("Two themes or statuses would get the same Gmail label")
+    for label in labels:
+        if label.lower() in GMAIL_RESERVED or label.startswith("[Gmail]"):
+            raise ConfigError(f"Gmail does not allow a label named '{label}'. "
+                              f"Add a 'label:' line with another name under it in config.yaml")
     if cfg["fallback"]["theme"] not in themes or cfg["fallback"]["status"] not in statuses:
         raise ConfigError("fallback.theme and fallback.status must exist in themes and statuses")
     cfg.setdefault("behavior", {})
     cfg["behavior"].setdefault("body_chars", 1500)
+    cfg["behavior"].setdefault("act_alone", False)
+    cfg["behavior"].setdefault("batch_size", 100)
+    cfg["behavior"].setdefault("archive", True)
     cfg.setdefault("local_models", [])
 
 
 def names(entries):
     return [e["name"] for e in entries]
+
+
+# Gmail's own labels: a user label cannot have these names (case does not matter).
+GMAIL_RESERVED = {"inbox", "sent", "sent mail", "drafts", "draft", "spam", "trash", "bin", "starred",
+                  "important", "chats", "chat", "all mail", "unread", "scheduled", "snoozed"}
+DEFAULT_LABELS = {"important": "Priority"}  # Gmail already has a hidden "Important" label
+
+
+def label_of(entry):
+    """Gmail label of a theme or status: its `label:` if set, else its name."""
+    return entry.get("label") or DEFAULT_LABELS.get(entry["name"].lower(), entry["name"])
+
+
+def labels(cfg):
+    """{theme or status name: Gmail label}"""
+    return {e["name"]: label_of(e) for e in cfg["themes"] + cfg["statuses"]}
 
 
 def set_value(text, key, value):
@@ -84,6 +110,18 @@ def ensure_file(path=DEFAULT_PATH):
         return False
     shutil.copy(EXAMPLE, path)
     return True
+
+
+def save_behavior(path, act_alone=None, batch_size=None):
+    """The two run options shown on the page."""
+    ensure_file(path)
+    values = {}
+    if act_alone is not None:
+        values["act_alone"] = bool(act_alone)
+    if batch_size is not None:
+        values["batch_size"] = max(50, min(int(batch_size), 1000))
+    save_values(path, values)
+    return load(path)
 
 
 def save_settings(path, email, provider, model_name="", app_password="", api_key="", base_url=None):

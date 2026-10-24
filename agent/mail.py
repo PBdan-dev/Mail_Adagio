@@ -1,4 +1,7 @@
-"""Read Gmail over IMAP. Read-only in this version: nothing is changed in the mailbox."""
+"""Gmail over IMAP: read mails, and (step 3) add labels and move mails out of the Inbox.
+
+Never deletes: the only writes are adding/removing Gmail labels (\\Inbox is a label too).
+"""
 import base64
 import email
 import imaplib
@@ -53,15 +56,15 @@ class Gmail:
         except Exception:
             pass
 
-    def open(self, mailbox="INBOX"):
-        """Open a mailbox read-only and return its number of mails."""
-        status, data = self.imap.select(quote(mailbox), readonly=True)
+    def open(self, mailbox="INBOX", readonly=True):
+        """Open a mailbox (read-only unless asked) and return its number of mails."""
+        status, data = self.imap.select(quote(mailbox), readonly=readonly)
         if status != "OK":
             raise MailError(f"Cannot open mailbox '{mailbox}'")
         return int(data[0])
 
-    def recent_uids(self, limit=None, since_days=None):
-        """Mail ids, newest first."""
+    def recent_uids(self, limit=None, since_days=None, max_uid=None):
+        """Mail ids, newest first (only up to max_uid if given: ignores mails that arrived later)."""
         criteria = ["ALL"]
         if since_days:
             day = date.today() - timedelta(days=since_days)
@@ -69,7 +72,7 @@ class Gmail:
         status, data = self.imap.uid("SEARCH", None, *criteria)
         if status != "OK":
             raise MailError("Search failed")
-        uids = [int(u) for u in data[0].split()]
+        uids = [int(u) for u in data[0].split() if not max_uid or int(u) <= max_uid]
         uids.sort(reverse=True)
         return uids[:limit] if limit else uids
 
@@ -87,6 +90,72 @@ class Gmail:
                     mails.append(parse_fetch(item[0], item[1], body_chars))
         mails.sort(key=lambda m: m.uid, reverse=True)
         return mails
+
+    # --- step 3: writing labels -------------------------------------------------
+    def folders(self):
+        """{name: flags} of every folder and label."""
+        status, data = self.imap.list()
+        if status != "OK":
+            raise MailError("Cannot list the labels")
+        out = {}
+        for line in data:
+            m = re.match(rb'\((.*?)\) "(?:[^"]*)" (.*)$', line or b"")
+            if m:
+                name = m.group(2).decode().strip()
+                name = name[1:-1].replace('\\"', '"').replace("\\\\", "\\") if name.startswith('"') else name
+                out[utf7_decode(name)] = m.group(1).decode()
+        return out
+
+    def all_mail(self, folders=None):
+        """Name of the "All Mail" folder (it depends on the Gmail language)."""
+        for name, flags in (folders or self.folders()).items():
+            if "\\All" in flags.split():
+                return name
+        return "[Gmail]/All Mail"
+
+    def create_label(self, name):
+        status, data = self.imap.create(quote(name))
+        if status != "OK" and b"ALREADYEXISTS" not in b" ".join(d or b"" for d in data).upper():
+            raise MailError(f"Cannot create the label '{name}'")
+
+    def find(self, gm_msgids):
+        """{gm_msgid: uid} in the open folder (open All Mail to find a mail wherever it is)."""
+        found = {}
+        for gm in gm_msgids:
+            status, data = self.imap.uid("SEARCH", None, "X-GM-MSGID", str(gm))
+            ids = data[0].split() if status == "OK" and data and data[0] else []
+            if ids:
+                found[str(gm)] = int(ids[-1])
+        return found
+
+    def meta(self, uids):
+        """{uid: (gm_msgid, [labels])} for mails of the open folder (\\Inbox included). No content."""
+        out = {}
+        for chunk in chunks(list(uids), 500):
+            status, data = self.imap.uid("FETCH", ",".join(map(str, chunk)), "(X-GM-MSGID X-GM-LABELS)")
+            if status != "OK":
+                raise MailError("Fetch failed")
+            for item in data:
+                line = (item[0] if isinstance(item, tuple) else item or b"").decode("utf-8", "replace")
+                uid = re.search(r"UID (\d+)", line)
+                msgid = re.search(r"X-GM-MSGID (\d+)", line)
+                labels = re.search(r"X-GM-LABELS \((.*?)\)(?= UID| X-GM|\s*\)?\s*$)", line)
+                if uid:
+                    out[int(uid.group(1))] = (msgid.group(1) if msgid else "",
+                                              parse_labels(labels.group(1)) if labels else [])
+        return out
+
+    def change_labels(self, uids, add=(), remove=()):
+        """Add or remove labels on mails of the open folder. "\\Inbox" removed = archived."""
+        for op, labels in (("+X-GM-LABELS", add), ("-X-GM-LABELS", remove)):
+            if not labels or not uids:
+                continue
+            value = "(" + " ".join(label if label.startswith("\\") else quote(label)
+                                   for label in labels) + ")"
+            for chunk in chunks(sorted(uids), 200):
+                status, _ = self.imap.uid("STORE", ",".join(map(str, chunk)), op, value)
+                if status != "OK":
+                    raise MailError(f"Gmail refused to change labels ({op} {value})")
 
 
 def parse_fetch(meta, raw, body_chars):

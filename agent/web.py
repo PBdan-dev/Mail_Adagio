@@ -18,26 +18,34 @@ PAGE = Path(__file__).parent / "web" / "index.html"
 
 
 class App:
-    """State shared by all requests: settings path, current job, last result."""
+    """State shared by all requests: settings path, the job running in the background."""
 
     def __init__(self, config_path, demo_mode=False):
         self.config_path = Path(config_path)
         self.demo = demo_mode
         self.token = secrets.token_urlsafe(24)  # the page must send it back: blocks other sites
         self.lock = threading.Lock()
-        self.job = {"running": False, "done": 0, "total": 0, "model": ""}
-        self.last = None
+        self.job = {"running": False, "kind": "", "done": 0, "total": 0, "model": "", "stop": False}
+        self.error = ""      # why the last background job failed
+        self.notice = None   # what the last apply/undo did
+        self.demo_behavior = {"act_alone": False, "batch_size": 50}
 
     def cfg(self):
         if self.demo:
             cfg = yaml.safe_load(config.EXAMPLE.read_text(encoding="utf-8"))
             cfg["gmail"].update(email="demo@gmail.com", app_password="demo")
+            cfg["model"].update(provider="ollama", model_name="demo-model")
+            cfg["behavior"].update(self.demo_behavior)
             config.check(cfg)
             return cfg
         return config.load(self.config_path)
 
     def gmail(self):
         return demo.gmail_factory if self.demo else Gmail
+
+    def call(self, request, progress=None, cfg=None):
+        return core.handle(request, cfg=cfg or self.cfg(), gmail_factory=self.gmail(),
+                           ask=demo.ask if self.demo else None, progress=progress)
 
     def state(self):
         try:
@@ -46,6 +54,9 @@ class App:
             cfg, error = None, str(e)
         g = (cfg or {}).get("gmail", {})
         m = (cfg or {}).get("model", {})
+        job, stopping, error, notice = dict(self.job), self.job["stop"], self.error, self.notice  # before reading
+        sort = self.call({"action": "status"}, cfg=cfg) if cfg else None  # the database, never older than job
+        job.pop("stop")
         return {
             "demo": self.demo,
             "configured": bool(g.get("email") and g.get("app_password")),
@@ -58,7 +69,8 @@ class App:
             "themes": config.names(cfg["themes"]) if cfg else [],
             "statuses": config.names(cfg["statuses"]) if cfg else [],
             "default_models": config.DEFAULT_MODELS,
-            "job": dict(self.job), "last": self.last,
+            "job": job, "stopping": stopping, "error": error, "notice": notice,
+            "sort": sort if sort and sort.get("ok") else None,
             "log": core.read_log(40),
         }
 
@@ -80,56 +92,87 @@ class App:
             info.update(ok=False, error=str(e))
         return info
 
-    def learn(self, request):
-        """Corrections and rules; a correction also updates the mail in the current results."""
-        result = core.handle(request, cfg=self.cfg())
-        if result["ok"] and request["action"] == "correct" and self.last and self.last.get("ok"):
-            last = self.last
-            for row in last["mails"]:
-                if row["uid"] == request.get("uid"):
-                    row.update(theme=request["theme"], status=request["status"], classified=True,
-                               corrected=True)
-                    row.pop("error", None)
-            # a new rule also applies to the other mails of this sender or domain in the list
-            from .memory import Memory
-            mem = Memory(core.MEMORY_PATH)
-            cfg = self.cfg()
-            for row in last["mails"]:
-                rule = mem.match(row["sender"], config.names(cfg["themes"]), config.names(cfg["statuses"]))
-                if rule and not row.get("corrected"):
-                    row.update(theme=rule["theme"], status=rule["status"], classified=True,
-                               rule=f"{rule['kind']}: {rule['value']}")
-                    row.pop("error", None)
-            mem.close()
-            from collections import Counter
-            last["by_theme"] = dict(Counter(r["theme"] for r in last["mails"]).most_common())
-            last["by_status"] = dict(Counter(r["status"] for r in last["mails"]))
-            last["fallbacks"] = sum(not r["classified"] for r in last["mails"])
-            last["first_error"] = next((r.get("error", "") for r in last["mails"] if not r["classified"]), "")
-        return result
+    def save_behavior(self, body):
+        if self.demo:
+            if "act_alone" in body:
+                self.demo_behavior["act_alone"] = bool(body["act_alone"])
+            if body.get("batch_size"):
+                self.demo_behavior["batch_size"] = max(50, min(int(body["batch_size"]), 1000))
+            return
+        config.save_behavior(self.config_path, body.get("act_alone"), body.get("batch_size"))
 
-    def start_preview(self, limit):
+    def start(self, kind, work):
+        """Run `work` in the background; the page follows it through /api/state."""
         with self.lock:
             if self.job["running"]:
                 return False
-            self.job = {"running": True, "done": 0, "total": limit, "model": ""}
-        cfg = self.cfg()
-
-        def progress(i, n, row):
-            if i == 0:
-                self.job["model"] = row["model"]
-            else:
-                self.job.update(done=i, total=n)
+            self.job = {"running": True, "kind": kind, "done": 0, "total": 0, "model": "", "stop": False}
+            self.error = ""
 
         def run():
-            result = core.handle({"action": "preview", "limit": limit,
-                                  "model_note": "demo-model · demo"}, cfg=cfg,
-                                 gmail_factory=self.gmail(),
-                                 ask=demo.ask if self.demo else None, progress=progress)
-            self.last = result
-            self.job["running"] = False
+            try:
+                work()
+            except Exception as e:  # shown on the page, the server keeps running
+                self.error = f"{type(e).__name__}: {e}"
+            finally:
+                self.job["running"] = False
         threading.Thread(target=run, daemon=True).start()
         return True
+
+    def progress(self, i, n, row):
+        if i == 0:
+            self.job["model"] = row["model"]
+        else:
+            self.job.update(done=i, total=n)
+
+    def start_plan(self, body):
+        """Analyse the next batch. With "act alone", apply it and go on until the end or Stop."""
+        cfg = self.cfg()
+        request = {"action": "plan", "scope": body.get("scope"),
+                   "batch_size": body.get("batch_size") or cfg["behavior"]["batch_size"],
+                   "restart": bool(body.get("restart"))}
+        if self.demo:
+            request["model_note"] = "demo-model · demo"
+        auto = cfg["behavior"]["act_alone"]
+
+        def work():
+            while True:
+                self.job.update(done=0, total=0, kind="auto" if auto else "plan")
+                r = self.call(request, progress=self.progress, cfg=cfg)
+                request["restart"] = False
+                if not r["ok"]:
+                    self.error = r["error"]
+                    return
+                if not auto:
+                    return
+                if r.get("applied") is not None:
+                    self.notice = {"kind": "apply", **{k: r[k] for k in ("applied", "moved", "skipped")}}
+                if self.job["stop"] or not r.get("progress") or r["progress"].get("finished"):
+                    return
+        return self.start("auto" if auto else "plan", work)
+
+    def start_apply(self, body):
+        cfg = self.cfg()
+
+        def work():
+            r = self.call({"action": "apply", "batch_id": body.get("batch_id"), "skip": body.get("skip") or [],
+                           "batch_size": cfg["behavior"]["batch_size"]}, cfg=cfg)
+            if r["ok"]:
+                self.notice = {"kind": "apply", **{k: r[k] for k in ("applied", "moved", "skipped")}}
+            else:
+                self.error = r["error"]
+        return self.start("apply", work)
+
+    def start_undo(self):
+        cfg = self.cfg()
+
+        def work():
+            r = self.call({"action": "undo"}, cfg=cfg)
+            if r["ok"]:
+                self.notice = {"kind": "undo", "undone": r["undone"], "back_in_inbox": r["back_in_inbox"]}
+            else:
+                self.error = r["error"]
+        return self.start("undo", work)
 
 
 def make_handler(app, port):
@@ -165,7 +208,7 @@ def make_handler(app, port):
             if self.path == "/api/model":
                 return self.send(200, app.model_info())
             if self.path == "/api/rules":
-                return self.send(200, app.learn({"action": "rules"}))
+                return self.send(200, app.call({"action": "rules"}))
             if self.path == "/api/hardware":
                 return self.send(200, core.handle({"action": "hardware"}))
             self.send(404, {"error": "not found"})
@@ -190,12 +233,16 @@ def make_handler(app, port):
                     return self.send(200, {"ok": True})
                 except config.ConfigError as e:
                     return self.send(200, {"ok": False, "error": str(e)})
-            if self.path in ("/api/correct", "/api/rules/delete"):
-                action = "correct" if self.path == "/api/correct" else "delete_rule"
-                try:
-                    return self.send(200, app.learn({**body, "action": action}))
-                except config.ConfigError as e:
-                    return self.send(200, {"ok": False, "error": str(e)})
+            try:
+                return self.post(body)
+            except config.ConfigError as e:
+                return self.send(200, {"ok": False, "error": str(e)})
+
+        def post(self, body):
+            simple = {"/api/correct": "correct", "/api/rules/delete": "delete_rule",
+                      "/api/estimate": "estimate", "/api/discard": "discard"}
+            if self.path in simple:
+                return self.send(200, app.call({**body, "action": simple[self.path]}))
             if self.path == "/api/check":
                 try:
                     cfg = app.cfg()
@@ -203,14 +250,17 @@ def make_handler(app, port):
                     return self.send(200, {"ok": False, "error": str(e)})
                 return self.send(200, core.handle({"action": "check"}, cfg=cfg,
                                                   gmail_factory=app.gmail()))
-            if self.path == "/api/preview":
-                limit = max(1, min(int(body.get("limit") or 20), 1000))
-                try:
-                    started = app.start_preview(limit)
-                except config.ConfigError as e:
-                    return self.send(200, {"ok": False, "error": str(e)})
-                return self.send(200, {"ok": started,
-                                       **({} if started else {"error": "A run is already going"})})
+            if self.path == "/api/behavior":
+                app.save_behavior(body)
+                return self.send(200, {"ok": True})
+            if self.path == "/api/stop":
+                app.job["stop"] = True
+                return self.send(200, {"ok": True})
+            starters = {"/api/plan": lambda: app.start_plan(body), "/api/apply": lambda: app.start_apply(body),
+                        "/api/undo": app.start_undo}
+            if self.path in starters:
+                started = starters[self.path]()
+                return self.send(200, {"ok": started, **({} if started else {"error": "Busy, try again in a moment"})})
             self.send(404, {"error": "not found"})
 
     return Handler

@@ -4,8 +4,9 @@ An agent that sorts your Gmail. Each mail gets **one theme** (Finance, Travel, â
 (Important, To Do, Info). The AI model only chooses the two tags; plain code does everything else.
 It **never deletes** a mail.
 
-> **Current version: steps 1 and 2, read-only.** The agent reads and classifies your mails and shows
-> the result. Nothing is changed in Gmail yet. Labels, moves, batches and undo come in step 3.
+> **Current version: step 3.** The agent sorts your inbox by batches. For each batch it shows a plan;
+> you untick what you want to keep as is, then apply. Each mail gets its theme and status labels and
+> leaves the Inbox (it stays in its theme label, like a folder). The last batch can always be undone.
 
 ## Install (5 minutes)
 
@@ -39,6 +40,9 @@ and its API key. Everything is saved in `config.yaml`, on your computer only (it
 python adagio.py ui                     # web interface in your browser (127.0.0.1 only)
 python adagio.py ui --demo              # same, with made-up mails
 python adagio.py check                  # test the Gmail connection
+python adagio.py sort --newest 500      # sort by batches, asks before each batch
+python adagio.py sort --all --yes       # whole inbox, applies every batch on its own
+python adagio.py undo                   # undo the last applied batch
 python adagio.py preview --limit 20     # classify the 20 newest mails, change nothing
 python adagio.py preview --since 7      # mails from the last 7 days
 python adagio.py hardware               # which local model fits this computer
@@ -48,7 +52,23 @@ From another program (Orchestra, a chatbot): send one JSON request, read one JSO
 
 ```bash
 echo '{"action": "preview", "limit": 5}' | python adagio.py call
+echo '{"action": "plan", "scope": {"kind": "count", "value": 200}}' | python adagio.py call
+echo '{"action": "apply", "batch_id": 1, "skip": []}' | python adagio.py call
 ```
+
+## How sorting works (step 3)
+
+1. **Choose what to sort**: the newest N mails, the last N days, or the whole inbox, and the batch size
+   (50 to 1000). Before starting, the agent shows the number of mails, batches, time and cost.
+2. **Plan**: the agent reads one batch and proposes a theme and a status for each mail. Nothing changes
+   in Gmail yet. Untick a mail or a whole theme to leave it as it is; click the pencil to correct one.
+3. **Apply**: the theme and status labels are added and the mail leaves the Inbox. Your own labels stay.
+4. **Undo**: removes the labels the agent added and puts the mails back in the Inbox.
+
+With **Let the agent act alone** (or `act_alone: true`), batches are applied one after the other
+without asking. Progress is saved in `adagio.db`: after a stop or a crash, it resumes where it was.
+Gmail reserves the name *Important*, so that status uses the label **Priority** (change it with
+`label:` in `config.yaml`). Set `archive: false` to keep the mails in the Inbox.
 
 The contract (input and output) is in [`agent.json`](agent.json). Errors come back as
 `{"ok": false, "error": "..."}`: the caller never crashes because of the agent.
@@ -76,7 +96,8 @@ in the theme. Keep one theme named `Other` (used when nothing fits). Same for `s
 ```
 adagio.py            command line (door 1) and JSON mode (door 2)
 agent/core.py        handle(request) -> result: the single entry point
-agent/mail.py        Gmail over IMAP, read-only
+agent/mail.py        Gmail over IMAP: read, add/remove labels (never deletes)
+agent/batches.py     progress of the sort and what was done to each mail, in adagio.db
 agent/classify.py    prompt, answer check, retry, fallback
 agent/models.py      Anthropic, OpenRouter, Ollama adapters
 agent/hardware.py    graphics memory detection, local model choice

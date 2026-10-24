@@ -15,12 +15,14 @@ model:
   base_url: ""              # "" = provider default
 
 behavior:
-  act_alone: false          # "Allow the agent to act on its own" (used from step 3)
-  batch_size: 100           # mails per batch, 50 to 1000 (used from step 3)
+  act_alone: false          # true = apply each batch without asking (you can always undo the last one)
+  batch_size: 100           # mails per batch, 50 to 1000
+  archive: true             # true = move sorted mails out of the Inbox (they stay in their theme label)
   body_chars: 1500          # how many characters of each mail the model reads
 
-# Themes: one per mail. Add, rename or remove freely.
+# Themes: one per mail. Add, rename or remove freely. Each theme is a Gmail label (a "folder").
 # "hint" tells the model what belongs there. Keep a theme named "Other".
+# Optional "label": Gmail label name when it must differ from the name.
 themes:
   - name: Health
     hint: doctors, hospitals, pharmacy, health insurance, medical results
@@ -48,8 +50,10 @@ themes:
     hint: anything that does not clearly fit another theme
 
 # Statuses: one per mail, independent from the theme.
+# "label" = the Gmail label name when it must differ from the name (Gmail reserves "Important").
 statuses:
   - name: Important
+    label: Priority
     hint: needs your attention soon (deadline, money at stake, security, personal and urgent)
   - name: To Do
     hint: asks you to do something (reply, pay, sign, book, confirm) but is not urgent

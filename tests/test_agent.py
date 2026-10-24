@@ -339,6 +339,87 @@ class TestLearning(unittest.TestCase):
         self.assertFalse(bad["ok"])
 
 
+class TestStep3(unittest.TestCase):
+    """Batches on the pretend Gmail of the demo: plan, apply, undo, resume."""
+
+    def setUp(self):
+        from agent import demo
+        self.demo = demo
+        demo.DELAY = 0  # no pretend thinking time in tests
+        demo.FakeIMAP.reset(copies=8)  # 112 mails
+        self.tmp = Path(tempfile.mkdtemp())
+        core.MEMORY_PATH = self.tmp / "adagio.db"
+        self.cfg = cfg_with()
+        # a label you put yourself must survive apply and undo
+        first = max(demo.FakeIMAP.mails)
+        demo.FakeIMAP.mails[first]["labels"] |= {"Notes"}
+
+    def tearDown(self):
+        core.MEMORY_PATH = ":memory:"
+        shutil.rmtree(self.tmp)
+
+    def run_(self, **request):
+        return core.handle(request, cfg=self.cfg, gmail_factory=self.demo.gmail_factory, ask=self.demo.ask)
+
+    def labels(self):
+        return {u: set(m["labels"]) for u, m in self.demo.FakeIMAP.mails.items()}
+
+    def test_plan_changes_nothing_then_apply_and_undo(self):
+        before = self.labels()
+        scope = {"kind": "count", "value": 120}
+        plan = self.run_(action="plan", scope=scope, batch_size=50)
+        self.assertTrue(plan["ok"], plan.get("error"))
+        self.assertEqual(self.labels(), before)  # a plan never touches Gmail
+        self.assertEqual(plan["progress"], {**plan["progress"], "total": 112, "batches": 3, "batch_no": 1})
+        again = self.run_(action="plan", scope=scope, batch_size=50)
+        self.assertEqual(again["plan"]["batch_id"], plan["plan"]["batch_id"])  # one plan at a time
+
+        mails = plan["plan"]["mails"]
+        skipped = mails[-1]["gm_msgid"]
+        done = self.run_(action="apply", batch_id=plan["plan"]["batch_id"], skip=[skipped])
+        self.assertEqual((done["applied"], done["moved"], done["skipped"]), (49, 49, 1))
+        after = {m["gm"]: m["labels"] for m in self.demo.FakeIMAP.mails.values()}
+        signin = next(m for m in mails if m["subject"].startswith("Unusual sign-in"))
+        self.assertEqual(after[signin["gm_msgid"]], {"Finance", "Priority"} | ({"Notes"} if signin is mails[0] else set()))
+        self.assertIn("\\Inbox", after[skipped])  # unticked: left as it was
+
+        nxt = self.run_(action="plan", scope=scope, batch_size=50)
+        self.assertEqual(nxt["progress"]["batch_no"], 2)
+        self.assertFalse({m["gm_msgid"] for m in nxt["plan"]["mails"]} & {m["gm_msgid"] for m in mails})
+        self.run_(action="discard")
+
+        undo = self.run_(action="undo")
+        self.assertEqual((undo["undone"], undo["back_in_inbox"]), (49, 49))
+        self.assertEqual(self.labels(), before)  # back exactly as it was, your own label kept
+        bad = {c[0] for c in self.demo.FakeIMAP.commands} - {"SEARCH", "FETCH", "STORE", "CREATE"}
+        self.assertEqual(bad, set())
+        self.assertFalse(any("Deleted" in " ".join(map(str, c)) for c in self.demo.FakeIMAP.commands))
+
+    def test_act_alone_runs_to_the_end_and_resumes(self):
+        scope = {"kind": "all"}
+        r = self.run_(action="plan", scope=scope, batch_size=50, act_alone=True)
+        self.assertEqual((r["applied"], r["progress"]["done"]), (50, 50))
+        self.assertEqual(self.run_(action="status")["progress"]["done"], 50)  # kept in adagio.db
+        while not r["progress"]["finished"]:
+            r = self.run_(action="plan", scope=scope, batch_size=50, act_alone=True)
+        self.assertEqual(r["progress"]["done"], 112)
+        self.assertFalse(any("\\Inbox" in m["labels"] for m in self.demo.FakeIMAP.mails.values()))
+        self.assertIsNone(self.run_(action="plan", scope=scope, batch_size=50)["plan"])
+
+    def test_estimate(self):
+        r = self.run_(action="estimate", scope={"kind": "days", "value": 7}, batch_size=50)
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertTrue(0 < r["mails"] < 50 and r["batches"] == 1)
+        self.assertIn("$", r["cost_note"])
+
+    def test_gmail_reserved_label_names(self):
+        self.assertEqual(config.labels(self.cfg)["Important"], "Priority")
+        cfg = cfg_with()
+        cfg["themes"].append({"name": "Spam"})
+        with self.assertRaises(config.ConfigError):
+            config.check(cfg)
+
+
 class TestWeb(unittest.TestCase):
     """Starts the local server in demo mode and talks to it like the page does."""
 
@@ -377,20 +458,34 @@ class TestWeb(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertIn(self.app.token.encode(), html)
         self.assertEqual(self.call("/api/state", token=False)[0], 403)
-        self.assertEqual(self.call("/api/preview", {"limit": 3}, token=False)[0], 403)
+        self.assertEqual(self.call("/api/plan", {"scope": {"kind": "all"}}, token=False)[0], 403)
 
-    def test_preview_flow_and_no_password_leak(self):
+    def wait(self):
         import time
-        code, body = self.call("/api/preview", {"limit": 5})
-        self.assertTrue(json.loads(body)["ok"])
-        for _ in range(100):
+        for _ in range(200):
             state = json.loads(self.call("/api/state")[1])
-            if not state["job"]["running"] and state["last"]:
-                break
+            if not state["job"]["running"]:
+                return state
             time.sleep(0.1)
-        self.assertEqual(state["last"]["processed"], 5)
-        self.assertNotIn("app_password", json.dumps(state))
-        self.assertTrue(state["configured"])
+
+    def test_plan_apply_flow_and_no_password_leak(self):
+        from agent import demo
+        demo.DELAY = 0
+        demo.FakeIMAP.reset(copies=1)
+        core.MEMORY_PATH = self.tmp / "web.db"
+        try:
+            self.assertTrue(json.loads(self.call("/api/plan", {"scope": {"kind": "count", "value": 5}})[1])["ok"])
+            state = self.wait()
+            plan = state["sort"]["plan"]
+            self.assertEqual(plan["processed"], 5)
+            self.assertNotIn("app_password", json.dumps(state))
+            self.assertTrue(state["configured"])
+            self.call("/api/apply", {"batch_id": plan["batch_id"], "skip": [plan["mails"][0]["gm_msgid"]]})
+            state = self.wait()
+            self.assertIsNone(state["sort"]["plan"], (state["error"], state["job"], state["notice"]))
+            self.assertEqual((state["notice"]["applied"], state["sort"]["last"]["labelled"]), (4, 4))
+        finally:
+            core.MEMORY_PATH = ":memory:"
 
 
 if __name__ == "__main__":
