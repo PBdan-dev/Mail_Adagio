@@ -242,10 +242,47 @@ class TestModelChoice(unittest.TestCase):
         finally:
             hardware.detect = saved
 
-    def test_no_active_model(self):
-        self.models.ollama_models = lambda url=None: {"installed": ["x"], "running": []}
+    def test_nothing_loaded_uses_the_last_model(self):
+        from agent import batches
+        self.models.ollama_models = lambda url=None: {"installed": ["qwen3.5:9b", "gemma4:e4b"], "running": []}
+        tmp = Path(tempfile.mkdtemp())
+        core.MEMORY_PATH = tmp / "adagio.db"
+        saved = hardware.detect
+        hardware.detect = lambda: {"gpu": "RTX 3090", "vram_gb": 24.0, "ram_gb": 64}
+        try:
+            m, note = core.resolve_model(self.cfg("active"))  # never sorted: best model for the PC
+            self.assertEqual(m["model_name"], "qwen3.5:9b")
+            batches.Store(core.MEMORY_PATH).add_batch(1, "gemma4:e4b", 1.0, 1, [])
+            m, note = core.resolve_model(self.cfg("active"))  # then the model of the last batch
+            self.assertEqual(m["model_name"], "gemma4:e4b")
+            self.assertIn("last used", note)
+        finally:
+            hardware.detect = saved
+            core.MEMORY_PATH = ":memory:"
+            shutil.rmtree(tmp)
+
+    def test_no_model_installed(self):
+        self.models.ollama_models = lambda url=None: {"installed": [], "running": []}
         with self.assertRaises(self.models.ModelError):
             core.resolve_model(self.cfg("active"))
+
+    def test_load_model_and_keep_alive(self):
+        sent = []
+        saved = self.models._post
+        self.models._post = lambda url, body, headers, timeout=60: (sent.append((url, body, timeout)),
+                                                                    {"message": {"content": "{}"}})[1]
+        try:
+            self.models.load_model("qwen3.5:9b", "http://x:11434")
+            ask = self.models.make_ask({"provider": "ollama", "model_name": "m", "base_url": "http://x:11434",
+                                        "timeout_s": 60})
+            ask("s", "u", {})
+            ask("s", "u", {})
+        finally:
+            self.models._post = saved
+        load, first, second = sent
+        self.assertEqual((load[0], load[1]["prompt"], load[1]["keep_alive"]), ("http://x:11434/api/generate", "", "30m"))
+        self.assertEqual(first[1]["keep_alive"], "30m")
+        self.assertEqual((first[2], second[2]), (300, 60))  # the first mail may wait for the model to load
 
     def test_slow_model_skips_the_mail_then_stops(self):
         from agent import models
@@ -752,6 +789,19 @@ class TestWeb(unittest.TestCase):
             self.assertEqual((state["notice"]["applied"], state["sort"]["last"]["labelled"]), (4, 4))
         finally:
             core.MEMORY_PATH = ":memory:"
+
+    def test_load_model(self):
+        """The Load button: the model is loaded in the background, then shown as loaded."""
+        from agent import demo
+        demo.DELAY = 0
+        info = json.loads(self.call("/api/model")[1])
+        self.assertEqual((info["provider"], info["loaded"], info["model"]), ("ollama", False, "demo-model"))
+        self.assertTrue(json.loads(self.call("/api/load", {"name": "qwen3.5:9b"})[1])["ok"])
+        state = self.wait()
+        self.assertEqual(state["notice"]["kind"], "load")
+        info = json.loads(self.call("/api/model")[1])
+        self.assertEqual(info["running"], ["qwen3.5:9b"])
+        self.assertFalse(json.loads(self.call("/api/load", {"name": ""})[1])["ok"])
 
 
 class TestRelaunch(unittest.TestCase):

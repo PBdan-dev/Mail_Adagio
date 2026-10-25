@@ -112,6 +112,11 @@ class Store:
     def pending(self):
         return self.one("SELECT * FROM batches WHERE state = 'pending' ORDER BY id DESC LIMIT 1")
 
+    def last_model(self):
+        """Name of the model that sorted the last batch ('' if none yet)."""
+        row = self.one("SELECT model FROM batches WHERE model != '' ORDER BY id DESC LIMIT 1")
+        return row["model"] if row else ""
+
     def last_applied(self):
         return self.one("SELECT * FROM batches WHERE state = 'applied' ORDER BY id DESC LIMIT 1")
 

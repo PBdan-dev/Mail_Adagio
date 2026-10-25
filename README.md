@@ -48,6 +48,11 @@ python adagio.py preview --since 7      # mails from the last 7 days
 python adagio.py hardware               # which local model fits this computer
 ```
 
+The web page works like a mail program: sort settings and the list of statuses and themes (with
+counts, click to filter) on the left, the mails in the middle (their own scroll, Sort and Apply always
+visible), undo, rules, log and connection on the right. The panel button at the top hides the right
+side; on a smaller screen it opens as a drawer.
+
 From another program (Orchestra, a chatbot): send one JSON request, read one JSON result.
 
 ```bash
@@ -120,6 +125,11 @@ In `config.yaml`, section `model`:
 
 With Ollama and an empty `model_name`, the agent reads your graphics memory and picks a model from
 the `local_models` table. `python adagio.py hardware` shows what it found and why it chose that model.
+
+With `model_name: active`, the agent uses the model loaded in Ollama. If none is loaded, it takes the
+model of the last batch (or the best one for your PC) and Ollama loads it at the first mail. The
+**Load** button next to the model name loads it ahead of time. Ollama then keeps it in memory for
+30 minutes after the last mail (its own default is 5 minutes).
 
 ## Your own themes
 

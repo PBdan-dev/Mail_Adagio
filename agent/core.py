@@ -11,7 +11,7 @@ from . import batches, classify, config, hardware, memory, models, senders
 from .mail import Gmail, MailError, chunks
 
 AGENT = "mail-adagio"
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 ACTIONS = ("check", "hardware", "preview", "correct", "rules", "delete_rule",
            "estimate", "plan", "apply", "discard", "undo", "status",
            "scan", "senders", "sender_state", "suggest", "add_rule", "label_order",
@@ -111,11 +111,16 @@ def resolve_model(cfg):
         return m, f"{name} · {m['provider']}"
     have = models.ollama_models(m.get("base_url"))
     if name.lower() == "active":
-        if not have["running"]:
-            raise models.ModelError("No model is loaded in Ollama right now. Load one, or pick a "
-                                    "model by name in Settings.")
-        m["model_name"] = have["running"][0]
-        return m, f"{m['model_name']} · Ollama, active model"
+        if have["running"]:
+            m["model_name"] = have["running"][0]
+            return m, f"{m['model_name']} · Ollama, active model"
+        last = batches.Store(MEMORY_PATH).last_model()  # nothing loaded: the model of the last batch
+        if last in have["installed"]:
+            m["model_name"] = last
+            return m, f"{last} · Ollama, last used, loads at the start"
+        if not have["installed"]:
+            raise models.ModelError("Ollama has no model installed. Run: ollama pull qwen3.5:9b")
+        name = "auto"  # never sorted yet: the best installed model for this PC
     if name.lower() in ("", "auto"):
         info = hardware.detect()
         table = [r for r in cfg["local_models"] if r["use"] in have["installed"]] or cfg["local_models"]

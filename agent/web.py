@@ -39,6 +39,7 @@ class App:
         self.notice = None   # what the last apply/undo did
         self.demo_behavior = {"act_alone": False, "batch_size": 50}
         self.demo_order = None
+        self.demo_running = []
         self.page = PAGE.read_text(encoding="utf-8")  # read once: the page always matches this code
         self.stamp = code_stamp()
         self.server = None
@@ -93,22 +94,49 @@ class App:
         }
 
     def model_info(self):
-        """Which model will sort the mails, or why none can. Also what Ollama has installed."""
-        info = {"ok": True, "note": "", "error": "", "installed": [], "running": []}
+        """Which model will sort the mails, or why none can. For Ollama: what is installed and loaded."""
+        info = {"ok": True, "note": "", "error": "", "installed": [], "running": [],
+                "provider": "", "mode": "", "model": "", "loaded": True}
         try:
             cfg = self.cfg()
+            info["provider"] = cfg["model"]["provider"]
+            name = str(cfg["model"].get("model_name") or "").strip().strip("'\"").lower()
+            info["mode"] = name if name in ("active", "auto") else "auto" if not name else "name"
             if self.demo:
-                info["note"] = "demo-model · demo"
+                info.update(note="demo-model · demo", model="demo-model", mode="active",
+                            installed=["demo-model", "qwen3.5:9b", "qwen3.5:4b"], running=list(self.demo_running),
+                            loaded="demo-model" in self.demo_running)
                 return info
-            if cfg["model"]["provider"] == "ollama":
+            if info["provider"] == "ollama":
                 try:
                     info.update(models.ollama_models(cfg["model"].get("base_url")))
                 except models.ModelError:
                     pass
-            info["note"] = core.resolve_model(cfg)[1]
+            resolved, info["note"] = core.resolve_model(cfg)
+            info["model"] = resolved["model_name"]
+            if info["provider"] == "ollama":
+                info["loaded"] = info["model"] in info["running"]
         except (config.ConfigError, models.ModelError) as e:
-            info.update(ok=False, error=str(e))
+            info.update(ok=False, error=str(e), loaded=False)
         return info
+
+    def start_load(self, body):
+        """Load an Ollama model into memory in the background."""
+        name = str(body.get("name") or "").strip()
+        if not name:
+            return False
+        cfg = None if self.demo else self.cfg()
+
+        def work():
+            self.job["model"] = name
+            if self.demo:
+                time.sleep(1.5 if demo.DELAY else 0)
+                self.demo_running = [name]
+                self.notice = {"kind": "load", "model": name, "seconds": 1.5}
+                return
+            seconds = models.load_model(name, cfg["model"].get("base_url"))
+            self.notice = {"kind": "load", "model": name, "seconds": seconds}
+        return self.start("load", work)
 
     def save_behavior(self, body):
         if self.demo:
@@ -324,6 +352,7 @@ def make_handler(app, port):
                 print("\n  Mail Adagio was opened again in a new window. This one stops.\n")
                 return threading.Thread(target=app.server.shutdown, daemon=True).start()
             starters = {"/api/plan": lambda: app.start_plan(body), "/api/apply": lambda: app.start_apply(body),
+                        "/api/load": lambda: app.start_load(body),
                         "/api/undo": app.start_undo,
                         "/api/scan": lambda: app.start_simple("scan", {"action": "scan"}),
                         "/api/suggest": lambda: app.start_simple("suggest", {"action": "suggest",

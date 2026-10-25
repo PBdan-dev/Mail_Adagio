@@ -3,6 +3,7 @@
 The rest of the code only calls `ask(system, user, schema)` and never knows which model answered.
 """
 import json
+import time
 import socket
 import urllib.error
 import urllib.request
@@ -95,9 +96,23 @@ def ollama_models(url=None):
             "running": [m.get("name") or m.get("model") for m in running]}
 
 
+KEEP_ALIVE = "30m"  # Ollama keeps the model in memory this long after the last mail (its default is 5 min)
+LOAD_TIMEOUT = 300  # loading a model from disk can take a few minutes on a slow drive
+
+
+def load_model(name, url=None):
+    """Load a model into Ollama's memory now, so the first mail does not wait. Returns the seconds it took."""
+    url = (url or DEFAULT_URLS["ollama"]).rstrip("/")
+    started = time.time()
+    _post(f"{url}/api/generate", {"model": name, "prompt": "", "stream": False, "keep_alive": KEEP_ALIVE},
+          {}, timeout=LOAD_TIMEOUT)
+    return round(time.time() - started, 1)
+
+
 def _ollama(name, url, timeout=60):
     """Ollama's own API: the `format` field forces an answer that fits the JSON schema."""
     no_think = {"on": True}  # models without a thinking mode refuse the "think" field
+    first = {"on": True}  # the first call may have to load the model first: give it more time
 
     def ask(system, user, schema):
         body = {
@@ -108,11 +123,13 @@ def _ollama(name, url, timeout=60):
             "stream": False,
             # short answer (no endless output), small context: less graphics memory, steadier speed
             "options": {"temperature": 0, "num_predict": 256, "num_ctx": 4096},
+            "keep_alive": KEEP_ALIVE,
         }
+        wait = max(timeout, LOAD_TIMEOUT) if first["on"] else timeout
         if no_think["on"]:
             body["think"] = False
         try:
-            data = _post(f"{url}/api/chat", body, {}, timeout=timeout)
+            data = _post(f"{url}/api/chat", body, {}, timeout=wait)
         except ModelTimeout:
             raise
         except ModelError as e:
@@ -120,7 +137,8 @@ def _ollama(name, url, timeout=60):
                 raise
             no_think["on"] = False
             body.pop("think")
-            data = _post(f"{url}/api/chat", body, {}, timeout=timeout)
+            data = _post(f"{url}/api/chat", body, {}, timeout=wait)
+        first["on"] = False
         try:
             return data["message"]["content"]
         except (KeyError, TypeError) as e:
