@@ -89,8 +89,8 @@ fallback:
 # Local models (provider: ollama, model_name: ""): first row your machine meets wins.
 # Model names change fast: check https://ollama.com/library before relying on them.
 local_models:
-  - min_vram_gb: 20
-    use: qwen3.6:27b
+  - min_vram_gb: 20          # 24 GB cards (RTX 3090/4090): ~18 GB model, q4_K_M
+    use: qwen3.8:27b
   - min_vram_gb: 8
     use: qwen3.5:4b
   - min_vram_gb: 0

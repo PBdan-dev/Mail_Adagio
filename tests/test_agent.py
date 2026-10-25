@@ -170,7 +170,7 @@ class TestHardware(unittest.TestCase):
 
     def test_rtx_3090(self):
         model, why = hardware.pick_model(self.table, {"gpu": "RTX 3090", "vram_gb": 24.0, "ram_gb": 64})
-        self.assertEqual(model, "qwen3.6:27b")
+        self.assertEqual(model, "qwen3.8:27b")
         self.assertIn("RTX 3090", why)
 
     def test_no_gpu_uses_half_ram(self):
@@ -212,7 +212,7 @@ class TestModelChoice(unittest.TestCase):
         from agent import models
         self.models = models
         self.saved = models.ollama_models
-        models.ollama_models = lambda url=None: {"installed": ["qwen3.6:27b", "gemma4:e4b"],
+        models.ollama_models = lambda url=None: {"installed": ["qwen3.8:27b", "gemma4:e4b"],
                                                  "running": ["gemma4:e4b"]}
 
     def tearDown(self):
@@ -227,8 +227,8 @@ class TestModelChoice(unittest.TestCase):
         m, note = core.resolve_model(self.cfg("active"))
         self.assertEqual(m["model_name"], "gemma4:e4b")
         self.assertIn("active model", note)
-        m, _ = core.resolve_model(self.cfg("'qwen3.6:27b'"))  # stray quotes are ignored
-        self.assertEqual(m["model_name"], "qwen3.6:27b")
+        m, _ = core.resolve_model(self.cfg("'qwen3.8:27b'"))  # stray quotes are ignored
+        self.assertEqual(m["model_name"], "qwen3.8:27b")
         with self.assertRaises(self.models.ModelError):
             core.resolve_model(self.cfg("llama9"))
 
@@ -237,7 +237,7 @@ class TestModelChoice(unittest.TestCase):
         hardware.detect = lambda: {"gpu": "RTX 3090", "vram_gb": 24.0, "ram_gb": 64}
         try:
             m, note = core.resolve_model(self.cfg("auto"))
-            self.assertEqual(m["model_name"], "qwen3.6:27b")
+            self.assertEqual(m["model_name"], "qwen3.8:27b")
             self.assertIn("RTX 3090", note)
         finally:
             hardware.detect = saved

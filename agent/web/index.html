@@ -1241,7 +1241,7 @@ function setOll(mode) {
   $("#modelField").classList.toggle("hidden", oll && ollMode !== "name");
   const run = (M && M.running || []), inst = (M && M.installed || []);
   $("#installedList").innerHTML = inst.map(n => `<option value="${esc(n)}">`).join("");
-  if (oll && ollMode === "name") { $("#fModel").placeholder = inst[0] || "qwen3.6:27b"; $("#modelHint").textContent = inst.length ? "Installed: " + inst.join(", ") : "Type the name shown by: ollama list"; }
+  if (oll && ollMode === "name") { $("#fModel").placeholder = inst[0] || "qwen3.8:27b"; $("#modelHint").textContent = inst.length ? "Installed: " + inst.join(", ") : "Type the name shown by: ollama list"; }
   $("#ollHint").textContent = !oll ? "" : ollMode === "active"
     ? (run.length ? `Uses the model already loaded in Ollama: ${run[0]}.` : "Uses the model loaded in Ollama when you run the sort (none loaded right now).")
     : ollMode === "auto" ? "Picks the best installed model for your graphics card, from the table in config.yaml." : "";
