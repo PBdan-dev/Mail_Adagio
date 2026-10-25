@@ -431,7 +431,10 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
   border: 1px solid var(--border); font-weight: 600; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .chip .dot { flex: none; }
 .sugg .btn { flex: none; }
-.chip.rule { background: var(--green-soft); color: var(--green); border-color: transparent; }
+.chip.rule { background: var(--green-soft); color: var(--green); border-color: transparent; font: inherit; font-weight: 600; cursor: pointer; }
+.chip.rule svg { opacity: .55; flex: none; }
+.chip.rule:hover { box-shadow: inset 0 0 0 1px var(--green); }
+.chip.rule:hover svg { opacity: 1; }
 .sugg small { color: var(--faint); }
 .btn.sm { padding: 5px 10px; font-size: 12.5px; border-radius: 8px; }
 .btn.sm.primary { padding: 5px 11px; box-shadow: none; }
@@ -1216,7 +1219,7 @@ function renderSenders() {
   const max = Math.max(1, ...all.map(r => r.mails)), shown = rows.slice(0, 300);
   $("#senders").innerHTML = !scan ? `<div class="empty">No scan yet.</div>` : !rows.length ? `<div class="empty">No sender here.</div>` : shown.map((r, i) => {
     const link = safeLink(r.unsubscribe);
-    const sugg = r.rule ? `<span class="chip rule" title="Your rule (${esc(r.rule.kind)}: ${esc(r.rule.value)})"><span class="dot" style="background:${color(r.rule.theme)}"></span>${esc(r.rule.theme)} · ${esc(r.rule.status)}</span>`
+    const sugg = r.rule ? `<button type="button" class="chip rule" data-act="edit" data-i="${i}" title="Your rule (${esc(r.rule.kind)}: ${esc(r.rule.value)}). Click to change it."><span class="dot" style="background:${color(r.rule.theme)}"></span>${esc(r.rule.theme)} · ${esc(r.rule.status)}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>`
       : r.theme ? `<span class="chip" title="Suggested from ${esc(r.votes)}"><span class="dot" style="background:${color(r.theme)}"></span>${esc(r.theme)} · ${esc(r.status)}</span>
           <button class="btn sm primary" data-act="accept" data-i="${i}" title="Always sort ${esc(r.address)} this way">Accept</button><button class="btn sm" data-act="edit" data-i="${i}" title="Choose another theme or status">Change</button>`
       : `<button class="btn sm ghost" data-act="edit" data-i="${i}" style="color:var(--muted)">Add a rule</button>`;
@@ -1251,12 +1254,12 @@ $("#senderSearch").oninput = e => { senderQuery = e.target.value; renderSenders(
 $("#scanBtn").onclick = () => start("/api/scan", {});
 $("#suggestBtn").onclick = () => { senderFilter = "sugg"; start("/api/suggest", { top: 20 }); };
 function openSenderFix(r) {
-  fix = { mode: "sender", sender: r, theme: r.theme || (r.rule && r.rule.theme) || "Other", status: r.status || (r.rule && r.rule.status) || S.statuses[S.statuses.length - 1] };
-  $("#fixDlg h2").textContent = "Rule for this sender";
+  fix = { mode: "sender", sender: r, theme: (r.rule && r.rule.theme) || r.theme || "Other", status: (r.rule && r.rule.status) || r.status || S.statuses[S.statuses.length - 1] };
+  $("#fixDlg h2").textContent = r.rule ? "Change the rule for this sender" : "Rule for this sender";
   $("#fixFrom").textContent = `${r.name} <${r.address}>`; $("#fixSubj").textContent = `${fmt(r.mails)} mails in your mailbox`;
   $("#fixAddr").textContent = r.address; $("#fixDomain").textContent = r.domain;
   $("#fixDomainRow").classList.toggle("hidden", !r.domain); $("#fixNoneRow").classList.add("hidden");
-  $("#fixForm").querySelector('input[value="sender"]').checked = true;
+  $("#fixForm").querySelector(`input[value="${r.rule && r.rule.kind === "domain" && r.domain ? "domain" : "sender"}"]`).checked = true;
   drawFix(); $("#fixDlg").showModal();
 }
 
