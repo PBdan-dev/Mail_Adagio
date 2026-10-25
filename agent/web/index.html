@@ -6,98 +6,131 @@
 <title>Mail Adagio</title>
 <style>
 :root {
-  --bg: #f4f5f8; --surface: #ffffff; --surface-2: #f7f8fa; --border: #e4e6ec;
-  --text: #171a21; --muted: #646b7a; --faint: #9aa1ae;
-  --accent: #4f6ef7; --accent-2: #7b5cf6; --accent-soft: #eef1fe;
-  --red: #e5484d; --red-soft: #fdecec; --amber: #d98e04; --amber-soft: #fdf3dc;
-  --slate: #6b7385; --slate-soft: #eef0f3; --green: #1f9d63; --green-soft: #e3f6ed;
-  --shadow: 0 1px 2px rgba(16,24,40,.04), 0 4px 16px rgba(16,24,40,.05);
-  --radius: 14px;
+  --bg: #f4f5f9; --surface: #ffffff; --surface-2: #f3f4f8; --border: #e6e8ef; --sidebar: #fbfbfd; --row: #f5f6fb;
+  --text: #12141b; --muted: #5d6474; --faint: #9ba1af;
+  --accent: #5b5ff6; --accent-2: #8b5cf6; --accent-soft: #eef0ff;
+  --red: #e5484d; --red-soft: #fdeded; --amber: #c98502; --amber-soft: #fdf4de;
+  --slate: #687083; --slate-soft: #eff1f5; --green: #1a9a5f; --green-soft: #e4f6ed;
+  --shadow: 0 1px 2px rgba(18,20,40,.04), 0 10px 30px -14px rgba(18,20,40,.14);
+  --radius: 16px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1115; --surface: #171a21; --surface-2: #1d2129; --border: #2a2f3a;
-    --text: #eceef3; --muted: #9aa1b0; --faint: #6b7282;
-    --accent: #7088ff; --accent-2: #9a7cff; --accent-soft: #1f2540;
-    --red: #ff6b6f; --red-soft: #3a1d20; --amber: #f2b63c; --amber-soft: #3a2f16;
-    --slate: #a0a8b8; --slate-soft: #252a34; --green: #3ccf8e; --green-soft: #15302a;
-    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+    --bg: #0b0d12; --surface: #13161d; --surface-2: #1a1e27; --border: #242935; --sidebar: #0f1117; --row: #191d26;
+    --text: #eceef4; --muted: #9aa1b2; --faint: #646b7c;
+    --accent: #7d81ff; --accent-2: #a78bfa; --accent-soft: #1e2142;
+    --red: #ff6b6f; --red-soft: #351b1f; --amber: #f2b63c; --amber-soft: #352b14;
+    --slate: #a0a8b8; --slate-soft: #232833; --green: #3ccf8e; --green-soft: #14302a;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px -14px rgba(0,0,0,.6);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0f1115; --surface: #171a21; --surface-2: #1d2129; --border: #2a2f3a;
-  --text: #eceef3; --muted: #9aa1b0; --faint: #6b7282;
-  --accent: #7088ff; --accent-2: #9a7cff; --accent-soft: #1f2540;
-  --red: #ff6b6f; --red-soft: #3a1d20; --amber: #f2b63c; --amber-soft: #3a2f16;
-  --slate: #a0a8b8; --slate-soft: #252a34; --green: #3ccf8e; --green-soft: #15302a;
-  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+  --bg: #0b0d12; --surface: #13161d; --surface-2: #1a1e27; --border: #242935; --sidebar: #0f1117; --row: #191d26;
+  --text: #eceef4; --muted: #9aa1b2; --faint: #646b7c;
+  --accent: #7d81ff; --accent-2: #a78bfa; --accent-soft: #1e2142;
+  --red: #ff6b6f; --red-soft: #351b1f; --amber: #f2b63c; --amber-soft: #352b14;
+  --slate: #a0a8b8; --slate-soft: #232833; --green: #3ccf8e; --green-soft: #14302a;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px -14px rgba(0,0,0,.6);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
   background: var(--bg); color: var(--text);
-  font: 14px/1.5 "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  font: 14px/1.5 "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", Inter, system-ui, -apple-system, Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 button, input, select { font: inherit; color: inherit; }
 a { color: var(--accent); text-decoration: none; }
 
-/* layout: header, then three panes that scroll on their own (like a mail program) */
+/* layout: sidebar on the left, then the work area with its own panes (like a mail program) */
 html, body { height: 100%; }
-body { display: flex; flex-direction: column; overflow: hidden; }
-.top { flex: none; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--border); }
-.top-in { height: 58px; display: flex; align-items: center; gap: 14px; padding: 0 20px; }
-.logo { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; }
-.brand b { font-size: 16px; letter-spacing: -.01em; }
-.brand span { display: block; color: var(--muted); font-size: 12px; margin-top: -2px; }
+body { overflow: hidden; }
+.frame { display: flex; height: 100%; }
+.logo { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; flex: none;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff;
+  box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--accent) 70%, transparent); }
+.sidebar { flex: none; width: 256px; display: flex; flex-direction: column; gap: 18px; padding: 16px 12px 14px;
+  background: var(--sidebar); border-right: 1px solid var(--border); overflow: auto; }
+.brand-row { display: flex; align-items: center; gap: 11px; padding: 2px 8px; }
+.brand b { font-size: 15.5px; letter-spacing: -.01em; display: block; line-height: 1.2; }
+.brand span { display: block; color: var(--muted); font-size: 12px; }
+.nav { display: grid; gap: 2px; }
+.nav button { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 10px; border: 0; background: transparent;
+  color: var(--muted); font-weight: 550; cursor: pointer; text-align: left; width: 100%; }
+.nav button svg { flex: none; }
+.nav button:hover { background: var(--surface-2); color: var(--text); }
+.nav button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.05), inset 0 0 0 1px var(--border); }
+.nav button.on svg { color: var(--accent); }
+.side-h { display: flex; align-items: center; justify-content: space-between; padding: 0 10px 6px; font-size: 11px; font-weight: 650;
+  text-transform: uppercase; letter-spacing: .08em; color: var(--faint); }
+.linkbtn { border: 0; background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; padding: 2px 4px;
+  text-transform: none; letter-spacing: 0; border-radius: 6px; }
+.linkbtn:hover { background: var(--accent-soft); }
+.side-foot { margin-top: auto; padding: 10px 8px 0; border-top: 1px solid var(--border); }
+.side-foot .pill { width: 100%; justify-content: flex-start; overflow: hidden; }
+.side-foot .pill span { overflow: hidden; text-overflow: ellipsis; }
+.mainwrap { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.topbar { flex: none; display: flex; align-items: center; gap: 8px; padding: 14px 20px 12px; }
+.topbar .ttl { min-width: 0; }
+.topbar h1 { font-size: 21px; letter-spacing: -.025em; margin: 0; line-height: 1.25; }
+.topbar small { color: var(--muted); font-size: 13px; }
 .spacer { flex: 1; }
-.banners { flex: none; display: grid; gap: 8px; padding: 12px 16px 0; }
+.banners { flex: none; display: grid; gap: 8px; padding: 0 20px 12px; }
 .banners:not(:has(> .banner:not(.hidden))) { display: none; }
-main.shell { flex: 1; min-height: 0; display: grid; gap: 16px; padding: 16px;
-  grid-template-columns: 300px minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); }
-.shell.nopanel { grid-template-columns: 300px minmax(0, 1fr); }
+main.shell { flex: 1; min-height: 0; display: grid; gap: 16px; padding: 0 20px 20px;
+  grid-template-columns: minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); }
+.shell.nopanel { grid-template-columns: minmax(0, 1fr); }
 .shell.nopanel #sideCol { display: none; }
-.shell.senders { grid-template-columns: minmax(0, 1fr) 340px; }
-.shell.senders.nopanel { grid-template-columns: minmax(0, 1fr); }
 .pane { min-height: 0; min-width: 0; overflow: auto; }
 .pane.stack { display: grid; gap: 14px; align-content: start; padding: 0 2px 4px; }
-.pane.stack .card { padding: 16px; }
+.pane.stack .card { padding: 16px 18px; }
 .pane.stack .card h2 { font-size: 14px; }
 .pane.stack .card .sub { margin-bottom: 12px; font-size: 12.5px; }
 .center { display: flex; flex-direction: column; overflow: hidden; background: var(--surface);
-  border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
-.sortbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--surface)), var(--surface) 70%); }
-.listhead { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 16px 8px; }
+  border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+.sortbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px;
+  border-bottom: 1px solid var(--border); position: relative; z-index: 3; }
+.listhead { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 14px 18px 8px; }
 .listhead .ttl { flex: 1; min-width: 220px; }
 .listhead h2 { font-size: 15px; margin: 0; letter-spacing: -.01em; }
 .listhead .sub { color: var(--muted); margin: 0; font-size: 12.5px; }
-.listhead .search { flex: 0 1 280px; }
-.mails { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 8px; }
-.center > .hint, .center > .alert { margin: 10px 16px 0; }
-.ptitle { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 6px; font-weight: 650; }
-.ptitle:first-child { margin-top: 0; }
+.listhead .search { flex: 0 1 300px; }
+.mails { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 10px; }
+.center > .hint, .center > .alert { margin: 12px 16px 0; }
 #panelBtn.on { background: var(--accent-soft); color: var(--accent); }
+/* sort settings: a menu under the sort bar */
+.optwrap { position: relative; }
+#optsBtn { max-width: min(420px, 100%); }
+.optwrap { max-width: 100%; min-width: 0; }
+#optsBtn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+#optsBtn svg { flex: none; color: var(--muted); }
+.popover { position: absolute; top: calc(100% + 8px); left: 0; width: 380px; max-width: calc(100vw - 32px); z-index: 20;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px;
+  box-shadow: 0 24px 60px -18px rgba(10,12,30,.35), 0 2px 6px rgba(10,12,30,.06); }
 @media (max-width: 1440px) {
-  main.shell, .shell.nopanel { grid-template-columns: 270px minmax(0, 1fr); }
-  .shell.senders, .shell.senders.nopanel { grid-template-columns: minmax(0, 1fr); }
-  .shell.nopanel #sideCol, #sideCol { display: grid; position: fixed; top: 58px; right: 0; bottom: 0; width: 360px; max-width: 92vw; z-index: 8;
-    background: var(--bg); padding: 16px; border-left: 1px solid var(--border); box-shadow: -10px 0 30px rgba(0,0,0,.12);
-    transform: translateX(105%); transition: transform .2s; }
+  #sideCol, .shell.nopanel #sideCol { display: grid; position: fixed; top: 0; right: 0; bottom: 0; width: 360px; max-width: 92vw; z-index: 30;
+    background: var(--bg); padding: 16px; border-left: 1px solid var(--border); box-shadow: -18px 0 40px -12px rgba(0,0,0,.25);
+    transform: translateX(105%); transition: transform .22s ease; }
+  main.shell { grid-template-columns: minmax(0, 1fr); }
   .shell.panelopen #sideCol { transform: none; }
 }
+@media (max-width: 1000px) { .sidebar { width: 216px; } }
 @media (max-width: 780px) {
-  body { overflow: auto; height: auto; display: block; }
+  body { overflow: auto; height: auto; }
   html { height: auto; }
-  main.shell, .shell.nopanel, .shell.senders { display: block; padding: 12px; }
+  .frame { display: block; height: auto; }
+  .sidebar { width: auto; border-right: 0; border-bottom: 1px solid var(--border); gap: 12px; }
+  .nav { grid-auto-flow: column; }
+  .side-foot { display: none; }
+  #leftPane .flist { max-height: 240px; overflow: auto; }
+  main.shell { display: block; padding: 0 12px 12px; }
+  .topbar { padding: 14px 12px 10px; } .banners { padding: 0 12px 12px; }
   .pane { overflow: visible; }
-  .pane.stack, .center { margin-bottom: 14px; }
+  .center { margin-bottom: 14px; }
   .mails { overflow: visible; }
+  #settingsBtn .lbl { display: none; } #settingsBtn { padding: 8px 10px; }
+  .popover { position: fixed; left: 12px; right: 12px; top: 80px; width: auto; max-height: calc(100vh - 100px); overflow: auto; }
 }
-@media (max-width: 560px) { .top-in { padding: 0 12px; gap: 8px; } .brand { display: none; } #conn { display: none; }
-  #settingsBtn .lbl { display: none; } #settingsBtn { padding: 8px 10px; } }
 
 /* pieces */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
@@ -105,14 +138,15 @@ main.shell { flex: 1; min-height: 0; display: grid; gap: 16px; padding: 16px;
 .card h2 { font-size: 15px; margin: 0 0 4px; letter-spacing: -.01em; }
 .card .sub { color: var(--muted); margin: 0 0 16px; font-size: 13px; }
 .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.btn { border: 1px solid var(--border); background: var(--surface); padding: 8px 14px; border-radius: 10px;
+.btn { border: 1px solid var(--border); background: var(--surface); padding: 8px 14px; border-radius: 10px; box-shadow: 0 1px 1px rgba(18,20,40,.03);
   cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-weight: 550; transition: .15s; }
 .btn:hover:not(:disabled) { background: var(--surface-2); }
 .btn.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: 0;
-  padding: 10px 18px; box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent); }
+  padding: 9px 17px; box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 8px 20px -8px color-mix(in srgb, var(--accent) 80%, transparent); }
 .btn.primary:hover:not(:disabled) { background: linear-gradient(135deg, var(--accent), var(--accent-2)); filter: brightness(1.08); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
-.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost { border-color: transparent; background: transparent; box-shadow: none; color: var(--muted); }
+.btn.ghost:hover:not(:disabled) { color: var(--text); }
 .icon-btn { width: 36px; height: 36px; padding: 0; justify-content: center; }
 .pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px;
   background: var(--slate-soft); color: var(--muted); font-size: 12.5px; font-weight: 550; white-space: nowrap; }
@@ -122,8 +156,8 @@ main.shell { flex: 1; min-height: 0; display: grid; gap: 16px; padding: 16px;
 .seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
 .seg button { border: 0; background: transparent; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: var(--muted); font-weight: 550; }
 .seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-.banner { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; padding: 12px 16px;
-  border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-weight: 550; }
+.banner { display: flex; gap: 10px; align-items: center; padding: 9px 14px;
+  border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-weight: 550; font-size: 13px; }
 .cardtop { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 #orderDlg { width: min(640px, calc(100vw - 32px)); }
 .olists { display: grid; grid-template-columns: 1fr 1.4fr; gap: 16px; margin-top: 16px; }
@@ -161,7 +195,7 @@ details.colors small { display: block; margin: 6px 0; }
 .progress.on { display: block; }
 .sortbar .progress { flex: 1 1 260px; min-width: 200px; }
 .sortbar .progress small { margin-top: 3px; font-size: 12px; }
-.bar { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--border); }
+.bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--border); }
 .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s; }
 .progress small { color: var(--muted); display: block; margin-top: 6px; }
 @media (max-width: 640px) { .run { grid-template-columns: 1fr; } }
@@ -200,20 +234,33 @@ details.colors small { display: block; margin: 6px 0; }
 .search { flex: 1; min-width: 160px; border: 1px solid var(--border); background: var(--surface-2);
   border-radius: 10px; padding: 8px 12px; outline: none; }
 .search:focus { border-color: var(--accent); }
-.group { margin-top: 4px; }
-.ghead { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 13px; position: sticky; top: 0; z-index: 1;
-  background: var(--surface); padding: 8px 10px 6px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
-.ghead span { color: var(--faint); font-weight: 500; }
-.mail { display: grid; grid-template-columns: 84px 200px minmax(0, 1fr) 50px 26px 26px; gap: 10px; align-items: center;
-  padding: 4px 10px; border-radius: 8px; border-left: 3px solid transparent; font-size: 13.5px; min-height: 34px; }
-.mail:hover { background: var(--surface-2); }
+.group { margin-top: 6px; }
+.ghead { display: flex; align-items: center; gap: 9px; position: sticky; top: 0; z-index: 1; padding: 12px 12px 6px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent); backdrop-filter: blur(8px);
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.ghead span { color: var(--faint); font-weight: 600; }
+.ghead .dot { width: 8px; height: 8px; border-radius: 50%; }
+.mail { display: grid; grid-template-columns: 30px 190px minmax(0, 1fr) auto 46px 58px; gap: 12px; align-items: center;
+  padding: 5px 12px; border-radius: 10px; font-size: 13.5px; min-height: 42px; transition: background .12s; }
+.mail.sel { grid-template-columns: 18px 30px 190px minmax(0, 1fr) auto 46px 58px; }
+.mail:hover { background: var(--row); }
+.av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 12.5px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
 .mail .from { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mail .subj { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
-.mail .subj em { font-style: normal; color: var(--faint); margin-left: 8px; font-size: 12px; }
-.mail .date { color: var(--faint); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
-.mail a.open, .mail button.fix { color: var(--faint); display: grid; place-items: center; border-radius: 7px; height: 26px;
+.mail .subj { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.mail .date { color: var(--faint); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.mail .acts2 { display: flex; gap: 2px; justify-content: flex-end; opacity: 0; transition: opacity .12s; }
+.mail:hover .acts2, .mail:focus-within .acts2 { opacity: 1; }
+@media (hover: none) { .mail .acts2 { opacity: 1; } }
+.mail a.open, .mail button.fix { color: var(--muted); display: grid; place-items: center; border-radius: 8px; width: 28px; height: 28px;
   border: 0; background: transparent; cursor: pointer; padding: 0; }
 .mail a.open:hover, .mail button.fix:hover { color: var(--accent); background: var(--accent-soft); }
+.st { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px 3px 8px;
+  border-radius: 999px; white-space: nowrap; }
+.st i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.st-0, .st-x { background: var(--red-soft); color: var(--red); }
+.st-1 { background: var(--amber-soft); color: var(--amber); }
+.st-2 { background: var(--slate-soft); color: var(--slate); }
 .mini { font-size: 11px; font-weight: 650; padding: 1px 7px; border-radius: 6px; margin-left: 8px; background: var(--accent-soft); color: var(--accent); }
 .mini.ok { background: var(--green-soft); color: var(--green); }
 .mini.del { background: var(--red-soft); color: var(--red); display: inline-flex; align-items: center; gap: 4px; }
@@ -229,8 +276,10 @@ details.colors small { display: block; margin: 6px 0; }
 .b-2 { background: var(--slate-soft); color: var(--slate); }
 .b-x { background: var(--red-soft); color: var(--red); }
 @media (max-width: 760px) {
-  .mail { grid-template-columns: auto minmax(0, 1fr) 28px 28px; grid-template-areas: "b f e o" "s s s s"; row-gap: 2px; }
-  .mail .badge { grid-area: b; } .mail .from { grid-area: f; } .mail .subj { grid-area: s; } .mail .date { display: none; } .mail a.open { grid-area: o; } .mail button.fix { grid-area: e; }
+  .mail { grid-template-columns: 30px minmax(0, 1fr) auto; grid-template-areas: "a f k" "a j s"; row-gap: 0; padding: 7px 10px; }
+  .mail.sel { grid-template-columns: 18px 30px minmax(0, 1fr) auto; grid-template-areas: "c a f k" "c a j s"; }
+  .mail > input { grid-area: c; } .mail .av { grid-area: a; } .mail .from { grid-area: f; } .mail .subj { grid-area: j; }
+  .mail .st { grid-area: s; justify-self: end; } .mail .date { display: none; } .mail .acts2 { grid-area: k; opacity: 1; }
 }
 .empty { text-align: center; padding: 36px 12px; color: var(--muted); }
 .empty svg { color: var(--faint); margin-bottom: 8px; }
@@ -238,8 +287,8 @@ details.colors small { display: block; margin: 6px 0; }
 /* side */
 .kv { display: grid; grid-template-columns: 92px 1fr; gap: 8px 12px; font-size: 13px; margin-bottom: 16px; }
 .kv dt { color: var(--muted); } .kv dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.action { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px dashed var(--border); border-radius: 12px; margin-top: 10px; }
-.action .ic { width: 32px; height: 32px; border-radius: 9px; background: var(--surface-2); display: grid; place-items: center; color: var(--muted); flex: none; }
+.action { display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: var(--surface-2); border-radius: 12px; margin-top: 10px; }
+.action .ic { width: 32px; height: 32px; border-radius: 9px; background: var(--surface); display: grid; place-items: center; color: var(--muted); flex: none; }
 .action b { display: block; font-size: 13.5px; }
 .action small { color: var(--muted); }
 .tag { white-space: nowrap; font-size: 11px; font-weight: 650; padding: 2px 7px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; }
@@ -268,7 +317,7 @@ dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
 .step .num { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 700; font-size: 12px; margin-bottom: 8px; }
 
 .toast { position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0;
-  background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 550; transition: .25s; z-index: 20; max-width: calc(100vw - 32px); }
+  background: var(--text); color: var(--bg); padding: 11px 18px; border-radius: 12px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.4); font-weight: 550; transition: .25s; z-index: 20; max-width: calc(100vw - 32px); }
 .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.err { background: var(--red); color: #fff; }
 .hidden { display: none !important; }
@@ -298,7 +347,7 @@ dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
 .model-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; }
 .model-chip.err { border-color: color-mix(in srgb, var(--red) 40%, transparent); background: var(--red-soft); color: var(--red); }
 .model-chip.err i { background: var(--red); }
-.sortbar .model-chip { margin: 0 0 0 auto; flex-wrap: wrap; }
+.sortbar .model-chip { margin: 0 0 0 auto; flex-wrap: wrap; border-radius: 999px; padding: 5px 12px; background: var(--surface-2); border-color: transparent; }
 .model-chip.warn i { background: var(--amber); }
 .model-chip select { border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px; padding: 3px 6px; font-size: 12.5px; max-width: 170px; }
 .running i { animation: pulse 1s infinite; }
@@ -311,11 +360,11 @@ dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
 
 /* step 3: sort options, plan, apply bar */
 .opts { display: grid; gap: 14px; margin-top: 4px; }
-.pane .seg button { padding: 5px 9px; font-size: 12.5px; }
-.pane input[type=range] { flex: 1; width: auto; }
-.pane .switch { padding: 9px 10px; gap: 10px; margin-top: 8px; }
-.pane .estimate { margin-top: 10px; gap: 4px 12px; font-size: 12.5px; }
-#runSub { display: block; color: var(--muted); font-size: 12.5px; margin: 12px 0 10px; }
+.popover .seg button { padding: 5px 9px; font-size: 12.5px; }
+.popover input[type=range] { flex: 1; width: auto; }
+.popover .switch { padding: 9px 10px; gap: 10px; margin-top: 8px; }
+.popover .estimate { margin-top: 10px; gap: 4px 12px; font-size: 12.5px; }
+#runSub { display: block; color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
 .sortopts summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; }
 .sortopts summary::-webkit-details-marker { display: none; }
 .sortopts summary > span { flex: 1; min-width: 0; }
@@ -323,10 +372,10 @@ dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
 .sortopts summary small { display: block; color: var(--muted); font-size: 12.5px; }
 .sortopts .chev { color: var(--muted); transition: transform .15s; flex: none; }
 .sortopts[open] .chev { transform: rotate(180deg); }
-.pane .opt { gap: 8px; }
-.pane .opt > label { width: 100%; margin-bottom: -2px; }
-.pane .rangeval { min-width: 0; font-size: 13px; }
-.pane .num { width: 86px; }
+.popover .opt { gap: 8px; }
+.popover .opt > label { width: 100%; margin-bottom: -2px; }
+.popover .rangeval { min-width: 0; font-size: 13px; }
+.popover .num { width: 86px; }
 .opt { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .opt > label { width: 86px; color: var(--muted); font-size: 13px; font-weight: 550; }
 .num { width: 92px; border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 6px 10px; outline: none; font-variant-numeric: tabular-nums; }
@@ -350,22 +399,18 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
 .hint { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-radius: 12px;
   background: var(--green-soft); color: var(--green); font-size: 13px; font-weight: 550; }
 .hint .btn { margin-left: auto; }
-.mail.sel { grid-template-columns: 20px 84px 200px minmax(0, 1fr) 50px 26px 26px; }
-.mail.off { opacity: .45; }
+.mail.off { opacity: .42; }
 .mail input, .ghead input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; cursor: pointer; }
 .ghead .to { margin-left: auto; color: var(--faint); font-weight: 500; font-size: 12px; }
-.applybar { flex: none; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
-  padding: 10px 16px; background: var(--surface-2); border-top: 1px solid var(--border); }
+.applybar { flex: none; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 16px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface)); border-top: 1px solid var(--border); }
 .applybar .what { flex: 1; min-width: 200px; font-size: 13px; }
 .applybar .what b { display: block; font-size: 14px; }
 .applybar .what small { color: var(--muted); }
 .state { font-size: 11px; font-weight: 650; padding: 1px 7px; border-radius: 6px; margin-left: 8px; }
 .state.applied { background: var(--green-soft); color: var(--green); }
 .state.skipped, .state.undone { background: var(--slate-soft); color: var(--slate); }
-@media (max-width: 760px) {
-  .mail.sel { grid-template-columns: 22px auto minmax(0, 1fr) 28px 28px; grid-template-areas: "c b f e o" "c s s s s"; }
-  .mail.sel input { grid-area: c; }
-}
+
 .btn.danger { color: var(--red); }
 
 /* pages and senders */
@@ -405,14 +450,27 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
 </style>
 </head>
 <body>
-<header class="top"><div class="top-in">
-  <div class="logo" aria-hidden="true">
+<div class="frame">
+<aside class="sidebar" id="sidebar">
+  <div class="brand-row"><div class="logo" aria-hidden="true">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="3"/></svg>
   </div>
-  <div class="brand"><b>Mail Adagio</b><span>Your inbox, sorted calmly</span></div>
-  <div class="seg tabs hidden" id="pageSeg"><button data-p="sort" class="on">Sort</button><button data-p="senders">Senders</button></div>
+    <div class="brand"><b>Mail Adagio</b><span>Your inbox, sorted calmly</span></div></div>
+  <nav class="nav hidden" id="pageSeg">
+    <button data-p="sort" class="on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></svg><span>Sort</span></button>
+    <button data-p="senders"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Senders</span></button>
+  </nav>
+  <div id="leftPane">
+    <div class="side-h"><span>Views</span><button type="button" class="linkbtn" id="orderBtn2" title="Label order and numbers in Gmail">Order</button></div>
+    <div class="flist" id="folders"></div>
+  </div>
+  <div class="side-foot"><span id="conn" class="pill"><i></i><span>Not set up</span></span></div>
+</aside>
+
+<div class="mainwrap">
+<header class="topbar">
+  <div class="ttl"><h1 id="pageTitle">Sort my inbox</h1><small id="pageSub">Each mail gets a theme and a status. Nothing changes in Gmail until you apply.</small></div>
   <div class="spacer"></div>
-  <span id="conn" class="pill"><i></i><span>Not set up</span></span>
   <button class="btn ghost icon-btn" id="themeBtn" title="Light / dark">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
   </button>
@@ -423,7 +481,7 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
     <span class="lbl">Settings</span>
   </button>
-</div></header>
+</header>
 
 <div class="banners">
   <div class="banner hidden" id="demoBanner">
@@ -451,13 +509,20 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
     <button class="btn primary" id="welcomeBtn">Set up Mail Adagio</button>
   </section>
 
-  <aside class="pane stack" id="leftPane">
-    <section class="card">
-      <details id="sortOpts" class="sortopts">
-        <summary><span><b>Sort settings</b><small id="optsSummary"></small></span>
-          <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></summary>
-        <small id="runSub">Nothing changes in Gmail until you apply a plan.</small>
-        <div class="opts">
+  <section class="center" id="mainCol">
+    <div class="sortbar">
+      <button class="btn primary" id="runBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        <span>Analyze next batch</span>
+      </button>
+      <div class="optwrap" id="optWrap">
+        <button type="button" class="btn" id="optsBtn" aria-haspopup="true" title="Sort settings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+          <span id="optsSummary"></span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="popover hidden" id="sortOpts" role="dialog" aria-label="Sort settings">
+          <small id="runSub"></small>
+          <div class="opts">
           <div class="opt"><label>What</label>
             <div class="seg" id="scopeSeg"><button data-k="count" class="on">Newest</button><button data-k="days">Recent days</button><button data-k="all">Whole inbox</button></div>
             <input class="num" id="scopeVal" type="number" min="1" value="500" aria-label="How many"><span class="unit" id="scopeUnit">mails</span></div>
@@ -470,24 +535,9 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
               <a href="#" id="markReadEdit">Change themes</a></small>
               <span class="chooser hidden" id="markReadThemes"></span></span></label>
         </div>
-      </details>
-      <div class="estimate" id="estimate"></div>
-    </section>
-
-    <section class="card">
-      <div class="cardtop"><h2>View</h2>
-        <button type="button" class="btn sm" id="orderBtn2" title="Label order and numbers in Gmail">Order</button></div>
-      <p class="sub" style="margin:2px 0 8px">Click to show only these mails.</p>
-      <div class="flist" id="folders"></div>
-    </section>
-  </aside>
-
-  <section class="center" id="mainCol">
-    <div class="sortbar">
-      <button class="btn primary" id="runBtn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-        <span>Analyze next batch</span>
-      </button>
+          <div class="estimate" id="estimate"></div>
+        </div>
+      </div>
       <button class="btn danger hidden" id="stopBtn" title="Stops after the mail in progress. The mails already analysed wait in the plan; the others come next time.">Stop</button>
       <button class="btn ghost hidden" id="restartBtn" title="Start again from the newest mail">Start a new sort</button>
       <div class="progress" id="progress">
@@ -523,7 +573,7 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
   <section class="pane stack hidden" id="sendersCol">
     <section class="card run">
       <div>
-        <h2>Senders and subscriptions</h2>
+        <h2>Scan your mailbox</h2>
         <p class="sub" style="margin:4px 0 0">A quick look at who writes to you. The scan reads only the sender, the date and the unsubscribe link of each mail. It is fast and free, uses no AI and changes nothing.</p>
         <div class="estimate" id="scanInfo"></div>
       </div>
@@ -610,6 +660,8 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
     </section>
   </aside>
 </main>
+</div>
+</div>
 
 <dialog id="settings"><form class="dlg" id="settingsForm" method="dialog">
   <h2>Settings</h2>
@@ -719,7 +771,7 @@ const color = name => S?.colors?.[name]?.hex || PALETTE[Math.max(0, (S?.themes |
 (function () {
   try { const t = localStorage.getItem("adagio-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
   $("#themeBtn").onclick = () => {
-    const dark = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() === "#0f1115";
+    const dark = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() === "#0b0d12";
     const next = dark ? "light" : "dark";
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem("adagio-theme", next); } catch (e) {}
@@ -909,7 +961,6 @@ function initControls() {
   scope = saved || (p ? { kind: p.kind, value: p.value } : scope);
   batchSize = S.sort.batch_size;
   $("#actAlone").checked = S.sort.act_alone;
-  $("#sortOpts").open = store.get("adagio-opts") ?? !(p && p.done);
   drawScope(); estimate();
 }
 function drawMarkRead() {
@@ -928,7 +979,11 @@ function drawSummary() {
   $("#optsSummary").textContent = `${s} · ${batchSize} per batch · ${$("#actAlone").checked ? "acts alone" : "asks before applying"}`
     + ($("#markRead").checked ? " · marks low-interest as read" : "");
 }
-$("#sortOpts").ontoggle = () => store.set("adagio-opts", $("#sortOpts").open);
+/* sort settings menu: opens under its button, closes on a click outside or Escape */
+const closeOpts = () => $("#sortOpts").classList.add("hidden");
+$("#optsBtn").onclick = () => $("#sortOpts").classList.toggle("hidden");
+document.addEventListener("click", e => { if (!e.composedPath().includes($("#optWrap"))) closeOpts(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeOpts(); });
 function drawScope() {
   $("#scopeSeg").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.k === scope.kind));
   $("#scopeVal").classList.toggle("hidden", scope.kind === "all");
@@ -959,6 +1014,10 @@ function render() {
   $("#sideCol").classList.toggle("hidden", !ready);
   $("#panelBtn").classList.toggle("hidden", !ready);
   $("#app").classList.toggle("senders", page === "senders");
+  $("#pageTitle").textContent = !ready ? "Welcome" : page === "sort" ? "Sort my inbox" : "Senders";
+  $("#pageSub").textContent = !ready ? "Set up your Gmail address and a model to start." : page === "sort"
+    ? "Each mail gets a theme and a status. Nothing changes in Gmail until you apply."
+    : "Who writes to you, their unsubscribe links, and ready-made rules.";
   $("#pageSeg").classList.toggle("hidden", !ready);
   $("#pageSeg").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.p === page));
 
@@ -1254,20 +1313,25 @@ async function loadRules() { const r = await api("/api/rules"); if (r.ok) drawRu
 
 function mailRow(m, t, selectable) {
   const si = S.statuses.indexOf(m.status);
-  const badge = m.classified ? `<span class="badge b-${Math.min(si, 2)}">${esc(m.status)}</span>` : `<span class="badge b-x" title="${esc(m.error || "")}">Not sorted</span>`;
+  const status = m.classified ? `<span class="st st-${Math.min(si, 2)}"><i></i>${esc(m.status)}</span>` : `<span class="st st-x" title="${esc(m.error || "")}"><i></i>Not sorted</span>`;
   const name = (m.sender.split("<")[0].replace(/"/g, "").trim()) || m.sender;
+  const letter = (name.replace(/[^\p{L}\p{N}]/gu, "")[0] || "?").toUpperCase();
   const tags = (m.corrected ? `<span class="mini ok">corrected</span>` : m.rule ? `<span class="mini" title="${esc(m.rule)}">rule</span>` : "")
     + (m.to_delete ? `<span class="mini del" title="Gets the label for mails to delete. Only you send them to the Trash.">to delete${selectable ? `<button class="keep" data-keep="${esc(m.gm_msgid)}" title="Keep this mail" aria-label="Keep this mail">×</button>` : ""}</span>` : "")
     + (!selectable ? `<span class="state ${esc(m.state)}">${{ applied: m.archived ? "filed" : "labelled", skipped: "left as is", undone: "undone" }[m.state] || ""}</span>` : "");
   const url = /^https:\/\/mail\.google\.com\//.test(m.gmail_url) ? m.gmail_url : "";
   const off = selectable && skip.has(m.gm_msgid);
-  return `<div class="mail${selectable ? " sel" : ""}${off ? " off" : ""}" style="border-left-color:${color(t)}">
+  return `<div class="mail${selectable ? " sel" : ""}${off ? " off" : ""}">
     ${selectable ? `<input type="checkbox" data-id="${esc(m.gm_msgid)}" ${off ? "" : "checked"} aria-label="Include this mail">` : ""}
-    ${badge}<div class="from" title="${esc(m.sender)}">${esc(name)}</div>
+    <span class="av" style="background:${color(t)}">${esc(letter)}</span>
+    <div class="from" title="${esc(m.sender)}">${esc(name)}</div>
     <div class="subj" title="${esc(m.subject)}">${esc(m.subject || "(no subject)")}${tags}</div>
+    ${status}
     <div class="date">${esc((m.date || "").slice(5).replace("-", "/"))}</div>
-    ${selectable ? `<button class="fix" data-id="${esc(m.gm_msgid)}" title="Correct theme or status"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>` : "<span></span>"}
-    ${url ? `<a class="open" href="${esc(url)}" target="_blank" rel="noopener" title="Open in Gmail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>` : "<span></span>"}
+    <div class="acts2">
+    ${selectable ? `<button class="fix" data-id="${esc(m.gm_msgid)}" title="Correct theme or status"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>` : ""}
+    ${url ? `<a class="open" href="${esc(url)}" target="_blank" rel="noopener" title="Open in Gmail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>` : ""}
+    </div>
   </div>`;
 }
 
