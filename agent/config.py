@@ -60,6 +60,7 @@ def check(cfg):
     cfg["behavior"].setdefault("act_alone", False)
     cfg["behavior"].setdefault("batch_size", 100)
     cfg["behavior"].setdefault("archive", True)
+    cfg["model"].setdefault("timeout_s", 60)
     cfg["behavior"].setdefault("to_delete", True)
     cfg["behavior"].setdefault("mark_read", False)
     cfg["behavior"].setdefault("mark_read_themes", list(LOW_INTEREST))

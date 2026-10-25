@@ -219,7 +219,7 @@ def sort_mails(cfg, mails, ask, model_note, progress=None):
     mem = memory.Memory(MEMORY_PATH)
     try:
         examples = mem.examples()
-        rows, model_calls = [], 0
+        rows, model_calls, timeouts = [], 0, 0
         for i, mail in enumerate(mails, 1):
             rule = mem.match(mail.sender, themes, statuses)
             if rule:  # your rule wins: no model call
@@ -230,6 +230,11 @@ def sort_mails(cfg, mails, ask, model_note, progress=None):
                 if model_calls == 1 and not r.ok and r.provider_error:
                     # the model cannot answer at all: stop now instead of filing every mail in Other
                     raise models.ModelError(f"The model {model_note.split(' · ')[0]} did not answer: {r.error}")
+                timeouts = timeouts + 1 if r.timed_out else 0
+                if timeouts == 3:  # too slow for this computer: say so instead of waiting on every mail
+                    raise models.ModelError(
+                        f"The model {model_note.split(' · ')[0]} did not answer in time 3 mails in a row "
+                        f"({r.error}). Choose a smaller or faster model in Settings.")
             rows.append({
                 "uid": mail.uid, "gm_msgid": mail.gm_msgid, "date": mail.date,
                 "sender": mail.sender, "subject": mail.subject,

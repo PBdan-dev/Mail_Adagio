@@ -13,6 +13,7 @@ model:
   model_name: claude-haiku-5-5   # for ollama: active (model already loaded), auto (from your graphics card) or a name
   api_key: ""               # not needed for ollama
   base_url: ""              # "" = provider default
+  timeout_s: 60             # ollama: seconds per mail; a mail that takes longer is left unsorted
 
 behavior:
   act_alone: false          # true = apply each batch without asking (you can always undo the last one)
@@ -89,8 +90,8 @@ fallback:
 # Local models (provider: ollama, model_name: ""): first row your machine meets wins.
 # Model names change fast: check https://ollama.com/library before relying on them.
 local_models:
-  - min_vram_gb: 20          # 24 GB cards (RTX 3090/4090): ~18 GB model, q4_K_M
-    use: qwen3.8:27b
+  - min_vram_gb: 20          # 24 GB cards: fast and reliable. More precise but slower: qwen3.6:27b
+    use: qwen3.5:9b
   - min_vram_gb: 8
     use: qwen3.5:4b
   - min_vram_gb: 0

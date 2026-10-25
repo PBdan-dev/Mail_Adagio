@@ -3,6 +3,7 @@ import json
 from dataclasses import dataclass
 
 from .config import names
+from .models import ModelTimeout
 
 SYSTEM = """You sort e-mails. For the e-mail you receive, choose exactly one theme and one status.
 
@@ -40,6 +41,7 @@ class Result:
     error: str = ""
     provider_error: bool = False  # the model could not be reached, as opposed to a bad answer
     to_delete: bool = False       # proposed for deletion (only you move it to the Trash)
+    timed_out: bool = False       # the model took too long on this mail: left unsorted, the batch goes on
 
 
 def asks_delete(cfg):
@@ -107,6 +109,9 @@ def classify(mail, ask, cfg, tries=2, examples=()):
             answer, error, provider_error = parse(text, cfg), "", False
             if not answer:
                 error = f"invalid answer: {str(text)[:120]!r}"
+        except ModelTimeout as e:  # no second try: it would only double the wait
+            fb = cfg["fallback"]
+            return Result(fb["theme"], fb["status"], False, attempt, str(e), timed_out=True)
         except Exception as e:  # network or provider error: same treatment as a bad answer
             answer, error, provider_error = None, str(e), True
         if answer:

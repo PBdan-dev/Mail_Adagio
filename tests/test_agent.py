@@ -170,7 +170,7 @@ class TestHardware(unittest.TestCase):
 
     def test_rtx_3090(self):
         model, why = hardware.pick_model(self.table, {"gpu": "RTX 3090", "vram_gb": 24.0, "ram_gb": 64})
-        self.assertEqual(model, "qwen3.8:27b")
+        self.assertEqual(model, "qwen3.5:9b")
         self.assertIn("RTX 3090", why)
 
     def test_no_gpu_uses_half_ram(self):
@@ -212,7 +212,7 @@ class TestModelChoice(unittest.TestCase):
         from agent import models
         self.models = models
         self.saved = models.ollama_models
-        models.ollama_models = lambda url=None: {"installed": ["qwen3.8:27b", "gemma4:e4b"],
+        models.ollama_models = lambda url=None: {"installed": ["qwen3.5:9b", "gemma4:e4b"],
                                                  "running": ["gemma4:e4b"]}
 
     def tearDown(self):
@@ -227,8 +227,8 @@ class TestModelChoice(unittest.TestCase):
         m, note = core.resolve_model(self.cfg("active"))
         self.assertEqual(m["model_name"], "gemma4:e4b")
         self.assertIn("active model", note)
-        m, _ = core.resolve_model(self.cfg("'qwen3.8:27b'"))  # stray quotes are ignored
-        self.assertEqual(m["model_name"], "qwen3.8:27b")
+        m, _ = core.resolve_model(self.cfg("'qwen3.5:9b'"))  # stray quotes are ignored
+        self.assertEqual(m["model_name"], "qwen3.5:9b")
         with self.assertRaises(self.models.ModelError):
             core.resolve_model(self.cfg("llama9"))
 
@@ -237,7 +237,7 @@ class TestModelChoice(unittest.TestCase):
         hardware.detect = lambda: {"gpu": "RTX 3090", "vram_gb": 24.0, "ram_gb": 64}
         try:
             m, note = core.resolve_model(self.cfg("auto"))
-            self.assertEqual(m["model_name"], "qwen3.8:27b")
+            self.assertEqual(m["model_name"], "qwen3.5:9b")
             self.assertIn("RTX 3090", note)
         finally:
             hardware.detect = saved
@@ -246,6 +246,21 @@ class TestModelChoice(unittest.TestCase):
         self.models.ollama_models = lambda url=None: {"installed": ["x"], "running": []}
         with self.assertRaises(self.models.ModelError):
             core.resolve_model(self.cfg("active"))
+
+    def test_slow_model_skips_the_mail_then_stops(self):
+        from agent import models
+        calls = []
+
+        def slow(system, user, schema):
+            calls.append(1)
+            raise models.ModelTimeout("No answer after 60 s")
+        r = classify.classify(mail.Mail(1, "1", "2026-10-24", "a@b.c", "s"), slow, cfg_with())
+        self.assertEqual((r.ok, r.timed_out, len(calls)), (False, True, 1))  # no second try
+        with fake_gmail("me@gmail.com", "good", "x") as g:
+            g.open("INBOX")
+            mails = g.fetch(g.recent_uids())
+        with self.assertRaises(models.ModelError):  # 3 in a row: too slow, say so
+            core.sort_mails(cfg_with(), mails, slow, "slow-model")
 
     def test_unreachable_model_stops_the_run(self):
         def down(*a):
