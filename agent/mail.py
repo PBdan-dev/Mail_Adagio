@@ -14,6 +14,8 @@ from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 
 FETCH_BYTES = 30000  # first 30 KB of each mail: enough for the text, skips big attachments
+READ_BYTES = 3_000_000  # the reader window: the whole mail up to 3 MB (big attachments are cut, their names stay)
+INLINE_BYTES = 1_500_000  # pictures inside a mail (cid:) shown up to this total
 
 
 class MailError(Exception):
@@ -110,6 +112,16 @@ class Gmail:
                     mails.append(parse_fetch(item[0], item[1], body_chars))
         mails.sort(key=lambda m: m.uid, reverse=True)
         return mails
+
+    def message(self, uid):
+        """One whole mail for the reader window. BODY.PEEK: Gmail does not mark it as read."""
+        status, data = self.imap.uid("FETCH", str(uid), f"(X-GM-MSGID X-GM-LABELS RFC822.SIZE BODY.PEEK[]<0.{READ_BYTES}>)")
+        if status != "OK":
+            raise MailError("Fetch failed")
+        for item in data:
+            if isinstance(item, tuple):
+                return parse_message(item[0], item[1])
+        return None
 
     def headers(self, uids):
         """From, Date and List-Unsubscribe of many mails, fast: the mail content is not downloaded."""
@@ -258,6 +270,63 @@ def parse_fetch(meta, raw, body_chars):
         body=extract_text(msg)[:body_chars],
         unsubscribe=unsubscribe_header(str(msg.get("List-Unsubscribe", ""))) or unsubscribe_link(msg),
     )
+
+
+def parse_message(meta, raw):
+    """Everything the reader window shows: who, when, the text and/or the HTML, attachment names."""
+    meta = meta.decode("utf-8", "replace")
+    msgid = re.search(r"X-GM-MSGID (\d+)", meta)
+    labels = re.search(r"X-GM-LABELS \((.*?)\)(?= UID| BODY| X-GM| RFC822|\s*$)", meta)
+    size = re.search(r"RFC822.SIZE (\d+)", meta)
+    msg = email.message_from_bytes(raw, policy=policy.default)
+    plain = html = None
+    attachments, inline, used = [], {}, 0
+    for part in msg.walk():
+        if part.is_multipart():
+            continue
+        kind, name = part.get_content_type(), part.get_filename()
+        disp = part.get_content_disposition()
+        cid = (part.get("Content-ID") or "").strip().strip("<>")
+        if kind == "text/plain" and plain is None and disp != "attachment" and not name:
+            plain = part_text(part)
+        elif kind == "text/html" and html is None and disp != "attachment" and not name:
+            html = part_text(part)
+        elif cid and kind.startswith("image/") and disp != "attachment":
+            data = part.get_payload(decode=True) or b""
+            if data and used + len(data) <= INLINE_BYTES:
+                inline[cid] = f"data:{kind};base64,{base64.b64encode(data).decode()}"
+                used += len(data)
+        elif name or disp == "attachment":
+            data = part.get_payload(decode=True) or b""
+            attachments.append({"name": clean(name or "(no name)"), "type": kind, "size": len(data)})
+    when = ""
+    try:
+        when = parsedate_to_datetime(msg.get("Date")).isoformat()
+    except Exception:
+        pass
+    total = int(size.group(1)) if size else len(raw)
+    return {
+        "gm_msgid": msgid.group(1) if msgid else "",
+        "subject": clean(str(msg.get("Subject", ""))),
+        "from": addresses(msg, "From"), "to": addresses(msg, "To"), "cc": addresses(msg, "Cc"),
+        "reply_to": addresses(msg, "Reply-To"),
+        "date": when, "labels": parse_labels(labels.group(1)) if labels else [],
+        "text": (plain or "").strip() or (strip_html(html) if html else "").strip(),
+        "html": html or "", "inline": inline, "attachments": attachments,
+        "size": total, "truncated": total > len(raw),
+    }
+
+
+def addresses(msg, header):
+    """[{name, email}] of an address header; a header Python cannot parse comes back as one name."""
+    try:
+        value = msg.get(header)
+        if value is None:
+            return []
+        return [{"name": clean(a.display_name), "email": a.addr_spec} for a in value.addresses]
+    except Exception:
+        raw = msg.get_all(header) or []
+        return [{"name": clean(str(v)), "email": ""} for v in raw]
 
 
 def unsubscribe_header(value):

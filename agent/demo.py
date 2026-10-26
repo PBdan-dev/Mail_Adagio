@@ -44,14 +44,44 @@ SAMPLES = [
 BULK = {"Newsletters", "Promotions", "Job Search", "Social & Notifications", "Shopping & Deliveries"}
 
 
+# more to read in the reader window, for a few made-up mails
+LONGER = {
+    "Sunday lunch?": ("Hi love,\n\nAre you coming on Sunday? Bring dessert.\n\nYour aunt and Paul will be there too, "
+                      "around 12:30. Tell me if you want me to pick you up at the station.\n\nLove,\nMum"),
+    "Your application: next steps": ("Hello,\n\nThank you for your application for the Data Analyst role. Could you "
+                                     "share your availability for an interview?\n\nWe have slots on Tuesday and "
+                                     "Thursday afternoon, 30 minutes by video.\n\nBest regards,\nAnna\nTalent team"),
+    "Your October invoice: 64.20 EUR": ("Hello,\n\nYour October invoice is ready: 64.20 EUR.\nPayment due on 5 "
+                                        "November, by direct debit.\n\nThe invoice is attached as a PDF.\n\nPower & Co"),
+}
+CC = {"Sunday lunch?": "Paul <paul@family.example>, Aunt Rose <rose@family.example>",
+      "Your application: next steps": "Hiring team <hiring@talent.example>"}
+NEWSLETTER_HTML = """<html><body style="font-family:Georgia,serif;margin:0;padding:24px;background:#fbfaf7;color:#222">
+<h1 style="font-size:22px;margin:0 0 6px">This week: small models, big wins</h1>
+<p style="color:#666;margin:0 0 18px">Five links worth your time.</p>
+<img src="https://ainotes.example/banner.png" alt="Banner" width="560" height="120" style="display:block;background:#ddd">
+<ol><li><a href="https://ainotes.example/1">Running a 9B model on one GPU</a></li>
+<li><a href="https://ainotes.example/2">Why JSON schemas make small models reliable</a></li>
+<li><a href="https://ainotes.example/3">Benchmarks you can trust</a></li></ol>
+<p style="font-size:12px;color:#888">You get this because you subscribed. <a href="https://ainotes.example/unsubscribe">Unsubscribe</a></p>
+</body></html>"""
+
+
 def _raw(sender, subject, text, when, theme=""):
     m = EmailMessage()
     m["From"], m["Subject"], m["To"] = sender, subject, "you@gmail.com"
+    if subject in CC:
+        m["Cc"] = CC[subject]
     m["Date"] = format_datetime(when)
     if theme in BULK and "talent" not in sender:  # mailing lists carry an unsubscribe link
         site = sender.split("@")[1].rstrip(">")
         m["List-Unsubscribe"] = f"<mailto:leave@{site}>, <https://{site}/unsubscribe?u=demo>"
-    m.set_content(text)
+    m.set_content(LONGER.get(subject, text))
+    if theme == "Newsletters":
+        m.add_alternative(NEWSLETTER_HTML, subtype="html")
+    if "invoice" in subject:
+        m.add_attachment(b"%PDF-1.4 made-up invoice " * 2000, maintype="application", subtype="pdf",
+                         filename="invoice-october.pdf")
     return m.as_bytes()
 
 

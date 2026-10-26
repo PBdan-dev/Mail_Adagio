@@ -793,7 +793,7 @@ class TestReliability(unittest.TestCase):
         self.assertTrue(self.run_(action="label_order")["ok"])  # the window can
         cap = self.run_(door="json", action="capabilities")
         self.assertTrue(cap["ok"])
-        self.assertEqual(cap["ui_only"], ["trash", "restore", "label_order"])
+        self.assertEqual(cap["ui_only"], ["trash", "restore", "label_order", "read"])
         self.assertNotIn("trash", cap["actions"])
         self.assertIn("plan", cap["actions"])
         self.assertEqual(cap["contract"]["name"], "mail-adagio")
@@ -996,6 +996,40 @@ class TestWeb(unittest.TestCase):
             self.assertEqual(j["total"], 1)
             self.assertIn("to check:", j["lines"][0])
             self.assertTrue(state["sort"]["learn_gmail"])
+        finally:
+            core.MEMORY_PATH, core.LOG_PATH = ":memory:", None
+
+
+    def test_read_a_mail(self):
+        """The reader window: the whole mail (Cc, HTML, attachment names), and nothing changes in Gmail."""
+        from agent import demo
+        demo.DELAY = 0
+        demo.FakeIMAP.reset(copies=1)
+        core.MEMORY_PATH, core.LOG_PATH = self.tmp / "web6.db", self.tmp / "web6.log"
+        try:
+            self.call("/api/plan", {"scope": {"kind": "count", "value": 14}})
+            mails = {m["subject"]: m["gm_msgid"] for m in self.wait()["sort"]["plan"]["mails"]}
+            seen = {m["gm"]: m["seen"] for m in demo.FakeIMAP.mails.values()}
+            demo.FakeIMAP.commands.clear()
+            lunch = json.loads(self.call("/api/read", {"gm_msgid": mails["Sunday lunch?"]})[1])
+            self.assertTrue(lunch["ok"], lunch)
+            self.assertEqual([a["email"] for a in lunch["cc"]], ["paul@family.example", "rose@family.example"])
+            self.assertEqual(lunch["from"][0]["name"], "Mum")
+            self.assertIn("pick you up at the station", lunch["text"])
+            self.assertTrue(lunch["gmail_url"].startswith("https://mail.google.com/"))
+            bill = json.loads(self.call("/api/read", {"gm_msgid": mails["Your October invoice: 64.20 EUR"]})[1])
+            self.assertEqual(bill["attachments"][0]["name"], "invoice-october.pdf")
+            news = json.loads(self.call("/api/read", {"gm_msgid": mails["This week: small models, big wins"]})[1])
+            self.assertIn("<h1", news["html"])
+            self.assertFalse(json.loads(self.call("/api/read", {"gm_msgid": "123"})[1])["ok"])
+            self.assertFalse(json.loads(self.call("/api/read", {"gm_msgid": "x; DROP"})[1])["ok"])
+            # read-only: no STORE, no COPY, every fetch is a PEEK, the mails stay unread
+            self.assertFalse([c for c in demo.FakeIMAP.commands if c[0] in ("STORE", "COPY", "EXPUNGE")])
+            self.assertTrue(all("PEEK" in c[2] for c in demo.FakeIMAP.commands if c[0] == "FETCH"))
+            self.assertEqual(seen, {m["gm"]: m["seen"] for m in demo.FakeIMAP.mails.values()})
+            # another program cannot read mails through the JSON door
+            r = core.handle({"action": "read", "gm_msgid": mails["Sunday lunch?"]}, door="json")
+            self.assertFalse(r["ok"])
         finally:
             core.MEMORY_PATH, core.LOG_PATH = ":memory:", None
 

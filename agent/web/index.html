@@ -6,31 +6,45 @@
 <title>Mail Adagio</title>
 <style>
 :root {
-  --bg: #f4f5f9; --surface: #ffffff; --surface-2: #f3f4f8; --border: #e6e8ef; --sidebar: #fbfbfd; --row: #f5f6fb;
-  --text: #12141b; --muted: #5d6474; --faint: #9ba1af;
-  --accent: #5b5ff6; --accent-2: #8b5cf6; --accent-soft: #eef0ff;
-  --red: #e5484d; --red-soft: #fdeded; --amber: #c98502; --amber-soft: #fdf4de;
-  --slate: #687083; --slate-soft: #eff1f5; --green: #1a9a5f; --green-soft: #e4f6ed;
-  --shadow: 0 1px 2px rgba(18,20,40,.04), 0 10px 30px -14px rgba(18,20,40,.14);
-  --radius: 16px;
+  color-scheme: light;
+  --bg: #f2f0eb; --surface: rgba(255,255,255,.58); --surface-2: rgba(255,255,255,.8); --row: rgba(255,255,255,.8);
+  --dense: rgba(250,249,246,.92); --border: rgba(17,20,27,.08); --border-2: rgba(17,20,27,.16); --sidebar: var(--surface);
+  --text: #11141b; --muted: #474f60; --faint: #757d8e;
+  --accent: #4b63e0; --accent-2: #8a4fe0; --on-accent: #ffffff;
+  --red: #d64545; --amber: #c27d00; --slate: #5c6b8a; --green: #12996b;
+  --shadow: 0 30px 70px -45px rgba(40,40,60,.45); --rim: rgba(255,255,255,.9); --rim-2: rgba(255,255,255,.3);
+  --au1: #3a3fd8; --au2: #0fb3a6; --au3: #b2399b; --au-opacity: .38; --soft: 12%;
+  /* soft tints follow the theme's colours */
+  --accent-soft: color-mix(in srgb, var(--accent) var(--soft), transparent);
+  --red-soft: color-mix(in srgb, var(--red) var(--soft), transparent);
+  --amber-soft: color-mix(in srgb, var(--amber) var(--soft), transparent);
+  --slate-soft: color-mix(in srgb, var(--slate) var(--soft), transparent);
+  --green-soft: color-mix(in srgb, var(--green) var(--soft), transparent);
+  --radius: 28px; --radius-sm: 16px;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", Inter, system-ui, -apple-system, sans-serif;
+  --ease: cubic-bezier(.22,1,.36,1);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0b0d12; --surface: #13161d; --surface-2: #1a1e27; --border: #242935; --sidebar: #0f1117; --row: #191d26;
-    --text: #eceef4; --muted: #9aa1b2; --faint: #646b7c;
-    --accent: #7d81ff; --accent-2: #a78bfa; --accent-soft: #1e2142;
-    --red: #ff6b6f; --red-soft: #351b1f; --amber: #f2b63c; --amber-soft: #352b14;
-    --slate: #a0a8b8; --slate-soft: #232833; --green: #3ccf8e; --green-soft: #14302a;
-    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px -14px rgba(0,0,0,.6);
+    color-scheme: dark;
+    --bg: #06080e; --surface: rgba(255,255,255,.045); --surface-2: rgba(255,255,255,.075); --row: rgba(255,255,255,.075);
+    --dense: rgba(17,21,32,.82); --border: rgba(255,255,255,.085); --border-2: rgba(255,255,255,.16); --sidebar: var(--surface);
+    --text: #eef1f7; --muted: #aab3c5; --faint: #727d92;
+    --accent: #8ea6ff; --accent-2: #b48cff; --on-accent: #0a0e1a;
+    --red: #ff7a7a; --amber: #f5b84a; --slate: #8ea0c4; --green: #4fd1a5;
+    --shadow: 0 30px 80px -40px rgba(0,0,0,.9); --rim: rgba(255,255,255,.22); --rim-2: rgba(255,255,255,.06);
+    --au1: #3a3fd8; --au2: #0fb3a6; --au3: #b2399b; --au-opacity: .55; --soft: 16%;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0b0d12; --surface: #13161d; --surface-2: #1a1e27; --border: #242935; --sidebar: #0f1117; --row: #191d26;
-  --text: #eceef4; --muted: #9aa1b2; --faint: #646b7c;
-  --accent: #7d81ff; --accent-2: #a78bfa; --accent-soft: #1e2142;
-  --red: #ff6b6f; --red-soft: #351b1f; --amber: #f2b63c; --amber-soft: #352b14;
-  --slate: #a0a8b8; --slate-soft: #232833; --green: #3ccf8e; --green-soft: #14302a;
-  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px -14px rgba(0,0,0,.6);
+  color-scheme: dark;
+  --bg: #06080e; --surface: rgba(255,255,255,.045); --surface-2: rgba(255,255,255,.075); --row: rgba(255,255,255,.075);
+  --dense: rgba(17,21,32,.82); --border: rgba(255,255,255,.085); --border-2: rgba(255,255,255,.16); --sidebar: var(--surface);
+  --text: #eef1f7; --muted: #aab3c5; --faint: #727d92;
+  --accent: #8ea6ff; --accent-2: #b48cff; --on-accent: #0a0e1a;
+  --red: #ff7a7a; --amber: #f5b84a; --slate: #8ea0c4; --green: #4fd1a5;
+  --shadow: 0 30px 80px -40px rgba(0,0,0,.9); --rim: rgba(255,255,255,.22); --rim-2: rgba(255,255,255,.06);
+  --au1: #3a3fd8; --au2: #0fb3a6; --au3: #b2399b; --au-opacity: .55; --soft: 16%;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -469,6 +483,7 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
 .state.skipped, .state.undone { background: var(--slate-soft); color: var(--slate); }
 
 .btn.danger { color: var(--red); }
+a.btn { color: var(--text); }
 
 /* pages and senders */
 .tabs { margin-left: 18px; }
@@ -507,9 +522,178 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
   .acts .btn.sm { padding: 5px 8px; }
 }
 .undo { width: 100%; justify-content: center; margin-top: 4px; }
+
+/* reader: one whole mail, read-only */
+#readDlg { width: min(980px, calc(100vw - 32px)); height: min(90vh, 980px); max-height: calc(100vh - 32px); }
+.reader { display: flex; flex-direction: column; height: 100%; gap: 0; padding: 18px 22px 18px; }
+.rtop { display: flex; align-items: center; gap: 12px; }
+.rtop .av { width: 40px; height: 40px; font-size: 16px; flex: none; }
+.rwho { min-width: 0; }
+.rwho b { display: block; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rwho small { display: block; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rtop .icon-btn { width: 36px; height: 36px; }
+#rSubj { font-size: 20px; letter-spacing: -.015em; line-height: 1.3; margin: 14px 0 10px; word-break: break-word; }
+.rmeta { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 4px 12px; margin: 0 0 10px; font-size: 13px; }
+.rmeta dt { color: var(--faint); }
+.rmeta dd { margin: 0; color: var(--muted); min-width: 0; word-break: break-word; }
+.rmeta dd b { color: var(--text); font-weight: 550; }
+.rmeta dd .chip { margin: 0 4px 2px 0; font-size: 12px; }
+.ratt { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.ratt span { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px;
+  background: var(--surface-2); border: 1px solid var(--border); max-width: 100%; }
+.ratt span b { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ratt span small { color: var(--faint); white-space: nowrap; }
+.rbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0 10px; border-top: 1px solid var(--border); }
+.rbar small { color: var(--faint); font-size: 12px; margin-left: auto; }
+.rbar .seg button { padding: 4px 11px; font-size: 12.5px; }
+.rbody { flex: 1; min-height: 160px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); background: var(--surface); position: relative; }
+.rbody iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+.rbody .rtext { height: 100%; overflow: auto; margin: 0; padding: 18px 20px; white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.6; }
+.rbody .alert { margin: 16px; }
+.rbody .rwarn { margin: 0; padding: 8px 14px; font-size: 12.5px; color: var(--amber); background: var(--amber-soft); }
+.skel { padding: 20px; display: grid; gap: 12px; }
+.skel i { display: block; height: 12px; border-radius: 99px; background: linear-gradient(90deg, var(--surface-2), var(--border-2), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+.skel i:nth-child(2) { width: 86%; } .skel i:nth-child(3) { width: 92%; } .skel i:nth-child(4) { width: 60%; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.reader .foot { margin-top: 14px; }
+.mail { cursor: pointer; }
+.mail:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mail input, .mail button, .mail a { cursor: pointer; }
+@media (max-width: 640px) { .reader { padding: 14px; } .rbar small { margin-left: 0; } .rmeta { grid-template-columns: 58px minmax(0, 1fr); } }
+
+/* ===== Aurore: the design of Workspace (glass on a living light background) ===== */
+body { background: var(--bg); }
+h1, h2, h3, .brand b { font-family: var(--font-display); font-weight: 600; }
+.aurora { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.aurora i { position: absolute; border-radius: 50%; filter: blur(90px); opacity: var(--au-opacity); will-change: transform; }
+.aurora .a1 { width: 60vmax; height: 60vmax; left: -18vmax; top: -24vmax; background: radial-gradient(circle at 40% 40%, var(--au1), transparent 65%); animation: drift1 46s ease-in-out infinite alternate; }
+.aurora .a2 { width: 55vmax; height: 55vmax; right: -20vmax; top: 8vmax; background: radial-gradient(circle at 50% 50%, var(--au2), transparent 62%); animation: drift2 58s ease-in-out infinite alternate; }
+.aurora .a3 { width: 50vmax; height: 50vmax; left: 20vmax; bottom: -30vmax; background: radial-gradient(circle at 50% 50%, var(--au3), transparent 60%); animation: drift3 64s ease-in-out infinite alternate; }
+.aurora .grain { inset: -50%; width: auto; height: auto; border-radius: 0; filter: none; opacity: .06; animation: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+@keyframes drift1 { to { transform: translate(14vmax, 10vmax) scale(1.15) rotate(20deg); } }
+@keyframes drift2 { to { transform: translate(-12vmax, 14vmax) scale(.9) rotate(-25deg); } }
+@keyframes drift3 { to { transform: translate(-10vmax, -16vmax) scale(1.2); } }
+
+/* glass: translucent, blurred, 1 px border, light rim on top */
+.frame { position: relative; z-index: 1; padding: 14px; gap: 14px; }
+.sidebar, .topbar, .card, .center, #sideCol .card {
+  position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  backdrop-filter: blur(26px) saturate(150%); -webkit-backdrop-filter: blur(26px) saturate(150%); box-shadow: var(--shadow); }
+.sidebar::before, .topbar::before, .card::before, .center::before, dialog::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; padding: 1px; z-index: 0;
+  background: linear-gradient(160deg, var(--rim), transparent 30%, transparent 70%, var(--rim-2));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.sidebar { width: 264px; gap: 14px; padding: 16px 14px 12px; border-right: 1px solid var(--border); }
+.mainwrap { gap: 14px; }
+.topbar { padding: 14px 16px 14px 24px; border-radius: var(--radius); }
+.topbar h1 { font-size: 22px; letter-spacing: -.02em; }
+.banners { padding: 0; }
+main.shell { padding: 0; gap: 14px; }
+.card { padding: 22px 24px; }
+.pane.stack { gap: 14px; padding: 0 0 4px; }
+.pane.stack .card { padding: 18px 20px; border-radius: 24px; }
+/* the mail list stays more opaque, for reading */
+.center { background: var(--dense); border-color: var(--border); }
+.sortbar { padding: 14px 16px; border-bottom-color: var(--border); }
+.listhead { padding: 16px 22px 8px; }
+.mails { padding: 0 10px 12px; }
+.ghead { background: color-mix(in srgb, var(--dense) 94%, transparent); border-radius: 12px; }
+.mail { border-radius: 14px; }
+.mail:hover { background: var(--row); }
+.applybar { background: color-mix(in srgb, var(--accent) 7%, transparent); border-top-color: var(--border); }
+
+/* left menu */
+.logo { border-radius: 12px; color: var(--on-accent); background: linear-gradient(110deg, var(--accent), var(--accent-2));
+  box-shadow: 0 10px 24px -12px var(--accent); }
+.nav button { border-radius: 999px; padding: 9px 12px; }
+.nav button:hover { background: var(--surface-2); }
+.nav button.on { background: linear-gradient(110deg, color-mix(in srgb, var(--accent) 22%, transparent), color-mix(in srgb, var(--accent-2) 12%, transparent));
+  color: var(--text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+.frow { border-radius: 12px; padding: 6px 10px; }
+.frow:hover { background: var(--surface-2); }
+.frow.on { background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent); }
+.side-foot { border-top-color: var(--border); }
+
+/* buttons: pills; primary in the accent gradient, secondary transparent with a border */
+.btn { border-radius: 999px; border: 1px solid var(--border-2); background: transparent; box-shadow: none; padding: 8px 16px;
+  transition: transform .4s var(--ease), background .3s, filter .3s, border-color .3s; }
+.btn:hover:not(:disabled) { background: var(--surface-2); transform: translateY(-1px); }
+.btn.primary, .btn.primary:hover:not(:disabled) { background: linear-gradient(110deg, var(--accent), var(--accent-2)); color: var(--on-accent);
+  border-color: transparent; font-weight: 600; box-shadow: 0 12px 26px -14px var(--accent); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+.btn.primary.danger-fill { background: var(--red); color: #fff; }
+.btn.ghost { border-color: transparent; }
+.btn:disabled { transform: none; }
+.icon-btn { width: 40px; height: 40px; padding: 0; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); }
+.icon-btn:hover:not(:disabled) { border-color: var(--border-2); }
+.btn.sm { border-radius: 999px; padding: 5px 12px; }
+.linkbtn { border-radius: 999px; padding: 2px 8px; }
+.seg { border-radius: 999px; background: var(--surface-2); border-color: var(--border); }
+.seg button { border-radius: 999px; }
+.seg button.on { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border-2), 0 4px 12px -6px rgba(0,0,0,.35); }
+.search, .input, .num { border-radius: 999px; border-color: var(--border); background: var(--surface); }
+.input { border-radius: var(--radius-sm); }
+.search:focus, .input:focus, .num:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); background: var(--surface-2); }
+.model-chip, .sortbar .model-chip { border-radius: 999px; background: var(--surface); border: 1px solid var(--border); }
+.model-chip select { border-radius: 999px; background: var(--surface-2); border-color: var(--border); }
+.banner, .hint, .alert { border-radius: var(--radius-sm); }
+.banner { border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); backdrop-filter: blur(18px); }
+.banner.warn { border-color: color-mix(in srgb, var(--amber) 30%, transparent); }
+.hint { border: 1px solid color-mix(in srgb, var(--green) 28%, transparent); }
+.alert { border: 1px solid color-mix(in srgb, var(--red) 28%, transparent); }
+.bar { background: var(--surface-2); border-color: var(--border); }
+.knob { background: var(--border-2); }
+.switch { border-radius: var(--radius-sm); background: var(--surface); }
+.popover { background: var(--dense); border: 1px solid var(--border-2); border-radius: 22px;
+  backdrop-filter: blur(26px) saturate(150%); -webkit-backdrop-filter: blur(26px) saturate(150%); box-shadow: var(--shadow), 0 2px 8px rgba(0,0,0,.12);
+  animation: pop .45s var(--ease); }
+.pill { background: var(--surface-2); border: 1px solid var(--border); }
+.pill.ok { border-color: color-mix(in srgb, var(--green) 30%, transparent); }
+.pill.warn { border-color: color-mix(in srgb, var(--amber) 30%, transparent); }
+.stat .v, .delcount > b { font-family: var(--font-display); font-weight: 200; font-size: 34px; letter-spacing: -.04em; }
+.log, .reason, .fixmail, .opreview, .action, .step { border-radius: var(--radius-sm); }
+.run { background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, var(--accent-2) 7%, transparent) 55%, var(--surface)); }
+.toast { border-radius: 999px; }
+
+/* dialogs: denser glass, open with a slight zoom */
+dialog { position: fixed; background: var(--dense); border: 1px solid var(--border-2); border-radius: 24px; color: var(--text);
+  backdrop-filter: blur(26px) saturate(150%); -webkit-backdrop-filter: blur(26px) saturate(150%); box-shadow: var(--shadow), 0 20px 60px -20px rgba(0,0,0,.4); }
+dialog[open] { animation: pop .45s var(--ease); }
+dialog::backdrop { background: color-mix(in srgb, var(--bg) 45%, transparent); backdrop-filter: blur(6px); }
+dialog > * { position: relative; z-index: 1; }
+@keyframes pop { from { transform: translateY(14px) scale(.97); opacity: 0; } }
+
+/* side drawer (narrow screens): glass too */
+@media (max-width: 1440px) {
+  #sideCol, .shell.nopanel #sideCol { background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(26px) saturate(150%);
+    border-left: 1px solid var(--border); top: 14px; bottom: 14px; right: 14px; border-radius: var(--radius); border: 1px solid var(--border); }
+}
+@media (max-width: 780px) {
+  .center { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .frame { padding: 10px; } .sidebar { width: auto; border-right: 1px solid var(--border); margin-bottom: 10px; }
+  .topbar { padding: 12px 14px; margin-bottom: 10px; } .banners { padding: 0 0 10px; } main.shell { padding: 0; }
+}
+
+/* scrollbars, thin and quiet */
+* { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; }
+
+/* opening: panels rise with a blur fade, one after the other */
+.ready .sidebar, .ready .topbar, .ready .center, .ready #sideCol > .card, .ready #welcome, .ready #sendersCol > * {
+  animation: rise 1s var(--ease) both; animation-delay: calc(var(--i, 0) * 90ms); }
+.sidebar { --i: 0; } .topbar { --i: 1; } .center, #welcome { --i: 2; }
+#sideCol > .card:nth-child(1), #sendersCol > :nth-child(1) { --i: 3; } #sideCol > .card:nth-child(2), #sendersCol > :nth-child(2) { --i: 4; }
+#sideCol > .card:nth-child(3), #sendersCol > :nth-child(3) { --i: 5; } #sideCol > .card:nth-child(4) { --i: 6; } #sideCol > .card:nth-child(5) { --i: 7; }
+@keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.995); filter: blur(6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
+  .aurora i { animation: none; }
+}
 </style>
 </head>
 <body>
+<div class="aurora" aria-hidden="true"><i class="a1"></i><i class="a2"></i><i class="a3"></i><i class="grain"></i></div>
 <div class="frame">
 <aside class="sidebar" id="sidebar">
   <div class="brand-row"><div class="logo" aria-hidden="true">
@@ -816,6 +1000,30 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
   </div>
 </form></dialog>
 
+<dialog id="readDlg" aria-labelledby="rSubj"><div class="dlg reader">
+  <div class="rtop">
+    <span class="av" id="rAv" aria-hidden="true"></span>
+    <div class="rwho"><b id="rFrom"></b><small id="rAddr"></small></div>
+    <div class="spacer"></div>
+    <button type="button" class="btn ghost icon-btn" id="rPrev" title="Previous mail (↑)" aria-label="Previous mail"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg></button>
+    <button type="button" class="btn ghost icon-btn" id="rNext" title="Next mail (↓)" aria-label="Next mail"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    <button type="button" class="btn ghost icon-btn" id="rClose" title="Close (Esc)" aria-label="Close"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </div>
+  <h2 id="rSubj"></h2>
+  <dl class="rmeta" id="rMeta"></dl>
+  <div class="ratt hidden" id="rAtt"></div>
+  <div class="rbar">
+    <div class="seg hidden" id="rMode"><button type="button" data-k="html" class="on">Formatted</button><button type="button" data-k="text">Text</button></div>
+    <button type="button" class="btn sm hidden" id="rImages" title="Pictures from the web can tell the sender that you opened the mail">Show pictures</button>
+    <small id="rNote">Read only. Opening a mail here does not mark it as read in Gmail.</small>
+  </div>
+  <div class="rbody" id="rBody"></div>
+  <div class="foot">
+    <a class="btn hidden" id="rGmail" href="#" target="_blank" rel="noopener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Open in Gmail</a>
+    <button type="button" class="btn primary" id="rDone">Close</button>
+  </div>
+</div></dialog>
+
 <dialog id="journalDlg"><form class="dlg" method="dialog">
   <h2>Journal</h2>
   <p class="sub">Everything Mail Adagio did, newest first: each mail it sorted, how (your rule or the model, and how sure it was), the labels it added and what it learned from you.</p>
@@ -878,7 +1086,7 @@ const color = name => S?.colors?.[name]?.hex || PALETTE[Math.max(0, (S?.themes |
 (function () {
   try { const t = localStorage.getItem("adagio-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
   $("#themeBtn").onclick = () => {
-    const dark = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() === "#0b0d12";
+    const t = document.documentElement.dataset.theme, dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
     const next = dark ? "light" : "dark";
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem("adagio-theme", next); } catch (e) {}
@@ -1360,6 +1568,11 @@ function renderResult() {
   box.querySelectorAll(".mail input").forEach(cb => cb.onchange = () => { cb.checked ? skip.delete(cb.dataset.id) : skip.add(cb.dataset.id); renderResult(); });
   box.querySelectorAll("button.fix").forEach(b => b.onclick = () => openFix(r.mails.find(m => m.gm_msgid === b.dataset.id)));
   box.querySelectorAll("button.why").forEach(b => b.onclick = () => openWhy(r.mails.find(m => m.gm_msgid === b.dataset.id), !!plan));
+  box.querySelectorAll(".mail").forEach(row => {
+    const open = () => openRead(r.mails.find(m => m.gm_msgid === row.dataset.id), [...box.querySelectorAll(".mail")].map(x => x.dataset.id), r.mails);
+    row.onclick = e => { if (!e.target.closest("input, button, a, .mini")) open(); };
+    row.onkeydown = e => { if (e.key === "Enter" && e.target === row) open(); };
+  });
   box.querySelectorAll("button.keep").forEach(b => b.onclick = async e => {
     e.preventDefault(); e.stopPropagation();
     const k = await api("/api/keep", { gm_msgid: b.dataset.keep });
@@ -1528,7 +1741,7 @@ function mailRow(m, t, selectable) {
     + (!selectable ? `<span class="state ${esc(m.state)}">${{ applied: m.archived ? "filed" : "labelled", skipped: "left as is", undone: "undone" }[m.state] || ""}</span>` : "");
   const url = /^https:\/\/mail\.google\.com\//.test(m.gmail_url) ? m.gmail_url : "";
   const off = selectable && skip.has(m.gm_msgid);
-  return `<div class="mail${selectable ? " sel" : ""}${off ? " off" : ""}">
+  return `<div class="mail${selectable ? " sel" : ""}${off ? " off" : ""}" data-id="${esc(m.gm_msgid)}" tabindex="0" title="Open this mail">
     ${selectable ? `<input type="checkbox" data-id="${esc(m.gm_msgid)}" ${off ? "" : "checked"} aria-label="Include this mail">` : ""}
     <span class="av" style="background:${color(t)}">${esc(letter)}</span>
     <div class="from" title="${esc(m.sender)}">${esc(name)}</div>
@@ -1574,6 +1787,113 @@ $("#whyAsk").onclick = async () => {
 };
 $("#whyClose").onclick = () => $("#whyDlg").close();
 $("#whyFix").onclick = () => { $("#whyDlg").close(); openFix(whyMail); };
+
+/* reader: opens one whole mail in a window, read-only (nothing changes in Gmail) */
+const reader = { list: [], mails: [], id: "", cache: new Map(), mode: "html", images: false };
+const fmtSize = n => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+const who = a => a.name && a.email ? `<b>${esc(a.name)}</b> &lt;${esc(a.email)}&gt;` : `<b>${esc(a.name || a.email)}</b>`;
+function openRead(m, list, mails) {
+  if (!m) return;
+  reader.list = list || [m.gm_msgid]; reader.mails = mails || [m]; reader.id = m.gm_msgid;
+  reader.mode = "html"; reader.images = false;
+  drawRead(m, reader.cache.get(m.gm_msgid));
+  if (!$("#readDlg").open) $("#readDlg").showModal();
+  if (!reader.cache.has(m.gm_msgid)) fetchRead(m);
+}
+async function fetchRead(m) {
+  const r = await api("/api/read", { gm_msgid: m.gm_msgid });
+  if (r.ok) reader.cache.set(m.gm_msgid, r);
+  if (reader.id === m.gm_msgid && $("#readDlg").open) drawRead(m, r);
+}
+function drawRead(m, d) {
+  const name = (m.sender.split("<")[0].replace(/"/g, "").trim()) || m.sender;
+  const addr = (m.sender.match(/<([^>]+)>/) || [])[1] || "";
+  $("#rAv").textContent = (name.replace(/[^\p{L}\p{N}]/gu, "")[0] || "?").toUpperCase();
+  $("#rAv").style.background = color(m.theme);
+  $("#rFrom").textContent = d?.ok && d.from[0] ? (d.from[0].name || d.from[0].email) : name;
+  $("#rAddr").textContent = d?.ok && d.from[0] ? d.from[0].email : addr;
+  $("#rSubj").textContent = (d?.ok ? d.subject : m.subject) || "(no subject)";
+  const i = reader.list.indexOf(m.gm_msgid);
+  $("#rPrev").disabled = i <= 0; $("#rNext").disabled = i < 0 || i >= reader.list.length - 1;
+  const url = d?.ok && /^https:\/\/mail\.google\.com\//.test(d.gmail_url) ? d.gmail_url : /^https:\/\/mail\.google\.com\//.test(m.gmail_url || "") ? m.gmail_url : "";
+  $("#rGmail").classList.toggle("hidden", !url); $("#rGmail").href = url || "#";
+  const rows = [];
+  if (d?.ok) {
+    if (d.to.length) rows.push(["To", d.to.map(who).join(", ")]);
+    if (d.cc.length) rows.push(["Cc", d.cc.map(who).join(", ")]);
+    if (d.reply_to.length && d.reply_to.some(a => a.email !== d.from[0]?.email)) rows.push(["Reply to", d.reply_to.map(who).join(", ")]);
+    if (d.date) rows.push(["Date", esc(new Date(d.date).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }))]);
+  } else if (m.date) rows.push(["Date", esc(m.date)]);
+  rows.push(["Sorted as", `<span class="chip"><span class="dot" style="background:${color(m.theme)}"></span>${esc(m.theme)}</span><span class="st st-${Math.min(Math.max(S.statuses.indexOf(m.status), 0), 2)}"><i></i>${esc(m.status)}</span>`]);
+  const labels = d?.ok ? d.labels.filter(l => !l.startsWith("\\")) : [];
+  if (labels.length) rows.push(["In Gmail", labels.map(l => `<span class="chip">${esc(l)}</span>`).join("")]);
+  $("#rMeta").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  const att = d?.ok ? d.attachments : [];
+  $("#rAtt").classList.toggle("hidden", !att.length);
+  $("#rAtt").innerHTML = att.map(a => `<span title="${esc(a.type)}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg><b>${esc(a.name)}</b><small>${fmtSize(a.size)}</small></span>`).join("");
+  const body = $("#rBody");
+  if (!d) {
+    $("#rMode").classList.add("hidden"); $("#rImages").classList.add("hidden");
+    body.innerHTML = `<div class="skel" aria-label="Loading the mail"><i></i><i></i><i></i><i></i></div>`;
+    return;
+  }
+  if (!d.ok) {
+    $("#rMode").classList.add("hidden"); $("#rImages").classList.add("hidden");
+    body.innerHTML = `<div class="alert"><div><b>This mail could not be opened</b><span>${esc(d.error || "")}</span></div></div>`;
+    return;
+  }
+  const hasHtml = !!d.html, remote = hasHtml && /(src|background)\s*=\s*["']?\s*https?:|url\(\s*["']?\s*https?:/i.test(d.html);
+  $("#rMode").classList.toggle("hidden", !hasHtml || !d.text);
+  $("#rMode").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.k === reader.mode));
+  const html = hasHtml && reader.mode === "html";
+  $("#rImages").classList.toggle("hidden", !html || !remote || reader.images);
+  const warn = d.truncated ? `<p class="rwarn">This mail is large (${fmtSize(d.size)}): only its first 3 MB are shown. Open it in Gmail to see the rest.</p>` : "";
+  if (html) {
+    body.innerHTML = warn;
+    const f = document.createElement("iframe");
+    f.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
+    f.setAttribute("referrerpolicy", "no-referrer");
+    f.title = "Mail content";
+    f.srcdoc = mailDoc(d.html, d.inline || {}, reader.images);
+    if (warn) f.style.height = "calc(100% - 34px)";
+    body.appendChild(f);
+  } else {
+    body.innerHTML = warn + `<div class="rtext"></div>`;
+    linkify(body.querySelector(".rtext"), d.text || "(This mail has no text.)");
+  }
+}
+function mailDoc(html, inline, images) {
+  html = html.replace(/cid:([^"'\s)>]+)/gi, (all, id) => inline[id] || inline[decodeURIComponent(id)] || all);
+  const web = images ? " https: http:" : "";
+  const csp = `default-src 'none'; style-src 'unsafe-inline'${web}; img-src data:${web}; font-src data:${web}`;
+  return `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank">`
+    + `<style>html,body{margin:0}body{padding:16px 18px;font:14px/1.5 "Segoe UI",system-ui,sans-serif;color:#1d1f24;background:#fff;overflow-wrap:anywhere}img{max-width:100%;height:auto}</style>` + html;
+}
+function linkify(el, text) {
+  const re = /https?:\/\/[^\s<>"]+/g; let last = 0, m;
+  while ((m = re.exec(text))) {
+    el.append(text.slice(last, m.index));
+    const a = document.createElement("a"); a.href = m[0]; a.textContent = m[0]; a.target = "_blank"; a.rel = "noopener noreferrer";
+    el.append(a); last = m.index + m[0].length;
+  }
+  el.append(text.slice(last));
+}
+function stepRead(delta) {
+  const id = reader.list[reader.list.indexOf(reader.id) + delta];
+  const m = id && reader.mails.find(x => x.gm_msgid === id);
+  if (m) openRead(m, reader.list, reader.mails);
+}
+$("#rPrev").onclick = () => stepRead(-1);
+$("#rNext").onclick = () => stepRead(1);
+$("#rClose").onclick = $("#rDone").onclick = () => $("#readDlg").close();
+$("#rImages").onclick = () => { reader.images = true; const m = reader.mails.find(x => x.gm_msgid === reader.id); drawRead(m, reader.cache.get(reader.id)); };
+$("#rMode").querySelectorAll("button").forEach(b => b.onclick = () => { reader.mode = b.dataset.k; const m = reader.mails.find(x => x.gm_msgid === reader.id); drawRead(m, reader.cache.get(reader.id)); });
+$("#readDlg").addEventListener("keydown", e => {
+  if (e.target.closest && e.target.closest("input, select, textarea")) return;
+  if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); stepRead(-1); }
+  if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); stepRead(1); }
+});
+$("#readDlg").addEventListener("click", e => { if (e.target === $("#readDlg")) $("#readDlg").close(); });
 
 /* journal: every run and every mail, in a window of its own (not in the main view) */
 let jKind = "all", jN = 300, jTimer = null;
@@ -1730,6 +2050,7 @@ $("#panelBtn").onclick = () => { if (narrow()) drawerOn = !drawerOn; else { pane
 matchMedia("(max-width: 1440px)").addEventListener("change", () => { drawerOn = false; drawPanel(); });
 drawPanel();
 
+document.body.classList.add("ready");
 page = store.get("adagio-page") || "sort";
 refresh().then(() => { loadModel(); loadRules(); loadSenders(); loadDelete(); });
 </script>

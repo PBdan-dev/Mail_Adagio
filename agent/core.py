@@ -17,8 +17,8 @@ ACTIONS = ("capabilities", "check", "hardware", "preview", "correct", "rules", "
            "estimate", "plan", "apply", "discard", "undo", "status",
            "scan", "senders", "sender_state", "suggest", "add_rule", "label_order",
            "keep", "to_delete", "trash", "restore", "learn_gmail", "why", "journal",
-           "proposals", "ignore_proposal")
-UI_ONLY = ("trash", "restore", "label_order")  # a person must click them in the window: refused from the JSON door
+           "proposals", "ignore_proposal", "read")
+UI_ONLY = ("trash", "restore", "label_order", "read")  # a person must click them in the window: refused from the JSON door
 MAIL_LINE = "mail · "  # journal lines about one mail: kept out of the activity list, shown in the Journal
 LOG_PATH = config.ROOT / "adagio.log"  # readable journal of every run; None turns it off
 MEMORY_PATH = config.ROOT / "adagio.db"  # rules and examples learned from your corrections
@@ -69,7 +69,7 @@ def summary_line(r):
                 f"0 changes in Gmail ({r['model']})")
     if r["action"] in ("correct", "rules", "delete_rule", "estimate", "status", "discard", "senders",
                        "sender_state", "add_rule", "keep", "to_delete", "journal", "proposals", "capabilities",
-                       "ignore_proposal"):
+                       "ignore_proposal", "read"):
         return ""
     if r["action"] in ("plan", "apply", "undo", "scan", "suggest", "label_order", "trash", "restore",
                        "learn_gmail", "why"):
@@ -1044,6 +1044,29 @@ def why(cfg, request, gmail_factory, ask=None, progress=None):
         store.close()
 
 
-STEP3.update(keep=keep, to_delete=to_delete, trash=trash, restore=restore, label_order=label_order, scan=scan,
+def read(cfg, request, gmail_factory, ask=None, progress=None):
+    """The reader window: one whole mail, read-only. Nothing changes in Gmail, the mail stays unread."""
+    gm = str(request.get("gm_msgid") or "")
+    if not gm.isdigit():
+        raise ValueError("Unknown mail")
+    store = batches.Store(MEMORY_PATH)
+    try:
+        row = store.mail(gm)
+    finally:
+        store.close()
+    with connect(cfg, gmail_factory) as gmail:
+        gmail.open(gmail.all_mail(), readonly=True)
+        uid = row["all_uid"] if row and (row["all_uid"] or 0) > 0 else None
+        msg = gmail.message(uid) if uid else None
+        if not msg or msg["gm_msgid"] != gm:  # id unknown or changed: search it
+            uid = gmail.find([gm]).get(gm)
+            msg = gmail.message(uid) if uid else None
+    if not msg or msg["gm_msgid"] != gm:
+        raise ValueError("This mail is no longer in Gmail")
+    msg["gmail_url"] = gmail_url(gm)
+    return msg
+
+
+STEP3.update(read=read, keep=keep, to_delete=to_delete, trash=trash, restore=restore, label_order=label_order, scan=scan,
              senders=list_senders, sender_state=sender_state, suggest=suggest, learn_gmail=learn_gmail, why=why,
              journal=journal)

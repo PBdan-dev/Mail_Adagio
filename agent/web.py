@@ -378,7 +378,7 @@ def make_handler(app, port):
             simple = {"/api/correct": "correct", "/api/rules/delete": "delete_rule",
                       "/api/estimate": "estimate", "/api/discard": "discard",
                       "/api/sender": "sender_state", "/api/rule": "add_rule", "/api/keep": "keep",
-                      "/api/trash": "trash", "/api/restore": "restore", "/api/why": "why",
+                      "/api/trash": "trash", "/api/restore": "restore", "/api/why": "why", "/api/read": "read",
                       "/api/proposal/ignore": "ignore_proposal"}
             if self.path in simple:
                 return self.send(200, app.call({**body, "action": simple[self.path]}))
