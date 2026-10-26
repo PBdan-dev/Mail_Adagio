@@ -59,12 +59,26 @@ CC = {"Sunday lunch?": "Paul <paul@family.example>, Aunt Rose <rose@family.examp
 NEWSLETTER_HTML = """<html><body style="font-family:Georgia,serif;margin:0;padding:24px;background:#fbfaf7;color:#222">
 <h1 style="font-size:22px;margin:0 0 6px">This week: small models, big wins</h1>
 <p style="color:#666;margin:0 0 18px">Five links worth your time.</p>
-<img src="https://ainotes.example/banner.png" alt="Banner" width="560" height="120" style="display:block;background:#ddd">
+<img src="cid:banner@ainotes" alt="Banner" width="560" height="120" style="display:block;border-radius:8px">
+<p><img src="https://ainotes.example/logo.png" alt="AI Notes logo (a picture from the web)" width="120" height="32"></p>
 <ol><li><a href="https://ainotes.example/1">Running a 9B model on one GPU</a></li>
 <li><a href="https://ainotes.example/2">Why JSON schemas make small models reliable</a></li>
 <li><a href="https://ainotes.example/3">Benchmarks you can trust</a></li></ol>
+<p><a href="https://ainotes.example/read" style="display:inline-block;background:#3b5bdb;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Read the issue</a></p>
 <p style="font-size:12px;color:#888">You get this because you subscribed. <a href="https://ainotes.example/unsubscribe">Unsubscribe</a></p>
 </body></html>"""
+
+
+def _banner(w=560, h=120):
+    """A small made-up picture (a PNG gradient) for the demo newsletter, built without any library."""
+    import struct
+    import zlib
+    rows = b"".join(b"\x00" + bytes(v for x in range(w) for v in (40 + x * 150 // w, 90 + y, 200 - x * 80 // w))
+                    for y in range(h))
+    chunk = lambda kind, data: (struct.pack(">I", len(data)) + kind + data
+                                + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
 def _raw(sender, subject, text, when, theme=""):
@@ -79,6 +93,7 @@ def _raw(sender, subject, text, when, theme=""):
     m.set_content(LONGER.get(subject, text))
     if theme == "Newsletters":
         m.add_alternative(NEWSLETTER_HTML, subtype="html")
+        m.get_payload()[1].add_related(_banner(), "image", "png", cid="<banner@ainotes>")
     if "invoice" in subject:
         m.add_attachment(b"%PDF-1.4 made-up invoice " * 2000, maintype="application", subtype="pdf",
                          filename="invoice-october.pdf")

@@ -548,6 +548,14 @@ a.btn { color: var(--text); }
 .rbar .seg button { padding: 4px 11px; font-size: 12.5px; }
 .rbody { flex: 1; min-height: 160px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); background: var(--surface); position: relative; }
 .rbody iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+.rbody.dark iframe { background: #11151f; }
+.rsw { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); cursor: pointer; user-select: none; }
+.rsw input { position: absolute; opacity: 0; pointer-events: none; }
+.rsw .knob { width: 30px; height: 18px; margin: 0; }
+.rsw .knob::after { top: 2px; left: 2px; width: 14px; height: 14px; }
+.rsw input:checked + .knob { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.rsw input:checked + .knob::after { left: 14px; }
+.rsw input:focus-visible + .knob { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rbody .rtext { height: 100%; overflow: auto; margin: 0; padding: 18px 20px; white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.6; }
 .rbody .alert { margin: 16px; }
 .rbody .rwarn { margin: 0; padding: 8px 14px; font-size: 12.5px; color: var(--amber); background: var(--amber-soft); }
@@ -1014,7 +1022,8 @@ dialog > * { position: relative; z-index: 1; }
   <div class="ratt hidden" id="rAtt"></div>
   <div class="rbar">
     <div class="seg hidden" id="rMode"><button type="button" data-k="html" class="on">Formatted</button><button type="button" data-k="text">Text</button></div>
-    <button type="button" class="btn sm hidden" id="rImages" title="Pictures from the web can tell the sender that you opened the mail">Show pictures</button>
+    <label class="rsw hidden" id="rImagesSw" title="Pictures from the web can tell the sender that you opened the mail. Your choice is remembered."><input type="checkbox" id="rImages"><span class="knob"></span>Load pictures</label>
+    <label class="rsw hidden" id="rDarkSw" title="Shows the mail in the colours of Mail Adagio. Untick to see its original colours. Your choice is remembered."><input type="checkbox" id="rDark"><span class="knob"></span>Dark mail</label>
     <small id="rNote">Read only. Opening a mail here does not mark it as read in Gmail.</small>
   </div>
   <div class="rbody" id="rBody"></div>
@@ -1789,13 +1798,15 @@ $("#whyClose").onclick = () => $("#whyDlg").close();
 $("#whyFix").onclick = () => { $("#whyDlg").close(); openFix(whyMail); };
 
 /* reader: opens one whole mail in a window, read-only (nothing changes in Gmail) */
-const reader = { list: [], mails: [], id: "", cache: new Map(), mode: "html", images: false };
+const reader = { list: [], mails: [], id: "", cache: new Map(), mode: "html" };
+const pref = (k, d) => { const v = store.get(k); return v === null || v === undefined ? d : v; };
+const darkTheme = () => { const t = document.documentElement.dataset.theme; return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; };
 const fmtSize = n => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
 const who = a => a.name && a.email ? `<b>${esc(a.name)}</b> &lt;${esc(a.email)}&gt;` : `<b>${esc(a.name || a.email)}</b>`;
 function openRead(m, list, mails) {
   if (!m) return;
   reader.list = list || [m.gm_msgid]; reader.mails = mails || [m]; reader.id = m.gm_msgid;
-  reader.mode = "html"; reader.images = false;
+  reader.mode = "html";
   drawRead(m, reader.cache.get(m.gm_msgid));
   if (!$("#readDlg").open) $("#readDlg").showModal();
   if (!reader.cache.has(m.gm_msgid)) fetchRead(m);
@@ -1833,12 +1844,12 @@ function drawRead(m, d) {
   $("#rAtt").innerHTML = att.map(a => `<span title="${esc(a.type)}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg><b>${esc(a.name)}</b><small>${fmtSize(a.size)}</small></span>`).join("");
   const body = $("#rBody");
   if (!d) {
-    $("#rMode").classList.add("hidden"); $("#rImages").classList.add("hidden");
+    ["#rMode", "#rImagesSw", "#rDarkSw"].forEach(q => $(q).classList.add("hidden"));
     body.innerHTML = `<div class="skel" aria-label="Loading the mail"><i></i><i></i><i></i><i></i></div>`;
     return;
   }
   if (!d.ok) {
-    $("#rMode").classList.add("hidden"); $("#rImages").classList.add("hidden");
+    ["#rMode", "#rImagesSw", "#rDarkSw"].forEach(q => $(q).classList.add("hidden"));
     body.innerHTML = `<div class="alert"><div><b>This mail could not be opened</b><span>${esc(d.error || "")}</span></div></div>`;
     return;
   }
@@ -1846,7 +1857,10 @@ function drawRead(m, d) {
   $("#rMode").classList.toggle("hidden", !hasHtml || !d.text);
   $("#rMode").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.k === reader.mode));
   const html = hasHtml && reader.mode === "html";
-  $("#rImages").classList.toggle("hidden", !html || !remote || reader.images);
+  const images = pref("adagio-pictures", true), dark = darkTheme() && pref("adagio-dark-mail", true);
+  $("#rImagesSw").classList.toggle("hidden", !html || !remote); $("#rImages").checked = images;
+  $("#rDarkSw").classList.toggle("hidden", !html || !darkTheme()); $("#rDark").checked = dark;
+  body.classList.toggle("dark", html && dark);
   const warn = d.truncated ? `<p class="rwarn">This mail is large (${fmtSize(d.size)}): only its first 3 MB are shown. Open it in Gmail to see the rest.</p>` : "";
   if (html) {
     body.innerHTML = warn;
@@ -1854,7 +1868,7 @@ function drawRead(m, d) {
     f.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
     f.setAttribute("referrerpolicy", "no-referrer");
     f.title = "Mail content";
-    f.srcdoc = mailDoc(d.html, d.inline || {}, reader.images);
+    f.srcdoc = mailDoc(d.html, d.inline || {}, images, dark);
     if (warn) f.style.height = "calc(100% - 34px)";
     body.appendChild(f);
   } else {
@@ -1862,12 +1876,15 @@ function drawRead(m, d) {
     linkify(body.querySelector(".rtext"), d.text || "(This mail has no text.)");
   }
 }
-function mailDoc(html, inline, images) {
+function mailDoc(html, inline, images, dark) {
   html = html.replace(/cid:([^"'\s)>]+)/gi, (all, id) => inline[id] || inline[decodeURIComponent(id)] || all);
   const web = images ? " https: http:" : "";
   const csp = `default-src 'none'; style-src 'unsafe-inline'${web}; img-src data:${web}; font-src data:${web}`;
   return `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank">`
-    + `<style>html,body{margin:0}body{padding:16px 18px;font:14px/1.5 "Segoe UI",system-ui,sans-serif;color:#1d1f24;background:#fff;overflow-wrap:anywhere}img{max-width:100%;height:auto}</style>` + html;
+    + `<style>html,body{margin:0}body{padding:16px 18px;font:14px/1.5 "Segoe UI",system-ui,sans-serif;color:#1d1f24;background:#fff;overflow-wrap:anywhere}img{max-width:100%;height:auto}</style>`
+    // dark: the page is inverted (light becomes dark, hues kept), then pictures are turned back to normal
+    + (dark ? `<style>html{background:#11151f;color-scheme:dark}body{min-height:100vh;box-sizing:border-box;background-color:#e9edf5 !important;filter:invert(.93) hue-rotate(180deg)}`
+      + `img,picture,video,svg,canvas,[background],[style*="background-image"],[style*="background:url"],[style*="background: url"]{filter:invert(1) hue-rotate(180deg)}</style>` : "") + html;
 }
 function linkify(el, text) {
   const re = /https?:\/\/[^\s<>"]+/g; let last = 0, m;
@@ -1886,7 +1903,9 @@ function stepRead(delta) {
 $("#rPrev").onclick = () => stepRead(-1);
 $("#rNext").onclick = () => stepRead(1);
 $("#rClose").onclick = $("#rDone").onclick = () => $("#readDlg").close();
-$("#rImages").onclick = () => { reader.images = true; const m = reader.mails.find(x => x.gm_msgid === reader.id); drawRead(m, reader.cache.get(reader.id)); };
+const redrawRead = () => drawRead(reader.mails.find(x => x.gm_msgid === reader.id), reader.cache.get(reader.id));
+$("#rImages").onchange = () => { store.set("adagio-pictures", $("#rImages").checked); redrawRead(); };
+$("#rDark").onchange = () => { store.set("adagio-dark-mail", $("#rDark").checked); redrawRead(); };
 $("#rMode").querySelectorAll("button").forEach(b => b.onclick = () => { reader.mode = b.dataset.k; const m = reader.mails.find(x => x.gm_msgid === reader.id); drawRead(m, reader.cache.get(reader.id)); });
 $("#readDlg").addEventListener("keydown", e => {
   if (e.target.closest && e.target.closest("input, select, textarea")) return;
