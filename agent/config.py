@@ -43,6 +43,9 @@ def check(cfg):
         raise ConfigError("A theme and a status cannot share a name (both become Gmail labels)")
     if not isinstance(cfg.get("label_order") or [], list):
         raise ConfigError("label_order must be a list of theme and status names")
+    chosen = cfg.get("colors") or {}
+    if not isinstance(chosen, dict) or any(c not in GMAIL_COLORS for c in chosen.values()):
+        raise ConfigError(f"colors must map labels to Gmail colours: {', '.join(GMAIL_COLORS)}")
     kw = cfg.get("keywords") or {}
     if not isinstance(kw, dict) or not all(isinstance(v, list) for v in kw.values()):
         raise ConfigError("keywords must map each theme to a list of words")
@@ -136,14 +139,30 @@ def color_of(entry, spare=0):
 
 def colors(cfg):
     """{theme or status name: {"gmail": colour name, "hex": "#..."}}"""
-    out, spare = {}, 0
+    out, spare, chosen = {}, 0, cfg.get("colors") or {}  # chosen: picked in the app (Color & Order)
     for e in cfg["themes"] + cfg["statuses"]:
-        name = color_of(e, spare)
+        name = chosen.get(e["name"]) or color_of(e, spare)
         spare += not e.get("color") and e["name"].lower() not in DEFAULT_COLORS
         out[e["name"]] = {"gmail": name, "hex": GMAIL_COLORS.get(name, "#666666")}
-    out[TO_CHECK] = {"gmail": "Dark Orange", "hex": GMAIL_COLORS["Dark Orange"]}
-    out[TO_DELETE] = {"gmail": "Dark Red", "hex": GMAIL_COLORS["Dark Red"]}
+    for fixed, default in ((TO_CHECK, "Dark Orange"), (TO_DELETE, "Dark Red")):
+        name = chosen.get(fixed) or default
+        out[fixed] = {"gmail": name, "hex": GMAIL_COLORS[name]}
     return out
+
+
+def save_colors(path, colors_by_label):
+    """Write the `colors:` line at the end of config.yaml: {label name: Gmail colour name}."""
+    ensure_file(path)
+    path = Path(path)
+    data = {str(k): v for k, v in (colors_by_label or {}).items() if v in GMAIL_COLORS}
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(r"(?m)^# Colours of the labels.*\n", "", text)
+    text = re.sub(r"(?m)^colors:.*\n?", "", text).rstrip("\n") + "\n"
+    if data:
+        text += ("\n# Colours of the labels, picked in the app (Views > Color & Order). Gmail's own colour is set by hand.\n"
+                 "colors: " + json.dumps(data, ensure_ascii=False) + "\n")
+    path.write_text(text, encoding="utf-8")
+    return load(path)
 
 
 def label_of(entry):

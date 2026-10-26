@@ -626,6 +626,20 @@ class TestLabelOrder(unittest.TestCase):
     def run_(self, **request):
         return core.handle(request, cfg=self.cfg, gmail_factory=self.demo.gmail_factory, ask=self.demo.ask)
 
+    def test_colours_picked_in_the_app(self):
+        """Color & Order: a colour per label, saved in config.yaml, Gmail colours only."""
+        path = self.tmp / "config.yaml"
+        config.ensure_file(path)
+        cfg = config.save_colors(path, {"Finance": "Dark Green", "To delete": "Black", "Health": "Not a colour"})
+        self.assertEqual(config.colors(cfg)["Finance"], {"gmail": "Dark Green", "hex": "#076239"})
+        self.assertEqual(config.colors(cfg)["To delete"]["gmail"], "Black")
+        self.assertEqual(config.colors(cfg)["Health"]["gmail"], "Teal")  # unknown colour dropped
+        cfg = config.save_colors(path, {"Finance": "Red"})  # saved again: one line, replaced
+        self.assertEqual(path.read_text(encoding="utf-8").count("colors:"), 1)
+        self.assertEqual(config.colors(cfg)["Finance"]["gmail"], "Red")
+        with self.assertRaises(config.ConfigError):
+            config.check({**cfg, "colors": {"Finance": "Fuchsia"}})
+
     def test_numbers_and_recommended_order(self):
         cfg = {**self.cfg, "label_order": ["Important"]}
         labels = config.labels(cfg)

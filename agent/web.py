@@ -41,6 +41,7 @@ class App:
         self.demo_behavior = {"act_alone": False, "batch_size": 50}
         self.demo_order = None
         self.demo_keywords = None
+        self.demo_colors = None
         self.demo_running = []
         self.page = PAGE.read_text(encoding="utf-8")  # read once: the page always matches this code
         self.stamp = code_stamp()
@@ -54,6 +55,7 @@ class App:
             cfg["behavior"].update(self.demo_behavior)
             cfg["label_order"] = self.demo_order
             cfg["keywords"] = self.demo_keywords
+            cfg["colors"] = self.demo_colors
             config.check(cfg)
             return cfg
         return config.load(self.config_path)
@@ -167,9 +169,21 @@ class App:
                 return {"ok": False, "error": "Wait for the current job to finish"}
         request = {"action": "label_order", "order": body.get("order"), "numbered": bool(body.get("numbered")),
                    "apply": bool(body.get("apply")), "save": not self.demo, "config": str(self.config_path)}
+        colors = body.get("colors")
+        if colors is not None:
+            cfg = self.cfg()
+            known = set(config.names(cfg["themes"]) + config.names(cfg["statuses"]) + [config.TO_CHECK, config.TO_DELETE])
+            if not isinstance(colors, dict) or any(k not in known or v not in config.GMAIL_COLORS for k, v in colors.items()):
+                return {"ok": False, "error": "Unknown label or colour"}
         r = self.call(request)
         if r["ok"] and request["apply"] and self.demo:
             self.demo_order = [*r["statuses"], *r["themes"]] if r["numbered"] else None
+        if r["ok"] and request["apply"] and colors is not None:
+            if self.demo:
+                self.demo_colors = colors
+            else:
+                config.save_colors(self.config_path, colors)
+                core.log(f"colours saved for {len(colors)} label(s)")
         return r
 
     def save_keywords(self, body):

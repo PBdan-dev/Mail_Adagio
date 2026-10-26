@@ -211,8 +211,6 @@ main.shell { flex: 1; min-height: 0; display: grid; gap: 16px; padding: 0 20px 2
 details.colors { margin-top: 6px; }
 details.colors summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 550; }
 details.colors small { display: block; margin: 6px 0; }
-#colorList div { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 2px 0; }
-#colorList em { margin-left: auto; font-style: normal; color: var(--muted); font-size: 12px; }
 .banner.warn { background: var(--amber-soft); color: var(--amber); }
 .banner svg { flex: none; }
 
@@ -702,6 +700,32 @@ dialog > * { position: relative; z-index: 1; }
 .track { background: var(--surface-2); }
 .kv dt { color: var(--faint); }
 .toast { backdrop-filter: blur(18px); }
+/* side panel: Learning folds, the safety note lives in To delete */
+details.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary h2 { margin: 0; }
+details.fold .fcount { color: var(--faint); font-size: 12.5px; }
+details.fold .chev { margin-left: auto; color: var(--muted); transition: transform .3s var(--ease); flex: none; }
+details.fold[open] .chev { transform: rotate(180deg); }
+details.fold[open] > summary { margin-bottom: 6px; }
+details.fold > summary .mini { margin-left: 0; }
+details.fold #learnBtn { margin-bottom: 4px; }
+.never { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
+  font-size: 12.5px; color: var(--muted); }
+.never svg { flex: none; margin-top: 2px; color: var(--green); }
+.never b { display: block; color: var(--text); font-size: 13px; font-weight: 600; }
+/* Color & Order: a colour per label */
+.olist .cdot { width: 18px; height: 18px; border-radius: 6px; border: 2px solid transparent; padding: 0; cursor: pointer; flex: none;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.olist .cdot:hover, .olist .cdot:focus-visible { border-color: var(--text); outline: none; }
+.olist li.recolored .cdot { border-color: var(--accent); }
+.olist .gname { color: var(--faint); font-size: 11.5px; white-space: nowrap; }
+.palette { position: absolute; z-index: 50; display: grid; grid-template-columns: repeat(5, 30px); gap: 6px; padding: 10px; border-radius: 16px;
+  background: var(--dense); border: 1px solid var(--border-2); box-shadow: var(--shadow), 0 10px 30px -10px rgba(0,0,0,.4); backdrop-filter: blur(26px); }
+.palette button { width: 30px; height: 30px; border-radius: 9px; border: 2px solid transparent; cursor: pointer; padding: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.palette button:hover, .palette button.on { border-color: var(--text); }
+.onote { display: block; color: var(--muted); font-size: 12px; margin-top: 8px; }
+
 /* scrollbars, thin and quiet */
 * { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; }
 
@@ -733,7 +757,7 @@ dialog > * { position: relative; z-index: 1; }
     <button type="button" id="journalBtn" title="Everything Mail Adagio did, mail by mail"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M8 7h8M8 11h6"/></svg><span>Journal</span></button>
   </nav>
   <div id="leftPane">
-    <div class="side-h"><span>Views</span><span><button type="button" class="linkbtn" id="kwBtn" title="Typical words of each theme, to help the model">Keywords</button><button type="button" class="linkbtn" id="orderBtn2" title="Label order and numbers in Gmail">Order</button></span></div>
+    <div class="side-h"><span>Views</span><span><button type="button" class="linkbtn" id="kwBtn" title="Typical words of each theme, to help the model">Keywords</button><button type="button" class="linkbtn" id="orderBtn2" title="Colours, order and numbers of the labels in Gmail">Color &amp; Order</button></span></div>
     <div class="flist" id="folders"></div>
   </div>
   <div class="side-foot"><span id="conn" class="pill"><i></i><span>Not set up</span></span></div>
@@ -894,21 +918,14 @@ dialog > * { position: relative; z-index: 1; }
       <button class="btn" id="checkBtn" style="width:100%;justify-content:center">Test connection</button>
     </section>
 
-    <section class="card">
-      <h2>Undo</h2>
-      <p class="sub" id="undoSub" style="margin-bottom:10px">Nothing applied yet.</p>
-      <button class="btn undo" id="undoBtn" disabled>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
-        Undo last batch</button>
-      <div class="action"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></div>
-        <div><b>Labels in Gmail</b><small id="labelNote">Each theme and status becomes a Gmail label.</small>
-          <button type="button" class="btn sm" id="orderBtn" style="margin-top:8px">Order and numbers</button>
-          <details class="colors"><summary>Same colours in Gmail</summary>
-            <small>Gmail does not let the agent colour labels. Once, in Gmail: hover a label, click ⋮ &gt; Label colour, pick the colour shown here.</small>
-            <div id="colorList"></div></details></div></div>
-      <div class="action"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/><path d="M4 4l16 16"/></svg></div>
-        <div><b>Never deletes on its own</b><small>Adds labels and moves mails out of the Inbox. Only you can send the "To delete" mails to the Trash.</small></div></div>
-    </section>
+    <details class="card fold" id="learnCard">
+      <summary><h2>Learning</h2><span class="fcount" id="learnCount"></span><span class="mini hidden" id="learnBadge"></span>
+        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <p class="sub">Your corrections, here or in Gmail, become examples for the model. Rules are applied before the model, with no AI call.</p>
+      <button type="button" class="btn sm" id="learnBtn" title="Reads the labels of the mails already sorted (no content, no AI) and learns from the ones you moved in Gmail">Learn from Gmail</button>
+      <div class="props" id="proposals"></div>
+      <div class="rules" id="rules"></div>
+    </details>
 
     <section class="card hidden" id="delCard">
       <h2>To delete</h2>
@@ -919,14 +936,16 @@ dialog > * { position: relative; z-index: 1; }
         <button type="button" class="btn sm danger" id="trashBtn" disabled>Move to Trash</button>
       </div>
       <button type="button" class="btn sm hidden" id="restoreBtn" style="margin-top:10px"></button>
+      <div class="never"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/><path d="M4 4l16 16"/></svg>
+        <span><b>Never deletes on its own</b>Adds labels and moves mails out of the Inbox. Only you can send the "To delete" mails to the Trash.</span></div>
     </section>
 
     <section class="card">
-      <div class="card-h"><h2>Learning</h2>
-        <button type="button" class="btn sm" id="learnBtn" title="Reads the labels of the mails already sorted (no content, no AI) and learns from the ones you moved in Gmail">Learn from Gmail</button></div>
-      <p class="sub">Your corrections, here or in Gmail, become examples for the model. Rules are applied before the model, with no AI call.</p>
-      <div class="props" id="proposals"></div>
-      <div class="rules" id="rules"></div>
+      <h2>Undo</h2>
+      <p class="sub" id="undoSub" style="margin-bottom:10px">Nothing applied yet.</p>
+      <button class="btn undo" id="undoBtn" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
+        Undo last batch</button>
     </section>
 
     <section class="card">
@@ -985,8 +1004,8 @@ dialog > * { position: relative; z-index: 1; }
 </form></dialog>
 
 <dialog id="orderDlg"><form class="dlg" id="orderForm" method="dialog">
-  <h2>Label order</h2>
-  <p class="sub">Drag a label, or use the arrows. Gmail lists labels alphabetically, so a number in front keeps them in this order.</p>
+  <h2>Colours and order of the labels</h2>
+  <p class="sub">Drag a label, or use the arrows. Gmail lists labels alphabetically, so a number in front keeps them in this order. Click a colour dot to change it.</p>
   <label class="switch" style="margin-top:14px"><input type="checkbox" id="orderNum"><span class="knob"></span>
     <span><b>Number the labels in Gmail</b><small>Statuses 01, 02, 03 · themes 11, 12... · To check 97, To delete 98, Other 99.</small></span></label>
   <div class="olists">
@@ -994,6 +1013,8 @@ dialog > * { position: relative; z-index: 1; }
     <div><h3>Themes</h3><ol class="olist" id="olThemes"></ol></div>
   </div>
   <div class="opreview" id="orderPreview"></div>
+  <small class="onote" id="labelNote"></small>
+  <div class="palette hidden" id="palette" role="dialog" aria-label="Pick a colour"></div>
   <div class="foot">
     <button type="button" class="btn" id="orderCancel">Cancel</button>
     <button type="submit" class="btn primary" id="orderApply">Apply</button>
@@ -1170,13 +1191,31 @@ async function refresh() {
 }
 /* label order: drag and drop, numbers, rename in Gmail */
 let ord = null, ordTimer = null, ordPreview = null;
-$("#orderBtn").onclick = () => {
-  ord = { statuses: [...S.order.statuses], themes: [...S.order.themes], numbered: true };  // numbering proposed by default
+const GMAIL = { "Red": "#fb4c2f", "Orange": "#ffad47", "Yellow": "#fad165", "Green": "#16a765", "Mint": "#43d692",
+  "Teal": "#2da2bb", "Blue": "#4a86e8", "Purple": "#a479e2", "Pink": "#f691b2", "Brown": "#7a4706",
+  "Dark Red": "#822111", "Dark Orange": "#a46a21", "Dark Green": "#076239", "Dark Blue": "#1c4587",
+  "Dark Purple": "#41236d", "Dark Pink": "#83334c", "Gray": "#666666", "Light Gray": "#cccccc", "Dark Gray": "#434343", "Black": "#000000" };
+$("#orderBtn2").onclick = () => {
+  ord = { statuses: [...S.order.statuses], themes: [...S.order.themes], numbered: true,  // numbering proposed by default
+          colors: Object.fromEntries(Object.entries(S.colors || {}).map(([k, c]) => [k, c.gmail])) };
+  ord.was = { ...ord.colors };
   $("#orderNum").checked = ord.numbered;
+  const odd = Object.entries(S.sort?.labels || {}).filter(([k, v]) => k !== v.replace(/^\d{2} - /, ""));
+  $("#labelNote").textContent = odd.length ? odd.map(([k, v]) => `${k} uses the label "${v.replace(/^\d{2} - /, "")}"`).join(", ") + " (Gmail reserves the name)." : "";
   drawOrder(); $("#orderDlg").showModal();
 };
-$("#orderBtn2").onclick = () => $("#orderBtn").click();
 $("#orderCancel").onclick = () => $("#orderDlg").close();
+const ordHex = n => GMAIL[ord.colors[n]] || color(n);
+function openPalette(btn, name) {
+  const pal = $("#palette"), r = btn.getBoundingClientRect();
+  pal.innerHTML = Object.entries(GMAIL).map(([g, hex]) => `<button type="button" data-g="${g}" title="${g}" style="background:${hex}" class="${ord.colors[name] === g ? "on" : ""}" aria-label="${g}"></button>`).join("");
+  pal.classList.remove("hidden");
+  const d = $("#orderDlg").getBoundingClientRect();  // the dialog is the frame of reference (it is blurred glass)
+  pal.style.left = Math.min(r.left - d.left, d.width - 210) + "px"; pal.style.top = (r.bottom - d.top + 6 + $("#orderDlg").scrollTop) + "px";
+  pal.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation(); ord.colors[name] = b.dataset.g; pal.classList.add("hidden"); drawOrder(); });
+}
+$("#orderDlg").addEventListener("click", e => { if (!e.target.closest(".palette, .cdot")) $("#palette").classList.add("hidden"); });
+$("#orderDlg").addEventListener("close", () => $("#palette").classList.add("hidden"));
 $("#orderNum").onchange = e => { ord.numbered = e.target.checked; drawOrder(); };
 const isOther = n => n.toLowerCase() === "other";
 function drawOrder() {
@@ -1186,18 +1225,19 @@ function drawOrder() {
   const row = (list, n, i) => {
     const fixed = isOther(n), last = list.length - 1 - (list.some(isOther) ? 1 : 0);
     const label = ((S.sort?.labels || {})[n] || n).replace(/^\d{2} - /, "");
-    return `<li draggable="${!fixed}" data-n="${esc(n)}" class="${fixed ? "fixed" : ""}">
+    return `<li draggable="${!fixed}" data-n="${esc(n)}" class="${fixed ? "fixed" : ""}${ord.colors[n] !== ord.was[n] ? " recolored" : ""}">
       <span class="grip">${fixed ? "" : "⠿"}</span>
       <span class="onum">${ord.numbered ? String(nums[n]).padStart(2, "0") : i + 1}</span>
-      <span class="dot" style="background:${color(n)}"></span><span class="nm">${esc(label)}</span>
+      <button type="button" class="cdot" data-c="${esc(n)}" style="background:${ordHex(n)}" title="Colour: ${esc(ord.colors[n] || "")}. Click to change" aria-label="Change the colour of ${esc(label)}"></button><span class="nm">${esc(label)}</span>
       <button type="button" class="mv" data-mv="-1" ${fixed || i === 0 ? "disabled" : ""} aria-label="Move up">▲</button>
       <button type="button" class="mv" data-mv="1" ${fixed || i >= last ? "disabled" : ""} aria-label="Move down">▼</button></li>`;
   };
   $("#olStatuses").innerHTML = ord.statuses.map((n, i) => row(ord.statuses, n, i)).join("");
-  const fixedRow = (num, name, hex) => `<li class="fixed"><span class="grip"></span><span class="onum">${ord.numbered ? num : ""}</span>
-      <span class="dot" style="background:${S.colors?.[name]?.hex || hex}"></span><span class="nm">${name}</span></li>`;
-  const del = fixedRow("97", "To check", "#a46a21") + fixedRow("98", "To delete", "#822111");
+  const fixedRow = (num, name) => `<li class="fixed${ord.colors[name] !== ord.was[name] ? " recolored" : ""}"><span class="grip"></span><span class="onum">${ord.numbered ? num : ""}</span>
+      <button type="button" class="cdot" data-c="${name}" style="background:${ordHex(name)}" title="Colour: ${esc(ord.colors[name] || "")}. Click to change" aria-label="Change the colour of ${name}"></button><span class="nm">${name}</span></li>`;
+  const del = fixedRow("97", "To check") + fixedRow("98", "To delete");
   $("#olThemes").innerHTML = ord.themes.map((n, i) => (isOther(n) ? del : "") + row(ord.themes, n, i)).join("");
+  $("#orderDlg").querySelectorAll(".cdot").forEach(b => b.onclick = e => { e.stopPropagation(); openPalette(b, b.dataset.c); });
   for (const [el, key] of [[$("#olStatuses"), "statuses"], [$("#olThemes"), "themes"]]) {
     el.querySelectorAll("li[data-n]").forEach(li => {
       const n = li.dataset.n;
@@ -1227,20 +1267,25 @@ async function previewOrder() {
   const r = await api("/api/order", { order: [...ord.statuses, ...ord.themes], numbered: ord.numbered });
   ordPreview = r;
   if (!r.ok) { $("#orderPreview").textContent = r.error; return; }
-  const n = r.renames.length;
-  $("#orderPreview").innerHTML = n
+  const n = r.renames.length, recolored = Object.keys(ord.colors).filter(k => ord.colors[k] !== ord.was[k]);
+  $("#orderPreview").innerHTML = (n
     ? `<b>${n} label${n > 1 ? "s" : ""} will be renamed in Gmail.</b> Mails and colours stay.` +
       r.renames.map(x => `<div><span>${esc(x.old)}</span><span>→</span><b>${esc(x.new)}</b></div>`).join("")
-    : "Nothing to rename in Gmail. Apply creates any missing label.";
+    : "Nothing to rename in Gmail. Apply creates any missing label.")
+    + (recolored.length ? `<div style="margin-top:8px"><b>${recolored.length} new colour${recolored.length > 1 ? "s" : ""}.</b></div>`
+      + `<div>Gmail does not let an app colour a label: after Apply, set it once in Gmail (hover the label, ⋮ &gt; Label colour).</div>`
+      + recolored.map(k => `<div><span class="dot" style="background:${GMAIL[ord.colors[k]]}"></span><b>${esc((r.labels || {})[k] || k)}</b><span>→ ${esc(ord.colors[k])}</span></div>`).join("") : "");
   $("#orderApply").disabled = false;
 }
 $("#orderForm").onsubmit = async e => {
   e.preventDefault();
   $("#orderApply").disabled = true;
-  const r = await api("/api/order", { order: [...ord.statuses, ...ord.themes], numbered: ord.numbered, apply: true });
+  const recolored = Object.keys(ord.colors).filter(k => ord.colors[k] !== ord.was[k]).length;
+  const r = await api("/api/order", { order: [...ord.statuses, ...ord.themes], numbered: ord.numbered, apply: true, colors: ord.colors });
   if (!r.ok) { $("#orderApply").disabled = false; return toast(r.error, true); }
   $("#orderDlg").close();
-  toast(`${r.renamed} label${r.renamed === 1 ? "" : "s"} renamed in Gmail` + (r.created?.length ? `, ${r.created.length} created` : "") + ". Mails and colours kept.");
+  toast(`${r.renamed} label${r.renamed === 1 ? "" : "s"} renamed in Gmail` + (r.created?.length ? `, ${r.created.length} created` : "")
+    + (recolored ? `, ${recolored} colour${recolored > 1 ? "s" : ""} changed here: set ${recolored > 1 ? "them" : "it"} in Gmail too.` : ". Mails and colours kept."));
   refresh().then(loadDelete);
 };
 
@@ -1472,11 +1517,6 @@ function render() {
   $("#undoBtn").disabled = busy || !last;
   $("#undoSub").textContent = last ? `Last batch: ${fmt(last.labelled)} mails labelled, ${fmt(last.moved)} moved out of the Inbox, at ${(last.applied || "").slice(11, 16)}. Undo removes those labels and puts the mails back.`
                                    : "Nothing applied yet.";
-  const odd = Object.entries(sort.labels || {}).filter(([k, v]) => k !== v.replace(/^\d{2} - /, ""));
-  $("#labelNote").textContent = (S.numbered ? "Each theme and status becomes a numbered Gmail label (01 - Priority, 11 - Health...)." : "Each theme and status becomes a Gmail label.") +
-    (odd.length ? " " + odd.map(([k, v]) => `${k} uses the label "${v.replace(/^\d{2} - /, "")}"`).join(", ") + " (Gmail reserves the name)." : "");
-  $("#colorList").innerHTML = Object.entries(S.colors || {}).map(([k, c]) =>
-    `<div><span class="dot" style="background:${c.hex}"></span>${esc((sort.labels || {})[k] || k)}<em>${esc(c.gmail)}</em></div>`).join("");
 
   const alert = S.error && !busy;
   $("#sortAlert").classList.toggle("hidden", !alert);
@@ -1511,7 +1551,16 @@ function drawAlert(error, code) {
   help.querySelectorAll("[data-open]").forEach(b => b.onclick = () => b.dataset.open === "settings" ? openFresh() : loadModel().then(() => toast(M.ok ? "Ollama answers. You can sort again." : M.error, !M.ok)));
 }
 /* rules proposed after the same correction twice */
+function drawLearnHead(rules, props) {
+  if (rules !== undefined) drawLearnHead.rules = rules;
+  if (props !== undefined) drawLearnHead.props = props;
+  const nr = drawLearnHead.rules || 0, np = drawLearnHead.props || 0;
+  $("#learnCount").textContent = `${nr} rule${nr === 1 ? "" : "s"}`;
+  $("#learnBadge").classList.toggle("hidden", !np);
+  $("#learnBadge").textContent = `${np} to review`;
+}
 function drawProposals(list) {
+  drawLearnHead(undefined, list.length);
   $("#proposals").innerHTML = list.map((x, i) => `<div class="prop">
       <div class="who" title="${esc(x.sender)}">${esc(x.sender)}</div>
       <div class="to">You corrected it ${x.count}× to <span class="dot" style="background:${color(x.theme)}"></span>${esc(x.theme)} · ${esc(x.status)}</div>
@@ -1745,6 +1794,7 @@ $("#fixForm").onsubmit = async e => {
   drawRules(r.rules); refresh();
 };
 function drawRules(rules) {
+  drawLearnHead(rules.length);
   $("#rules").innerHTML = rules.length ? rules.map(x => `
     <div class="rule"><div style="min-width:0">
       <div class="who" title="${esc(x.value)}">${x.kind === "domain" ? "Everyone at " : ""}${esc(x.value)}</div>
@@ -2011,7 +2061,14 @@ $("#discardBtn").onclick = async () => {
   if (!r.ok) return toast(r.error, true);
   toast("Plan discarded."); refresh();
 };
-$("#undoBtn").onclick = () => { if (confirm("Undo the last batch? The labels it added are removed and the mails go back to the Inbox.")) start("/api/undo", {}); };
+$("#undoBtn").onclick = async () => {
+  const last = S.sort?.last;
+  if (!last) return;
+  const ok = await confirmBox("Undo the last batch?",
+    `The ${fmt(last.labelled)} mails sorted at ${(last.applied || "").slice(11, 16)} lose the labels Mail Adagio added, and ${fmt(last.moved)} go back to the Inbox. Your own labels and mails are not touched.`,
+    `Undo ${fmt(last.labelled)} mails`);
+  if (ok) start("/api/undo", {});
+};
 $("#checkBtn").onclick = async () => {
   $("#checkBtn").disabled = true; $("#checkBtn").textContent = "Testing…";
   const r = await api("/api/check", {});
