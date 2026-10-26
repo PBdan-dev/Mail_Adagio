@@ -134,7 +134,8 @@ model of the last batch (or the best one for your PC) and Ollama loads it at the
 ## Your own themes
 
 Edit `themes` in `config.yaml`: add, rename or remove entries. The `hint` tells the model what belongs
-in the theme. Keep one theme named `Other` (used when nothing fits). Same for `statuses`.
+in the theme. Each theme also has typical words (bank, invoice, receipt...) given to the model as
+clues: change them in the app, **Views > Keywords** (saved as `keywords:` at the end of `config.yaml`). Keep one theme named `Other` (used when nothing fits). Same for `statuses`.
 
 ## Files
 

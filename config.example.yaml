@@ -26,6 +26,7 @@ behavior:
 
 # Themes: one per mail. Add, rename or remove freely. Each theme is a Gmail label (a "folder").
 # "hint" tells the model what belongs there. Keep a theme named "Other".
+# Typical words of each theme (clues for the model): change them in the app, Views > Keywords.
 # Optional "label": Gmail label name when it must differ from the name.
 # Optional "color": one of Gmail's label colours (Red, Orange, Yellow, Green, Mint, Teal, Blue, Purple,
 # Pink, Brown, Dark Red, Dark Orange, Dark Green, Dark Blue, Dark Purple, Dark Pink, Gray, Light Gray,
@@ -36,10 +37,10 @@ themes:
     hint: doctors, hospitals, pharmacy, health insurance, medical results
   - name: Finance
     color: Green
-    hint: bank, cards, payments, invoices, taxes, investments, salary
+    hint: bank, cards, payments, invoices, taxes, investments, insurance, salary
   - name: Admin
     color: Dark Blue
-    hint: government, utilities, contracts, insurance (non-health), housing, official paperwork
+    hint: government, utilities, contracts, housing, official paperwork
   - name: Work & Projects
     color: Blue
     hint: your current work, colleagues, clients, personal projects, professional tools

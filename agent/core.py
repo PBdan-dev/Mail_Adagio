@@ -11,7 +11,7 @@ from . import batches, classify, config, hardware, memory, models, senders
 from .mail import Gmail, MailError, chunks
 
 AGENT = "mail-adagio"
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 ACTIONS = ("check", "hardware", "preview", "correct", "rules", "delete_rule",
            "estimate", "plan", "apply", "discard", "undo", "status",
            "scan", "senders", "sender_state", "suggest", "add_rule", "label_order",

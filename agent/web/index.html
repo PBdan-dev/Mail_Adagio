@@ -160,6 +160,21 @@ main.shell { flex: 1; min-height: 0; display: grid; gap: 16px; padding: 0 20px 2
   border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-weight: 550; font-size: 13px; }
 .cardtop { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 #orderDlg { width: min(640px, calc(100vw - 32px)); }
+#kwDlg { width: min(820px, calc(100vw - 32px)); margin: 6vh auto auto; }
+.kwfind { width: 100%; margin-top: 14px; }
+.kwlist { display: grid; gap: 10px; margin-top: 12px; max-height: min(60vh, 620px); overflow: auto; padding-right: 4px; }
+.kwrow { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--surface); }
+.kwrow:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.kwhead { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin-bottom: 8px; }
+.kwhead b { font-weight: 650; }
+.kwhead small { color: var(--faint); font-size: 12px; }
+.kwhead .linkbtn { margin-left: auto; }
+.kwbox { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; cursor: text; }
+.kw { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 550;
+  background: color-mix(in srgb, var(--c) 14%, var(--surface)); color: var(--text); border: 1px solid color-mix(in srgb, var(--c) 30%, transparent); }
+.kw button { border: 0; background: transparent; color: var(--muted); cursor: pointer; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; padding: 0; font-size: 13px; line-height: 1; }
+.kw button:hover { background: var(--red-soft); color: var(--red); }
+.kwbox input { border: 0; outline: none; background: transparent; min-width: 160px; flex: 1; padding: 4px 2px; font-size: 13px; }
 .olists { display: grid; grid-template-columns: 1fr 1.4fr; gap: 16px; margin-top: 16px; }
 .olists h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
 .olist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
@@ -464,7 +479,7 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
     <button data-p="senders"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Senders</span></button>
   </nav>
   <div id="leftPane">
-    <div class="side-h"><span>Views</span><button type="button" class="linkbtn" id="orderBtn2" title="Label order and numbers in Gmail">Order</button></div>
+    <div class="side-h"><span>Views</span><span><button type="button" class="linkbtn" id="kwBtn" title="Typical words of each theme, to help the model">Keywords</button><button type="button" class="linkbtn" id="orderBtn2" title="Label order and numbers in Gmail">Order</button></span></div>
     <div class="flist" id="folders"></div>
   </div>
   <div class="side-foot"><span id="conn" class="pill"><i></i><span>Not set up</span></span></div>
@@ -727,6 +742,17 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
   </div>
 </form></dialog>
 
+<dialog id="kwDlg"><form class="dlg" id="kwForm" method="dialog">
+  <h2>Keywords by theme</h2>
+  <p class="sub">Typical words help the model choose the right theme. They are clues, not strict rules: the model still reads the whole mail. Any language works. Changes apply from the next batch.</p>
+  <input class="search kwfind" id="kwFind" placeholder="Find a theme or a word">
+  <div class="kwlist" id="kwList"></div>
+  <div class="foot">
+    <button type="button" class="btn" id="kwCancel">Cancel</button>
+    <button type="submit" class="btn primary" id="kwSave">Save</button>
+  </div>
+</form></dialog>
+
 <dialog id="confirmDlg"><form class="dlg" method="dialog">
   <h2 id="confirmTitle"></h2>
   <p class="sub" id="confirmText"></p>
@@ -901,6 +927,53 @@ $("#orderForm").onsubmit = async e => {
   $("#orderDlg").close();
   toast(`${r.renamed} label${r.renamed === 1 ? "" : "s"} renamed in Gmail` + (r.created?.length ? `, ${r.created.length} created` : "") + ". Mails and colours kept.");
   refresh().then(loadDelete);
+};
+
+/* keywords: typical words of each theme, given to the model */
+let KW = null;
+$("#kwBtn").onclick = () => { KW = JSON.parse(JSON.stringify(S.keywords || {})); $("#kwFind").value = ""; drawKw(); $("#kwDlg").showModal(); };
+$("#kwCancel").onclick = () => $("#kwDlg").close();
+$("#kwFind").oninput = () => drawKw();
+function addWords(t, text) {
+  const words = text.split(/[,;\n]/).map(w => w.trim()).filter(Boolean);
+  for (const w of words) if (!KW[t].some(x => x.toLowerCase() === w.toLowerCase())) KW[t].push(w);
+  return words.length;
+}
+function drawKw(focus) {
+  const q = $("#kwFind").value.trim().toLowerCase();
+  const shown = S.themes.filter(t => !q || t.toLowerCase().includes(q) || (KW[t] || []).some(w => w.toLowerCase().includes(q)));
+  $("#kwList").innerHTML = shown.map(t => {
+    KW[t] = KW[t] || [];
+    const def = (S.default_keywords || {})[t] || [];
+    const same = def.length === KW[t].length && def.every((w, i) => w === KW[t][i]);
+    return `<div class="kwrow" data-t="${esc(t)}" style="--c:${color(t)}">
+      <div class="kwhead"><span class="dot" style="background:${color(t)}"></span><b>${esc(t)}</b><small>${KW[t].length} word${KW[t].length === 1 ? "" : "s"}</small>
+        ${def.length && !same ? `<button type="button" class="linkbtn" data-reset title="Put back the suggested words">Default words</button>` : ""}</div>
+      <div class="kwbox">${KW[t].map((w, i) => `<span class="kw">${esc(w)}<button type="button" data-i="${i}" aria-label="Remove ${esc(w)}">×</button></span>`).join("")}
+        <input type="text" placeholder="${KW[t].length ? "Add a word…" : "Add words, separated by commas"}" aria-label="Add a word to ${esc(t)}"></div>
+    </div>`; }).join("") || `<div class="empty">No theme matches.</div>`;
+  $("#kwList").querySelectorAll(".kwrow").forEach(row => {
+    const t = row.dataset.t, input = row.querySelector("input");
+    row.querySelector(".kwbox").onclick = e => { if (e.target === e.currentTarget) input.focus(); };
+    row.querySelectorAll(".kw button").forEach(b => b.onclick = () => { KW[t].splice(+b.dataset.i, 1); drawKw(t); });
+    const reset = row.querySelector("[data-reset]");
+    if (reset) reset.onclick = () => { KW[t] = [...S.default_keywords[t]]; drawKw(t); };
+    input.onkeydown = e => {
+      if ((e.key === "Enter" || e.key === ",") && input.value.trim()) { e.preventDefault(); addWords(t, input.value); drawKw(t); }
+      else if (e.key === "Enter") e.preventDefault();
+      else if (e.key === "Backspace" && !input.value && KW[t].length) { KW[t].pop(); drawKw(t); }
+    };
+    input.onpaste = e => { const text = e.clipboardData.getData("text"); if (/[,;\n]/.test(text)) { e.preventDefault(); addWords(t, text); drawKw(t); } };
+    input.onblur = () => { if (input.value.trim()) { addWords(t, input.value); input.value = ""; setTimeout(() => drawKw(), 0); } };
+    if (focus === t) input.focus();
+  });
+}
+$("#kwForm").onsubmit = async e => {
+  e.preventDefault();
+  $("#kwList").querySelectorAll(".kwrow").forEach(row => { const i = row.querySelector("input"); if (i.value.trim()) addWords(row.dataset.t, i.value); });
+  const r = await api("/api/keywords", { keywords: KW });
+  if (!r.ok) return toast(r.error, true);
+  $("#kwDlg").close(); toast("Keywords saved. The model uses them from the next batch."); refresh();
 };
 
 /* To delete: you check in Gmail, you send them to the Trash */

@@ -572,6 +572,41 @@ class TestSenders(unittest.TestCase):
         self.assertEqual(mail.unsubscribe_link(msg), "https://news.com/u?a=1&b=2")
 
 
+class TestKeywords(unittest.TestCase):
+    """Typical words of each theme: defaults, your own list, sent to the model."""
+
+    def test_defaults_your_list_and_prompt(self):
+        cfg = cfg_with()
+        kw = config.keywords(cfg)
+        self.assertIn("bank", kw["Finance"])
+        self.assertEqual(kw["Other"], [])
+        cfg["keywords"] = {"Finance": ["Bank", " bank ", "Crypto"], "Travel": []}
+        kw = config.keywords(cfg)
+        self.assertEqual(kw["Finance"], ["Bank", "Crypto"])  # trimmed, no duplicate
+        self.assertEqual(kw["Travel"], [])                   # emptied on purpose: stays empty
+        self.assertIn("flight", config.keywords(cfg_with())["Travel"])
+        prompt = classify.system_prompt(cfg)
+        self.assertIn("- Finance: ", prompt)
+        self.assertIn("(typical words: Bank, Crypto)", prompt)
+        self.assertNotIn("typical words: flight", prompt)
+
+    def test_saved_in_config_file(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            path = tmp / "config.yaml"
+            text = config.EXAMPLE.read_text(encoding="utf-8").replace('email: ""', 'email: "me@gmail.com"')
+            path.write_text(text, encoding="utf-8")
+            cfg = config.save_keywords(path, {"Finance": ["bank", "bourse"]})
+            cfg = config.save_keywords(path, {"Finance": ["bank"], "Travel": ["vol"]})  # replaced, not added twice
+            saved = path.read_text(encoding="utf-8")
+            self.assertEqual(saved.count("keywords:"), 1)
+            self.assertIn("# Themes: one per mail", saved)  # the rest of the file and its comments stay
+            self.assertEqual(config.keywords(cfg)["Finance"], ["bank"])
+            self.assertEqual(config.keywords(cfg)["Travel"], ["vol"])
+        finally:
+            shutil.rmtree(tmp)
+
+
 class TestLabelOrder(unittest.TestCase):
     """Numbered labels (01 - Priority, 11 - Health...), reordered and renamed in Gmail."""
 
@@ -789,6 +824,15 @@ class TestWeb(unittest.TestCase):
             self.assertEqual((state["notice"]["applied"], state["sort"]["last"]["labelled"]), (4, 4))
         finally:
             core.MEMORY_PATH = ":memory:"
+
+    def test_keywords(self):
+        r = json.loads(self.call("/api/keywords", {"keywords": {"Finance": ["bank", "Bank", "broker"], "Nope": ["x"]}})[1])
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["keywords"]["Finance"], ["bank", "broker"])
+        self.assertNotIn("Nope", r["keywords"])
+        state = json.loads(self.call("/api/state")[1])
+        self.assertEqual(state["keywords"]["Finance"], ["bank", "broker"])
+        self.assertIn("flight", state["keywords"]["Travel"])
 
     def test_load_model(self):
         """The Load button: the model is loaded in the background, then shown as loaded."""

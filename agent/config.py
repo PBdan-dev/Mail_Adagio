@@ -43,6 +43,9 @@ def check(cfg):
         raise ConfigError("A theme and a status cannot share a name (both become Gmail labels)")
     if not isinstance(cfg.get("label_order") or [], list):
         raise ConfigError("label_order must be a list of theme and status names")
+    kw = cfg.get("keywords") or {}
+    if not isinstance(kw, dict) or not all(isinstance(v, list) for v in kw.values()):
+        raise ConfigError("keywords must map each theme to a list of words")
     all_labels = list(labels(cfg).values()) + [delete_label(cfg)]
     if len({x.lower() for x in all_labels}) != len(all_labels):
         raise ConfigError(f"Two themes or statuses would get the same Gmail label (\"{TO_DELETE}\" is taken)")
@@ -180,6 +183,66 @@ def labels(cfg):
         return plain
     nums = numbers(cfg)
     return {name: f"{nums[name]:02d} - {label}" for name, label in plain.items()}
+
+
+# Typical words for each theme, shown to the model as clues (not strict rules). Change them in the app:
+# Views > Keywords. Saved as `keywords:` at the end of config.yaml; a theme missing there uses these.
+DEFAULT_KEYWORDS = {
+    "Health": ["doctor", "hospital", "clinic", "pharmacy", "prescription", "medical appointment", "lab results",
+               "dentist", "health insurance", "médecin", "mutuelle", "ordonnance"],
+    "Finance": ["bank", "investments", "insurance", "account statement", "credit card", "payment", "transfer",
+                "invoice", "tax", "savings", "loan", "salary", "banque", "impôts", "virement"],
+    "Admin": ["government", "city hall", "residence permit", "passport", "utilities", "electricity", "internet provider",
+              "contract", "lease", "rent", "housing", "official letter", "mairie", "préfecture"],
+    "Work & Projects": ["meeting", "project", "client", "colleague", "deadline", "report", "quote", "proposal",
+                        "GitHub", "réunion", "devis"],
+    "Job Search": ["job offer", "job alert", "application", "recruiter", "interview", "position", "hiring",
+                   "LinkedIn Jobs", "Indeed", "candidature", "entretien", "offre d'emploi"],
+    "Shopping & Deliveries": ["purchases", "buy", "credit card", "receipt", "return", "order", "refund", "shipping",
+                              "delivery", "tracking number", "parcel", "commande", "livraison", "colis"],
+    "Travel": ["flight", "boarding pass", "train", "hotel", "booking", "reservation", "check-in", "itinerary",
+               "car rental", "Airbnb", "vol", "billet"],
+    "Family & Friends": ["family", "friends", "birthday", "dinner", "weekend", "photos", "news", "famille",
+                         "anniversaire"],
+    "Newsletters": ["newsletter", "digest", "weekly", "monthly", "article", "blog", "podcast", "edition",
+                    "Substack"],
+    "Promotions": ["sale", "discount", "promo code", "special offer", "deal", "% off", "Black Friday", "coupon",
+                   "free shipping", "soldes", "réduction"],
+    "Social & Notifications": ["notification", "new follower", "comment", "mention", "security alert",
+                               "new sign-in", "password reset", "verification code", "Facebook", "Instagram"],
+    "Other": [],
+}
+
+
+def clean_words(words):
+    """A tidy keyword list: trimmed, no duplicates (case ignored), at most 40 words of 40 characters."""
+    out, seen = [], set()
+    for w in words or []:
+        w = " ".join(str(w).split())[:40]
+        if w and w.lower() not in seen:
+            seen.add(w.lower())
+            out.append(w)
+    return out[:40]
+
+
+def keywords(cfg):
+    """{theme: [words]} for every theme: your list from config.yaml, else the default one."""
+    saved = cfg.get("keywords") or {}
+    return {t: clean_words(saved[t] if t in saved else DEFAULT_KEYWORDS.get(t, [])) for t in names(cfg["themes"])}
+
+
+def save_keywords(path, words_by_theme):
+    """Write the `keywords:` line at the end of config.yaml (one JSON line, readable by YAML)."""
+    ensure_file(path)
+    path = Path(path)
+    data = {str(t): clean_words(w) for t, w in (words_by_theme or {}).items()}
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(r"(?m)^# Typical words of each theme.*\n", "", text)
+    text = re.sub(r"(?m)^keywords:.*\n?", "", text).rstrip("\n") + "\n"
+    text += ("\n# Typical words of each theme, given to the model as clues. Change them in the app: Views > Keywords.\n"
+             "keywords: " + json.dumps(data, ensure_ascii=False) + "\n")
+    path.write_text(text, encoding="utf-8")
+    return load(path)
 
 
 BEHAVIOR_KEYS = ("act_alone", "batch_size", "archive", "mark_read", "mark_read_themes", "to_delete")

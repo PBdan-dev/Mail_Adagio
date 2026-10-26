@@ -39,6 +39,7 @@ class App:
         self.notice = None   # what the last apply/undo did
         self.demo_behavior = {"act_alone": False, "batch_size": 50}
         self.demo_order = None
+        self.demo_keywords = None
         self.demo_running = []
         self.page = PAGE.read_text(encoding="utf-8")  # read once: the page always matches this code
         self.stamp = code_stamp()
@@ -51,6 +52,7 @@ class App:
             cfg["model"].update(provider="ollama", model_name="demo-model")
             cfg["behavior"].update(self.demo_behavior)
             cfg["label_order"] = self.demo_order
+            cfg["keywords"] = self.demo_keywords
             config.check(cfg)
             return cfg
         return config.load(self.config_path)
@@ -86,6 +88,8 @@ class App:
             "colors": config.colors(cfg) if cfg else {},
             "order": dict(zip(("statuses", "themes"), config.order(cfg))) if cfg else None,
             "numbered": config.numbered(cfg) if cfg else False,
+            "keywords": config.keywords(cfg) if cfg else {},
+            "default_keywords": config.DEFAULT_KEYWORDS,
             "default_models": config.DEFAULT_MODELS,
             "job": job, "stopping": stopping, "error": error, "notice": notice,
             "sort": sort if sort and sort.get("ok") else None,
@@ -163,6 +167,21 @@ class App:
         if r["ok"] and request["apply"] and self.demo:
             self.demo_order = [*r["statuses"], *r["themes"]] if r["numbered"] else None
         return r
+
+    def save_keywords(self, body):
+        """Typical words of each theme, from the Keywords window."""
+        words = body.get("keywords")
+        if not isinstance(words, dict):
+            return {"ok": False, "error": "Nothing to save"}
+        themes = config.names(self.cfg()["themes"])
+        data = {t: config.clean_words(words.get(t)) for t in themes if isinstance(words.get(t), list)}
+        if self.demo:
+            self.demo_keywords = {**(self.demo_keywords or {}), **data}
+        else:
+            current = config.load(self.config_path).get("keywords") or {}
+            config.save_keywords(self.config_path, {**current, **data})
+            core.log(f"keywords saved for {len(data)} theme(s)")
+        return {"ok": True, "keywords": config.keywords(self.cfg())}
 
     def start(self, kind, work):
         """Run `work` in the background; the page follows it through /api/state."""
@@ -342,6 +361,8 @@ def make_handler(app, port):
             if self.path == "/api/behavior":
                 app.save_behavior(body)
                 return self.send(200, {"ok": True})
+            if self.path == "/api/keywords":
+                return self.send(200, app.save_keywords(body))
             if self.path == "/api/order":
                 return self.send(200, app.label_order(body))
             if self.path == "/api/stop":
