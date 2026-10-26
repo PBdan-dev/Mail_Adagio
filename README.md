@@ -51,7 +51,15 @@ python adagio.py hardware               # which local model fits this computer
 The web page works like a mail program: sort settings and the list of statuses and themes (with
 counts, click to filter) on the left, the mails in the middle (their own scroll, Sort and Apply always
 visible), undo, rules, log and connection on the right. The panel button at the top hides the right
-side; on a smaller screen it opens as a drawer.
+side; on a smaller screen it opens as a drawer. The look follows Workspace ("Aurore": glass panels on
+a slowly moving light background), light or dark like Windows; animations stop when Windows asks to
+reduce motion.
+
+**Read a mail**: click it. A window shows the whole mail (sender, To, Cc, date, text or formatted
+mail, names of the attachments), with the arrows to go to the next or previous one. It is read only:
+no reply, and the mail stays unread in Gmail. Pictures from the web load by default (switch **Load
+pictures** to stop them: they can tell the sender you opened the mail). In the dark theme the mail is
+shown dark too (switch **Dark mail** to see its original colours). Both choices are remembered.
 
 From another program (Orchestra, a chatbot): send one JSON request, read one JSON result.
 
@@ -63,7 +71,7 @@ echo '{"action": "scan"}' | python adagio.py call
 echo '{"action": "capabilities"}' | python adagio.py call   # what it can do, for another agent
 ```
 
-Through this door, **trash**, **restore** and **label_order** are refused: a person must click them in
+Through this door, **trash**, **restore**, **label_order** and **read** (a whole mail) are refused: a person must click them in
 the window. `capabilities` returns the contract (`agent.json`), the allowed actions and those
 reserved for the window.
 
@@ -197,6 +205,7 @@ tests/               python -m unittest   (fake Gmail, fake model)
 
 - The agent reads the start of each mail (1500 characters by default, `body_chars`) and sends it to the
   model you chose. With Ollama, nothing leaves your computer.
+- The reader window fetches one whole mail when you click it, shows it and keeps nothing.
 - It does not store mail content (the journal has the sender and the subject, never the text). From step 3, only the mail id, subject and tags go into a local
   SQLite file, to resume after a stop and to undo the last run. The Senders page stores each sender's
   address, name, mail count and unsubscribe link.

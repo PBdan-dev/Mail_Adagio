@@ -683,6 +683,25 @@ dialog > * { position: relative; z-index: 1; }
   .topbar { padding: 12px 14px; margin-bottom: 10px; } .banners { padding: 0 0 10px; } main.shell { padding: 0; }
 }
 
+
+/* the rest of the tool: same radii and glass as the main view */
+.olist li { border-radius: 12px; background: var(--surface); border-color: var(--border); }
+.olist li.over { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.kwrow, .prop, .opreview, .jlist { border-radius: var(--radius-sm); }
+.kwrow { background: var(--surface); }
+.kwrow:focus-within { box-shadow: 0 0 0 4px var(--accent-soft); }
+.srow, .rule, .radio label { border-radius: 14px; }
+.srow:hover { background: var(--row); }
+.rule { background: var(--surface); }
+.jlist { background: var(--surface); }
+.jline.run { background: var(--accent-soft); }
+.step { background: var(--surface); }
+.step .num { background: linear-gradient(110deg, var(--accent), var(--accent-2)); color: var(--on-accent); }
+.welcome h1 { font-family: var(--font-display); font-weight: 300; font-size: 34px; letter-spacing: -.03em; }
+.cnt .track > div { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.track { background: var(--surface-2); }
+.kv dt { color: var(--faint); }
+.toast { backdrop-filter: blur(18px); }
 /* scrollbars, thin and quiet */
 * { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; }
 
