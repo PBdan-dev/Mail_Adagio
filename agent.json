@@ -1,11 +1,11 @@
 {
   "name": "mail-adagio",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Sorts Gmail: gives each mail one theme and one status, using an AI model you choose. Never deletes mail.",
-  "status": "Step 3: sorts the inbox by batches (labels + out of the Inbox), with approval, undo and resume. Senders page: subscriptions and suggested rules.",
+  "status": "Step 3: sorts the inbox by batches (labels + out of the Inbox), with approval, undo and resume. 'To check' label for unsure mails, a journal of every mail, learning from the changes you make in Gmail. Senders page: subscriptions and suggested rules.",
   "how_to_call": "python adagio.py call   (one JSON request on stdin, one JSON result on stdout)",
   "input": {
-    "action": "check | hardware | preview | estimate | plan | apply | discard | undo | status | correct | rules | delete_rule | add_rule | scan | senders | sender_state | suggest | label_order | keep | to_delete | trash | restore",
+    "action": "capabilities | check | hardware | preview | estimate | plan | apply | discard | undo | status | correct | rules | delete_rule | add_rule | scan | senders | sender_state | suggest | keep | to_delete | learn_gmail | why | journal | proposals | ignore_proposal  (window only, refused here: trash | restore | label_order)",
     "scope": "estimate/plan: {kind: count|days|all, value: N}",
     "batch_size": "estimate/plan: mails per batch, 50 to 1000 (default from config)",
     "act_alone": "plan: true = apply the batch right away (default from config)",
@@ -22,9 +22,10 @@
     "min_mails": "suggest: only senders with at least N mails (default 5)",
     "add_rule": "{kind: sender|domain, value, theme, status}",
     "sender_state": "{address, state: ''|opened|hidden}",
-    "label_order": "{order: [names], numbered: bool, apply: bool}: without apply, only the renames it would make",
     "keep": "{gm_msgid}: untick 'To delete' on a mail of the plan",
-    "trash": "{confirm: N}: moves the N mails labelled 'To delete' to Gmail Trash (only on request, N must match)"
+    "why": "{gm_msgid}: the model says in one sentence why it chose this theme and status",
+    "journal": "{kind: all|mails|check|learned, q: words, n: lines (default 500)}",
+    "ignore_proposal": "{sender, theme, status}: do not propose this rule again"
   },
   "output": {
     "ok": "true or false",
@@ -32,7 +33,7 @@
     "agent": "mail-adagio",
     "action": "the action that ran",
     "estimate": "{mails, batches, batch_size, duration_s, cost_usd, cost_note}",
-    "plan": "{plan: {batch_id, processed, by_theme, by_status, fallbacks, labels, mails: [{gm_msgid, date, sender, subject, theme, status, rule, state}]}, progress: {done, total, batch_no, batches, finished}}",
+    "plan": "{plan: {batch_id, processed, by_theme, by_status, fallbacks, to_check, check_label, labels, mails: [{gm_msgid, date, sender, subject, theme, status, confidence, to_check, reason, rule, state}]}, progress: {done, total, batch_no, batches, finished}, learned}",
     "apply": "{applied, moved, read, skipped, changes_made, progress}",
     "undo": "{undone, back_in_inbox, changes_made, progress}",
     "status": "{progress, plan, last, act_alone, batch_size, archive, labels}",
@@ -40,14 +41,19 @@
     "scan": "{mailbox, mails, senders, with_unsubscribe, changes_made: 0}",
     "senders": "{scan, with_unsubscribe, senders: [{address, name, domain, mails, last_date, unsubscribe, state, theme, status, votes, rule}]}",
     "suggest": "{suggested, checked, model, changes_made: 0}",
-    "label_order": "{numbered, statuses, themes, labels, renames: [{name, old, new}], renamed}",
     "to_delete": "{label, count, last_trash}",
-    "trash": "{trashed, trash_id}",
-    "restore": "{restored, still_in_trash, missing, warning?}"
+    "error_code": "with ok false: gmail_login | offline | ollama_down | ollama_missing | '' ",
+    "capabilities": "{name, contract, actions, ui_only, how_to_call}",
+    "learn_gmail": "{checked, changed, checked_off, changes: [{gm_msgid, sender, subject, old, new}], proposals: [{sender, theme, status, count}], changes_made: 0}",
+    "why": "{gm_msgid, reason, model}",
+    "journal": "{lines (newest first), total, path}",
+    "proposals": "{proposals: [{sender, theme, status, count}]}"
   },
   "never": [
     "delete mail on its own (Trash only when you click and confirm; never permanent: no EXPUNGE)",
     "store mail content (only id, date, sender, subject and tags)",
-    "unsubscribe on its own (it only gives you the link)"
+    "unsubscribe on its own (it only gives you the link)",
+    "move mail to the Trash, restore it or rename labels on another program's request (window only)",
+    "change Gmail while learning from your changes (it only reads labels)"
   ]
 }

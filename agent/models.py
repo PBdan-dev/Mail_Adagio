@@ -3,9 +3,13 @@
 The rest of the code only calls `ask(system, user, schema)` and never knows which model answered.
 """
 import json
-import time
+import shutil
 import socket
+import subprocess
+import sys
+import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 DEFAULT_URLS = {
@@ -15,7 +19,9 @@ DEFAULT_URLS = {
 
 
 class ModelError(Exception):
-    pass
+    def __init__(self, message="", code=""):
+        super().__init__(message)
+        self.code = code  # ollama_down | ollama_missing | "" : lets the page show the right help
 
 
 class ModelTimeout(ModelError):
@@ -87,9 +93,49 @@ def _openai_compatible(name, key, url):
     return ask
 
 
-def ollama_models(url=None):
-    """What Ollama has: {'installed': [names], 'running': [names loaded in memory]}."""
+OLLAMA_DOWN = ("Ollama is not running. Start it: open the Ollama app (Windows Start menu), "
+               "or run `ollama serve` in a terminal. Then try again.")
+OLLAMA_MISSING = ("Ollama is not installed on this computer. Get it at https://ollama.com/download, "
+                  "then run: ollama pull qwen3.5:9b")
+tried_start = {"done": False}  # start Ollama at most once per session: never wait on it again and again
+
+
+def start_ollama(url=None, wait=20):
+    """Ollama is not running: start it if it is installed on this computer. True if it now answers."""
     url = (url or DEFAULT_URLS["ollama"]).rstrip("/")
+    host = urllib.parse.urlparse(url).hostname or ""
+    exe = _ollama_exe()
+    if tried_start["done"] or host not in ("localhost", "127.0.0.1") or not exe:
+        return False
+    tried_start["done"] = True
+    flags = (subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS) if sys.platform == "win32" else 0
+    try:
+        subprocess.Popen([exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         stdin=subprocess.DEVNULL, creationflags=flags, start_new_session=sys.platform != "win32")
+    except OSError:
+        return False
+    for _ in range(wait * 2):
+        try:
+            _get(f"{url}/api/tags", timeout=1)
+            return True
+        except ModelError:
+            time.sleep(0.5)
+    return False
+
+
+def ollama_models(url=None, start=False):
+    """What Ollama has: {'installed': [names], 'running': [names loaded in memory]}.
+
+    start: if Ollama is not running, try to start it once, else say clearly how to."""
+    url = (url or DEFAULT_URLS["ollama"]).rstrip("/")
+    try:
+        _get(f"{url}/api/tags", timeout=3)
+    except ModelError as e:
+        if not (start and start_ollama(url)):
+            local = (urllib.parse.urlparse(url).hostname or "") in ("localhost", "127.0.0.1")
+            if local and not _ollama_exe():
+                raise ModelError(OLLAMA_MISSING, "ollama_missing") from e
+            raise ModelError(OLLAMA_DOWN if local else f"Ollama does not answer at {url}.", "ollama_down") from e
     installed = _get(f"{url}/api/tags").get("models") or []
     running = _get(f"{url}/api/ps").get("models") or []
     return {"installed": [m.get("name") or m.get("model") for m in installed],
@@ -144,6 +190,13 @@ def _ollama(name, url, timeout=60):
         except (KeyError, TypeError) as e:
             raise ModelError(f"Unexpected answer: {str(data)[:200]}") from e
     return ask
+
+
+def _ollama_exe():
+    """Path of the ollama program, "" if not installed (on Windows it is not always on the PATH)."""
+    import os
+    default = os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe") if sys.platform == "win32" else ""
+    return shutil.which("ollama") or (default if default and os.path.exists(default) else "")
 
 
 def _get(url, timeout=5):

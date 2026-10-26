@@ -29,7 +29,15 @@ CREATE TABLE IF NOT EXISTS examples (
     status  TEXT NOT NULL,
     created TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
+CREATE TABLE IF NOT EXISTS ignored (     -- rule proposals you said no to
+    sender  TEXT NOT NULL,
+    theme   TEXT NOT NULL,
+    status  TEXT NOT NULL,
+    UNIQUE (sender, theme, status)
+);
 """
+
+PROPOSE_AFTER = 2  # corrections of the same sender to the same theme and status: propose a rule
 
 
 def address(sender):
@@ -90,6 +98,33 @@ class Memory:
         with self.db:
             self.db.execute("INSERT INTO examples (sender, subject, theme, status) VALUES (?, ?, ?, ?)",
                             (address(sender) or sender, subject[:200], theme, status))
+
+    # rule proposals: the same correction several times for one sender ----------
+    def proposals(self, themes, statuses):
+        """[{sender, theme, status, count}] that would make a good rule, most corrections first."""
+        rows = self.db.execute(
+            "SELECT sender, theme, status, COUNT(*) AS count, MAX(id) AS last FROM examples "
+            "GROUP BY sender, theme, status HAVING COUNT(*) >= ? ORDER BY count DESC, last DESC",
+            (PROPOSE_AFTER,)).fetchall()
+        out = []
+        for r in rows:
+            r = dict(r)
+            latest = self.db.execute("SELECT theme, status FROM examples WHERE sender = ? ORDER BY id DESC LIMIT 1",
+                                     (r["sender"],)).fetchone()
+            rule = self.match(r["sender"], themes, statuses)
+            if ("@" not in r["sender"] or r["theme"] not in themes or r["status"] not in statuses
+                    or (latest["theme"], latest["status"]) != (r["theme"], r["status"])  # you changed your mind
+                    or (rule and (rule["theme"], rule["status"]) == (r["theme"], r["status"]))
+                    or self.db.execute("SELECT 1 FROM ignored WHERE sender = ? AND theme = ? AND status = ?",
+                                       (r["sender"], r["theme"], r["status"])).fetchone()):
+                continue
+            out.append({k: r[k] for k in ("sender", "theme", "status", "count")})
+        return out
+
+    def ignore(self, sender, theme, status):
+        with self.db:
+            self.db.execute("INSERT OR IGNORE INTO ignored (sender, theme, status) VALUES (?, ?, ?)",
+                            (address(sender) or sender, theme, status))
 
     def examples(self, n=8):
         rows = self.db.execute("SELECT * FROM examples ORDER BY id DESC LIMIT ?", (n,))

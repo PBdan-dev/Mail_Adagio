@@ -36,6 +36,7 @@ class App:
         self.lock = threading.Lock()
         self.job = {"running": False, "kind": "", "done": 0, "total": 0, "model": "", "stop": False}
         self.error = ""      # why the last background job failed
+        self.error_code = ""  # gmail_login, ollama_down...: the page shows the right help
         self.notice = None   # what the last apply/undo did
         self.demo_behavior = {"act_alone": False, "batch_size": 50}
         self.demo_order = None
@@ -72,6 +73,7 @@ class App:
         g = (cfg or {}).get("gmail", {})
         m = (cfg or {}).get("model", {})
         job, stopping, error, notice = dict(self.job), self.job["stop"], self.error, self.notice  # before reading
+        error_code = self.error_code
         sort = self.call({"action": "status"}, cfg=cfg) if cfg else None  # the database, never older than job
         job.pop("stop")
         return {
@@ -91,7 +93,7 @@ class App:
             "keywords": config.keywords(cfg) if cfg else {},
             "default_keywords": config.DEFAULT_KEYWORDS,
             "default_models": config.DEFAULT_MODELS,
-            "job": job, "stopping": stopping, "error": error, "notice": notice,
+            "job": job, "stopping": stopping, "error": error, "error_code": error_code, "notice": notice,
             "sort": sort if sort and sort.get("ok") else None,
             "log": core.read_log(40),
             "outdated": code_stamp() != self.stamp,  # files updated while open: a restart is needed
@@ -121,7 +123,7 @@ class App:
             if info["provider"] == "ollama":
                 info["loaded"] = info["model"] in info["running"]
         except (config.ConfigError, models.ModelError) as e:
-            info.update(ok=False, error=str(e), loaded=False)
+            info.update(ok=False, error=str(e), loaded=False, error_code=getattr(e, "code", ""))
         return info
 
     def start_load(self, body):
@@ -152,9 +154,11 @@ class App:
                 self.demo_behavior["mark_read"] = bool(body["mark_read"])
             if isinstance(body.get("mark_read_themes"), list):
                 self.demo_behavior["mark_read_themes"] = [str(x) for x in body["mark_read_themes"]]
+            if "learn_gmail" in body:
+                self.demo_behavior["learn_gmail"] = bool(body["learn_gmail"])
             return
         config.save_behavior(self.config_path, body.get("act_alone"), body.get("batch_size"),
-                             body.get("mark_read"), body.get("mark_read_themes"))
+                             body.get("mark_read"), body.get("mark_read_themes"), body.get("learn_gmail"))
 
     def label_order(self, body):
         """Preview, or apply, a new order and numbering of the labels."""
@@ -189,17 +193,34 @@ class App:
             if self.job["running"]:
                 return False
             self.job = {"running": True, "kind": kind, "done": 0, "total": 0, "model": "", "stop": False}
-            self.error = ""
+            self.error, self.error_code = "", ""
 
         def run():
             try:
                 work()
             except Exception as e:  # shown on the page, the server keeps running
                 self.error = f"{type(e).__name__}: {e}"
+                self.error_code = getattr(e, "code", "")
             finally:
                 self.job["running"] = False
         threading.Thread(target=run, daemon=True).start()
         return True
+
+    def fail(self, r):
+        self.error, self.error_code = r["error"], r.get("error_code", "")
+
+    def start_learn(self):
+        """The "Learn from my Gmail changes" button."""
+        cfg = self.cfg()
+
+        def work():
+            r = self.call({"action": "learn_gmail"}, cfg=cfg)
+            if r["ok"]:
+                self.notice = {"kind": "learn", **{k: r[k] for k in ("checked", "changed", "checked_off")},
+                               "proposals": len(r["proposals"])}
+            else:
+                self.fail(r)
+        return self.start("learn", work)
 
     def progress(self, i, n, row):
         if i == 0:
@@ -224,8 +245,12 @@ class App:
                 r = self.call(request, progress=self.progress, cfg=cfg)
                 request["restart"] = False
                 if not r["ok"]:
-                    self.error = r["error"]
+                    self.fail(r)
                     return
+                learned = r.get("learned") or {}
+                if learned.get("changed") or learned.get("checked_off"):
+                    self.notice = {"kind": "learn", **{k: learned[k] for k in ("checked", "changed", "checked_off")},
+                                   "proposals": len(learned.get("proposals") or [])}
                 if r.get("stopped"):
                     plan = r.get("plan") or {}
                     self.notice = {"kind": "stopped", "analysed": plan.get("processed", 0)}
@@ -247,7 +272,7 @@ class App:
             if r["ok"]:
                 self.notice = {"kind": "apply", **{k: r[k] for k in ("applied", "moved", "skipped", "read")}}
             else:
-                self.error = r["error"]
+                self.fail(r)
         return self.start("apply", work)
 
     def start_simple(self, kind, request):
@@ -262,7 +287,7 @@ class App:
                 self.notice = {"kind": kind, **{k: r[k] for k in ("mails", "senders", "with_unsubscribe",
                                                                   "suggested", "checked") if k in r}}
             else:
-                self.error = r["error"]
+                self.fail(r)
         return self.start(kind, work)
 
     def start_undo(self):
@@ -273,7 +298,7 @@ class App:
             if r["ok"]:
                 self.notice = {"kind": "undo", "undone": r["undone"], "back_in_inbox": r["back_in_inbox"]}
             else:
-                self.error = r["error"]
+                self.fail(r)
         return self.start("undo", work)
 
 
@@ -315,6 +340,11 @@ def make_handler(app, port):
                 return self.send(200, app.call({"action": "senders"}))
             if self.path == "/api/todelete":
                 return self.send(200, app.call({"action": "to_delete"}))
+            if self.path.startswith("/api/journal"):
+                from urllib.parse import parse_qs, urlparse
+                q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+                return self.send(200, app.call({"action": "journal", "kind": q.get("kind"), "q": q.get("q"),
+                                                "n": q.get("n") or 500}))
             if self.path == "/api/hardware":
                 return self.send(200, core.handle({"action": "hardware"}))
             self.send(404, {"error": "not found"})
@@ -348,7 +378,8 @@ def make_handler(app, port):
             simple = {"/api/correct": "correct", "/api/rules/delete": "delete_rule",
                       "/api/estimate": "estimate", "/api/discard": "discard",
                       "/api/sender": "sender_state", "/api/rule": "add_rule", "/api/keep": "keep",
-                      "/api/trash": "trash", "/api/restore": "restore"}
+                      "/api/trash": "trash", "/api/restore": "restore", "/api/why": "why",
+                      "/api/proposal/ignore": "ignore_proposal"}
             if self.path in simple:
                 return self.send(200, app.call({**body, "action": simple[self.path]}))
             if self.path == "/api/check":
@@ -374,7 +405,7 @@ def make_handler(app, port):
                 return threading.Thread(target=app.server.shutdown, daemon=True).start()
             starters = {"/api/plan": lambda: app.start_plan(body), "/api/apply": lambda: app.start_apply(body),
                         "/api/load": lambda: app.start_load(body),
-                        "/api/undo": app.start_undo,
+                        "/api/undo": app.start_undo, "/api/learn": app.start_learn,
                         "/api/scan": lambda: app.start_simple("scan", {"action": "scan"}),
                         "/api/suggest": lambda: app.start_simple("suggest", {"action": "suggest",
                                                                              "top": body.get("top") or 20})}

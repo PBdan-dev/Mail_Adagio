@@ -185,9 +185,21 @@ def gmail_factory(address, password, host):
 DELAY = 0.15
 
 
+UNSURE = {  # subject: (reason, confidence) for the mails the made-up model is not sure about
+    "You are on a 30-day streak": ("A learning app reminder: could be a notification or a newsletter, "
+                                   "nothing to act on.", "low"),
+    "A game on your wishlist is on sale": ("A sale on a game you follow: a promotion, but it could also "
+                                           "be shopping.", "low"),
+}
+
+
 def ask(system, user, schema):
     time.sleep(DELAY)  # feel of a real model
     for sender, subject, _text, theme, status, _day in SAMPLES:
         if subject in user:
-            return json.dumps({"theme": theme, "status": status, "to_delete": theme == "Promotions"})
+            reason, confidence = UNSURE.get(subject, (f"The sender and the subject point to {theme}.", "high"))
+            if "reason" in schema.get("properties", {}):
+                return json.dumps({"reason": reason})
+            return json.dumps({"theme": theme, "status": status, "confidence": confidence,
+                               "to_delete": theme == "Promotions"})
     return "{}"

@@ -22,6 +22,7 @@ behavior:
   mark_read: false          # true = mark low-interest mails as read (themes below, status Info only)
   mark_read_themes: ["Newsletters", "Promotions", "Social & Notifications"]
   archive: true             # true = move sorted mails out of the Inbox (they stay in their theme label)
+  learn_gmail: true         # before each batch, learn from the sorted mails you moved in Gmail (labels only)
   body_chars: 1500          # how many characters of each mail the model reads
 
 # Themes: one per mail. Add, rename or remove freely. Each theme is a Gmail label (a "folder").

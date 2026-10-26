@@ -46,9 +46,10 @@ def check(cfg):
     kw = cfg.get("keywords") or {}
     if not isinstance(kw, dict) or not all(isinstance(v, list) for v in kw.values()):
         raise ConfigError("keywords must map each theme to a list of words")
-    all_labels = list(labels(cfg).values()) + [delete_label(cfg)]
+    all_labels = list(labels(cfg).values()) + [check_label(cfg), delete_label(cfg)]
     if len({x.lower() for x in all_labels}) != len(all_labels):
-        raise ConfigError(f"Two themes or statuses would get the same Gmail label (\"{TO_DELETE}\" is taken)")
+        raise ConfigError(f"Two themes or statuses would get the same Gmail label "
+                          f"(\"{TO_CHECK}\" and \"{TO_DELETE}\" are taken)")
     for label in all_labels:
         if label.lower() in GMAIL_RESERVED or label.startswith("[Gmail]"):
             raise ConfigError(f"Gmail does not allow a label named '{label}'. "
@@ -66,6 +67,7 @@ def check(cfg):
     cfg["model"].setdefault("timeout_s", 60)
     cfg["behavior"].setdefault("to_delete", True)
     cfg["behavior"].setdefault("mark_read", False)
+    cfg["behavior"].setdefault("learn_gmail", True)
     cfg["behavior"].setdefault("mark_read_themes", list(LOW_INTEREST))
     if not isinstance(cfg["behavior"]["mark_read_themes"], list):
         raise ConfigError("behavior.mark_read_themes must be a list of theme names")
@@ -78,6 +80,14 @@ LOW_STATUS = "Info"
 
 
 TO_DELETE = "To delete"  # label for mails the model finds useless; only you send them to the Trash
+
+
+TO_CHECK = "To check"  # label for mails the model is not sure about: have a look
+
+
+def check_label(cfg):
+    """Gmail label of the mails to check: "97 - To check" when labels are numbered."""
+    return f"97 - {TO_CHECK}" if numbered(cfg) else TO_CHECK
 
 
 def delete_label(cfg):
@@ -114,8 +124,9 @@ DEFAULT_COLORS = {
     "job search": "Purple", "shopping & deliveries": "Orange", "travel": "Mint", "family & friends": "Pink",
     "newsletters": "Dark Green", "promotions": "Gray", "social & notifications": "Light Gray",
     "other": "Brown", "important": "Red", "to do": "Yellow", "info": "Dark Gray", "to delete": "Dark Red",
+    "to check": "Dark Orange",
 }
-SPARE_COLORS = ["Dark Purple", "Dark Pink", "Dark Orange", "Black"]  # for your own themes
+SPARE_COLORS = ["Dark Purple", "Dark Pink", "Black"]  # for your own themes
 
 
 def color_of(entry, spare=0):
@@ -130,6 +141,7 @@ def colors(cfg):
         name = color_of(e, spare)
         spare += not e.get("color") and e["name"].lower() not in DEFAULT_COLORS
         out[e["name"]] = {"gmail": name, "hex": GMAIL_COLORS.get(name, "#666666")}
+    out[TO_CHECK] = {"gmail": "Dark Orange", "hex": GMAIL_COLORS["Dark Orange"]}
     out[TO_DELETE] = {"gmail": "Dark Red", "hex": GMAIL_COLORS["Dark Red"]}
     return out
 
@@ -300,10 +312,12 @@ def save_order(path, names_in_order=None):
     return load(path)
 
 
-def save_behavior(path, act_alone=None, batch_size=None, mark_read=None, mark_read_themes=None):
+def save_behavior(path, act_alone=None, batch_size=None, mark_read=None, mark_read_themes=None, learn_gmail=None):
     """The run options shown on the page."""
     ensure_file(path)
     values = {}
+    if learn_gmail is not None:
+        values["learn_gmail"] = bool(learn_gmail)
     if mark_read is not None:
         values["mark_read"] = bool(mark_read)
     if mark_read_themes is not None:

@@ -47,7 +47,11 @@ CREATE TABLE IF NOT EXISTS mails (
     added      TEXT NOT NULL DEFAULT '[]', -- labels the agent added (JSON list)
     archived   INTEGER NOT NULL DEFAULT 0, -- 1 = the agent moved it out of the Inbox
     marked_read INTEGER NOT NULL DEFAULT 0, -- 1 = it was unread and the agent marked it as read
-    to_delete  INTEGER NOT NULL DEFAULT 0  -- 1 = proposed for deletion (label "To delete")
+    to_delete  INTEGER NOT NULL DEFAULT 0, -- 1 = proposed for deletion (label "To delete")
+    confidence TEXT NOT NULL DEFAULT '',  -- high | medium | low, from the model ('' = a rule decided)
+    to_check   INTEGER NOT NULL DEFAULT 0, -- 1 = the model was not sure: label "To check"
+    reason     TEXT NOT NULL DEFAULT '',  -- one sentence from the model, only for the mails to check
+    all_uid    INTEGER NOT NULL DEFAULT 0 -- id in All Mail, to read its labels again later (0 = unknown)
 );
 CREATE TABLE IF NOT EXISTS trash (
     gm_msgid TEXT NOT NULL,
@@ -56,6 +60,11 @@ CREATE TABLE IF NOT EXISTS trash (
     restored INTEGER NOT NULL DEFAULT 0
 );
 """
+
+
+NEW_COLUMNS = [("marked_read", "INTEGER NOT NULL DEFAULT 0"), ("to_delete", "INTEGER NOT NULL DEFAULT 0"),
+               ("confidence", "TEXT NOT NULL DEFAULT ''"), ("to_check", "INTEGER NOT NULL DEFAULT 0"),
+               ("reason", "TEXT NOT NULL DEFAULT ''"), ("all_uid", "INTEGER NOT NULL DEFAULT 0")]
 
 
 def now():
@@ -68,10 +77,10 @@ class Store:
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
         columns = {r["name"] for r in self.db.execute("PRAGMA table_info(mails)")}
-        for column in ("marked_read", "to_delete"):  # adagio.db made by an older version
+        for column, kind in NEW_COLUMNS:  # adagio.db made by an older version
             if column not in columns:
                 with self.db:
-                    self.db.execute(f"ALTER TABLE mails ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0")
+                    self.db.execute(f"ALTER TABLE mails ADD COLUMN {column} {kind}")
 
     def close(self):
         self.db.close()
@@ -128,11 +137,12 @@ class Store:
             for r in rows:
                 self.db.execute(
                     "INSERT OR REPLACE INTO mails (gm_msgid, batch_id, uid, date, sender, subject, "
-                    "theme, status, classified, rule, error, state, to_delete) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?)",
+                    "theme, status, classified, rule, error, state, to_delete, confidence, to_check, reason) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?)",
                     (r["gm_msgid"], cur.lastrowid, r["uid"], r["date"], r["sender"], r["subject"][:300],
                      r["theme"], r["status"], int(r["classified"]), r.get("rule", ""), r.get("error", ""),
-                     int(bool(r.get("to_delete")))))
+                     int(bool(r.get("to_delete"))), r.get("confidence", ""), int(bool(r.get("to_check"))),
+                     r.get("reason", "")[:300]))
         return cur.lastrowid
 
     def mails(self, batch_id):
@@ -142,6 +152,7 @@ class Store:
             r["classified"], r["corrected"], r["archived"] = (bool(r["classified"]), bool(r["corrected"]),
                                                               bool(r["archived"]))
             r["marked_read"], r["to_delete"] = bool(r["marked_read"]), bool(r["to_delete"])
+            r["to_check"] = bool(r["to_check"])
         return rows
 
     def set_state(self, batch_id, state):
@@ -163,22 +174,56 @@ class Store:
     def correct(self, gm_msgid, theme, status):
         with self.db:
             self.db.execute("UPDATE mails SET theme = ?, status = ?, classified = 1, error = '', "
-                            "corrected = 1, rule = '', to_delete = 0 WHERE gm_msgid = ? AND state = 'planned'",
+                            "corrected = 1, rule = '', to_delete = 0, to_check = 0 WHERE gm_msgid = ? AND state = 'planned'",
                             (theme, status, str(gm_msgid)))
 
     def apply_rule(self, gm_msgid, theme, status, rule):
         with self.db:
             self.db.execute("UPDATE mails SET theme = ?, status = ?, classified = 1, error = '', "
-                            "rule = ?, to_delete = 0 WHERE gm_msgid = ? AND state = 'planned' AND corrected = 0",
+                            "rule = ?, to_delete = 0, to_check = 0 WHERE gm_msgid = ? AND state = 'planned' AND corrected = 0",
                             (theme, status, rule, gm_msgid))
 
-    def mark(self, gm_msgid, state, added=None, archived=None, read=False):
+    def mark(self, gm_msgid, state, added=None, archived=None, read=False, all_uid=0):
         with self.db:
             if added is None:
                 self.db.execute("UPDATE mails SET state = ? WHERE gm_msgid = ?", (state, gm_msgid))
             else:
-                self.db.execute("UPDATE mails SET state = ?, added = ?, archived = ?, marked_read = ? "
-                                "WHERE gm_msgid = ?", (state, json.dumps(added), int(archived), int(read), gm_msgid))
+                self.db.execute("UPDATE mails SET state = ?, added = ?, archived = ?, marked_read = ?, all_uid = ? "
+                                "WHERE gm_msgid = ?", (state, json.dumps(added), int(archived), int(read),
+                                                       int(all_uid or 0), gm_msgid))
+
+    def mail(self, gm_msgid):
+        row = self.one("SELECT * FROM mails WHERE gm_msgid = ?", str(gm_msgid))
+        if row:
+            row["added"] = json.loads(row["added"])
+        return row
+
+    def set_reason(self, gm_msgid, reason):
+        with self.db:
+            self.db.execute("UPDATE mails SET reason = ? WHERE gm_msgid = ?", (reason[:300], str(gm_msgid)))
+
+    def set_all_uid(self, gm_msgid, all_uid):
+        with self.db:
+            self.db.execute("UPDATE mails SET all_uid = ? WHERE gm_msgid = ?", (int(all_uid), str(gm_msgid)))
+
+    def applied(self, n=2000):
+        """The mails the agent labelled, most recent batches first (to read their labels again)."""
+        rows = self.all("SELECT * FROM mails WHERE state = 'applied' ORDER BY batch_id DESC, uid DESC LIMIT ?", n)
+        for r in rows:
+            r["added"] = json.loads(r["added"])
+        return rows
+
+    def changed_in_gmail(self, gm_msgid, theme, status, checked):
+        """You changed the theme or status of a sorted mail in Gmail: keep the new one."""
+        with self.db:
+            self.db.execute("UPDATE mails SET theme = ?, status = ?, corrected = 1, rule = '', "
+                            "to_check = CASE WHEN ? THEN 0 ELSE to_check END WHERE gm_msgid = ?",
+                            (theme, status, int(checked), str(gm_msgid)))
+
+    def checked(self, gm_msgid):
+        """You removed the label "To check" in Gmail: the mail is checked."""
+        with self.db:
+            self.db.execute("UPDATE mails SET to_check = 0 WHERE gm_msgid = ?", (str(gm_msgid),))
 
     def keep(self, gm_msgid):
         """You un-ticked "To delete" on a mail of the plan."""

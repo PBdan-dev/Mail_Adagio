@@ -212,7 +212,7 @@ class TestModelChoice(unittest.TestCase):
         from agent import models
         self.models = models
         self.saved = models.ollama_models
-        models.ollama_models = lambda url=None: {"installed": ["qwen3.5:9b", "gemma4:e4b"],
+        models.ollama_models = lambda url=None, start=False: {"installed": ["qwen3.5:9b", "gemma4:e4b"],
                                                  "running": ["gemma4:e4b"]}
 
     def tearDown(self):
@@ -244,7 +244,7 @@ class TestModelChoice(unittest.TestCase):
 
     def test_nothing_loaded_uses_the_last_model(self):
         from agent import batches
-        self.models.ollama_models = lambda url=None: {"installed": ["qwen3.5:9b", "gemma4:e4b"], "running": []}
+        self.models.ollama_models = lambda url=None, start=False: {"installed": ["qwen3.5:9b", "gemma4:e4b"], "running": []}
         tmp = Path(tempfile.mkdtemp())
         core.MEMORY_PATH = tmp / "adagio.db"
         saved = hardware.detect
@@ -262,7 +262,7 @@ class TestModelChoice(unittest.TestCase):
             shutil.rmtree(tmp)
 
     def test_no_model_installed(self):
-        self.models.ollama_models = lambda url=None: {"installed": [], "running": []}
+        self.models.ollama_models = lambda url=None, start=False: {"installed": [], "running": []}
         with self.assertRaises(self.models.ModelError):
             core.resolve_model(self.cfg("active"))
 
@@ -370,7 +370,7 @@ class TestLearning(unittest.TestCase):
         result = core.handle({"action": "preview", "limit": 10}, cfg=cfg, gmail_factory=fake_gmail, ask=ask)
         flight = next(m for m in result["mails"] if m["sender"].startswith("Air"))
         self.assertEqual((flight["theme"], flight["status"], flight["rule"]), ("Travel", "Important", "domain: air.com"))
-        self.assertEqual(len(calls), 2)  # 3 mails, one handled by the rule
+        self.assertEqual(len(calls), 4)  # 3 mails, one by the rule; 2 by the model + 2 reasons ("Other": to check)
         self.assertEqual(result["by_rule"], 1)
 
     def test_corrections_become_examples_in_the_prompt(self):
@@ -482,7 +482,7 @@ class TestStep3(unittest.TestCase):
         cfg = cfg_with()
         c = config.colors(cfg)
         self.assertEqual((c["Job Search"]["gmail"], c["Important"]["hex"]), ("Purple", "#fb4c2f"))
-        self.assertEqual(len({v["gmail"] for v in c.values()}), 16)  # all different, "To delete" included
+        self.assertEqual(len({v["gmail"] for v in c.values()}), 17)  # all different, "To check/delete" included
         cfg["themes"].insert(0, {"name": "Music"})
         self.assertEqual(config.colors(cfg)["Music"]["gmail"], "Dark Purple")
         cfg["themes"][0]["color"] = "Neon"
@@ -695,7 +695,7 @@ class TestToDeleteAndRead(unittest.TestCase):
 
     def test_model_answer(self):
         self.assertEqual(classify.parse('{"theme": "Promotions", "status": "Info", "to_delete": true}', self.cfg),
-                         ("Promotions", "Info", True))
+                         ("Promotions", "Info", True, "medium"))
         self.assertFalse(classify.parse('{"theme": "Finance", "status": "To Do", "to_delete": true}', self.cfg)[2])
         self.assertIn("to_delete", classify.schema(self.cfg)["required"])
         self.cfg["behavior"]["to_delete"] = False
@@ -756,6 +756,132 @@ class TestToDeleteAndRead(unittest.TestCase):
                                   if not x.strip().startswith(("mark_read", "to_delete", "archive"))), encoding="utf-8")
         cfg = config.save_behavior(path, mark_read=True, mark_read_themes=["Promotions"])
         self.assertEqual((cfg["behavior"]["mark_read"], cfg["behavior"]["mark_read_themes"]), (True, ["Promotions"]))
+
+
+class TestReliability(unittest.TestCase):
+    """v0.5: JSON door limits, "To check", clear errors, per-mail journal, learning from Gmail changes."""
+
+    def setUp(self):
+        from agent import demo
+        self.demo = demo
+        demo.DELAY = 0
+        demo.FakeIMAP.reset(copies=2)  # 28 mails, 4 the model is not sure about
+        self.tmp = Path(tempfile.mkdtemp())
+        core.MEMORY_PATH = self.tmp / "adagio.db"
+        core.LOG_PATH = self.tmp / "adagio.log"
+        self.cfg = cfg_with()
+
+    def tearDown(self):
+        core.MEMORY_PATH, core.LOG_PATH = ":memory:", None
+        shutil.rmtree(self.tmp)
+
+    def run_(self, door="app", **request):
+        return core.handle(request, cfg=self.cfg, gmail_factory=self.demo.gmail_factory, ask=self.demo.ask,
+                           door=door)
+
+    def sorted_batch(self):
+        plan = self.run_(action="plan", scope={"kind": "all"}, batch_size=50)
+        self.assertTrue(plan["ok"], plan.get("error"))
+        self.run_(action="apply", batch_id=plan["plan"]["batch_id"], skip=[])
+        return plan["plan"]
+
+    def test_json_door_refuses_trash_restore_and_renaming(self):
+        for action in ("trash", "restore", "label_order"):
+            r = self.run_(door="json", action=action, confirm=0)
+            self.assertFalse(r["ok"])
+            self.assertIn("only available in the Mail Adagio window", r["error"])
+        self.assertTrue(self.run_(action="label_order")["ok"])  # the window can
+        cap = self.run_(door="json", action="capabilities")
+        self.assertTrue(cap["ok"])
+        self.assertEqual(cap["ui_only"], ["trash", "restore", "label_order"])
+        self.assertNotIn("trash", cap["actions"])
+        self.assertIn("plan", cap["actions"])
+        self.assertEqual(cap["contract"]["name"], "mail-adagio")
+
+    def test_to_check_label_reason_and_journal(self):
+        plan = self.sorted_batch()
+        unsure = [m for m in plan["mails"] if m["to_check"]]
+        self.assertEqual(plan["to_check"], 4)
+        self.assertTrue(all(m["reason"] and m["confidence"] == "low" for m in unsure))
+        self.assertTrue(all(not m["reason"] for m in plan["mails"] if not m["to_check"]))  # no extra call
+        labelled = [m for m in self.demo.FakeIMAP.mails.values() if "To check" in m["labels"]]
+        self.assertEqual(len(labelled), 4)
+        self.assertIn("To check", core.all_labels(self.cfg))
+        activity = core.read_log(100)
+        self.assertFalse(any(core.MAIL_LINE in x for x in activity))  # the activity list stays short
+        lines = self.run_(action="journal", kind="mails")["lines"]
+        self.assertEqual(len(lines), 28)
+        self.assertTrue(any("model (high)" in x and "out of the Inbox" in x for x in lines))
+        self.assertEqual(len(self.run_(action="journal", kind="check")["lines"]), 4)
+        self.assertEqual(len(self.run_(action="journal", q="streak")["lines"]), 2)
+        self.run_(action="undo")
+        self.assertFalse(any("To check" in m["labels"] for m in self.demo.FakeIMAP.mails.values()))
+
+    def test_a_correction_clears_to_check(self):
+        plan = self.run_(action="plan", scope={"kind": "all"}, batch_size=50)["plan"]
+        m = next(x for x in plan["mails"] if x["to_check"])
+        r = self.run_(action="correct", gm_msgid=m["gm_msgid"], sender=m["sender"], subject=m["subject"],
+                      theme="Promotions", status="Info")
+        self.assertEqual(r["plan"]["to_check"], 3)
+
+    def test_why(self):
+        plan = self.sorted_batch()
+        m = next(x for x in plan["mails"] if not x["to_check"])
+        r = self.run_(action="why", gm_msgid=m["gm_msgid"])
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertIn(m["theme"], r["reason"])
+        self.assertTrue(any("why ·" in x for x in core.read_log(50, mails=True)))
+
+    def test_learns_from_changes_in_gmail(self):
+        plan = self.sorted_batch()
+        start = len(self.demo.FakeIMAP.commands)
+        nothing = self.run_(action="learn_gmail")
+        self.assertEqual((nothing["checked"], nothing["changed"]), (28, 0))
+        # in Gmail you move the two "streak" mails from Social & Notifications to Newsletters, and look at them
+        moved = [m for m in self.demo.FakeIMAP.mails.values() if b"streak" in m["raw"]]
+        for m in moved:
+            m["labels"] = (m["labels"] - {"Social & Notifications", "To check"}) | {"Newsletters"}
+        r = self.run_(action="learn_gmail")
+        self.assertEqual(r["changed"], 2)
+        self.assertEqual(r["changes"][0]["new"], ["Newsletters", "Info"])
+        self.assertEqual(r["proposals"], [{"sender": "hello@learnlang.example", "theme": "Newsletters",
+                                           "status": "Info", "count": 2}])
+        from agent import batches, memory
+        store = batches.Store(core.MEMORY_PATH)
+        row = store.mail(moved[0]["gm"])
+        store.close()
+        self.assertEqual((row["theme"], row["corrected"], row["to_check"]), ("Newsletters", 1, 0))
+        mem = memory.Memory(core.MEMORY_PATH)
+        self.assertEqual(mem.examples()[-1]["theme"], "Newsletters")  # shown to the model next time
+        mem.close()
+        self.assertEqual(self.run_(action="learn_gmail")["changed"], 0)  # learned once
+        self.assertEqual(self.run_(action="ignore_proposal", **r["proposals"][0])["proposals"], [])
+        self.assertTrue(any("learned from Gmail" in x for x in self.run_(action="journal", kind="learned")["lines"]))
+        self.assertEqual(sum(c[0] == "STORE" for c in self.demo.FakeIMAP.commands[start:]), 0)  # read only
+
+    def test_learning_runs_before_each_batch(self):
+        self.cfg["behavior"]["batch_size"] = 50
+        plan = self.run_(action="plan", scope={"kind": "count", "value": 14}, batch_size=50)
+        self.run_(action="apply", batch_id=plan["plan"]["batch_id"], skip=[])
+        m = next(x for x in self.demo.FakeIMAP.mails.values() if b"Sunday lunch" in x["raw"] and "\\Inbox" not in x["labels"])
+        m["labels"] = (m["labels"] - {"Family & Friends"}) | {"Admin"}
+        nxt = self.run_(action="plan", scope={"kind": "count", "value": 28}, batch_size=50)
+        self.assertEqual(nxt["learned"]["changed"], 1)
+
+    def test_clear_errors(self):
+        r = core.handle({"action": "check"}, cfg=cfg_with(app_password="bad"), gmail_factory=fake_gmail)
+        self.assertEqual(r["error_code"], "gmail_login")
+        self.assertIn("apppasswords", r["error"])
+        from agent import models
+        saved = models._get
+        models._get = lambda url, timeout=5: (_ for _ in ()).throw(models.ModelError("refused"))
+        models.tried_start["done"] = True  # do not start a real Ollama here
+        try:
+            with self.assertRaises(models.ModelError) as e:
+                models.ollama_models(start=True)
+            self.assertIn(e.exception.code, ("ollama_down", "ollama_missing"))
+        finally:
+            models._get = saved
 
 
 class TestWeb(unittest.TestCase):
@@ -848,6 +974,32 @@ class TestWeb(unittest.TestCase):
         self.assertFalse(json.loads(self.call("/api/load", {"name": ""})[1])["ok"])
 
 
+    def test_why_learn_and_journal(self):
+        """v0.5 from the page: Why?, Learn from Gmail, the Journal window, the To check count."""
+        from agent import demo
+        demo.DELAY = 0
+        demo.FakeIMAP.reset(copies=1)
+        core.MEMORY_PATH, core.LOG_PATH = self.tmp / "web5.db", self.tmp / "web5.log"
+        try:
+            self.call("/api/plan", {"scope": {"kind": "count", "value": 14}})
+            plan = self.wait()["sort"]["plan"]
+            self.assertEqual(plan["to_check"], 2)
+            why = json.loads(self.call("/api/why", {"gm_msgid": plan["mails"][0]["gm_msgid"]})[1])
+            self.assertTrue(why["ok"] and why["reason"], why)
+            self.call("/api/apply", {"batch_id": plan["batch_id"], "skip": []})
+            self.wait()
+            self.assertTrue(json.loads(self.call("/api/learn", {})[1])["ok"])
+            state = self.wait()
+            self.assertEqual((state["notice"]["kind"], state["notice"]["checked"]), ("learn", 14))
+            self.assertFalse(any("mail · " in x for x in state["log"]))  # not in the main view
+            j = json.loads(self.call("/api/journal?kind=mails&q=streak")[1])
+            self.assertEqual(j["total"], 1)
+            self.assertIn("to check:", j["lines"][0])
+            self.assertTrue(state["sort"]["learn_gmail"])
+        finally:
+            core.MEMORY_PATH, core.LOG_PATH = ":memory:", None
+
+
 class TestRelaunch(unittest.TestCase):
     """Opening Mail Adagio again stops the copy still open (maybe an older version)."""
 
@@ -871,7 +1023,10 @@ class TestRelaunch(unittest.TestCase):
         first.join(timeout=5)
         self.assertFalse(first.is_alive())  # the first one stopped
         for _ in range(50):
-            info = json.loads(running.read_text()) if running.exists() else {}
+            try:  # the file may be read while it is being written
+                info = json.loads(running.read_text()) if running.exists() else {}
+            except ValueError:
+                info = {}
             if info.get("token") not in (None, token1):
                 break
             time.sleep(0.05)

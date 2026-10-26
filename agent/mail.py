@@ -17,7 +17,16 @@ FETCH_BYTES = 30000  # first 30 KB of each mail: enough for the text, skips big 
 
 
 class MailError(Exception):
-    pass
+    def __init__(self, message="", code=""):
+        super().__init__(message)
+        self.code = code  # gmail_login | offline | "" : lets the page show the right help
+
+
+LOGIN_HELP = ("Gmail refused the login for {address}. Check these 3 things: "
+              "1) IMAP is on: in Gmail, gear > See all settings > Forwarding and POP/IMAP > Enable IMAP. "
+              "2) You use an app password (16 letters), not your Google password. Create one at "
+              "https://myaccount.google.com/apppasswords (it needs 2-Step Verification). "
+              "3) Paste it in Mail Adagio > Settings.")
 
 
 @dataclass
@@ -55,11 +64,10 @@ class Gmail:
             self.imap = self.imap_class(self.host)
             self.imap.login(self.address, self.password)
         except imaplib.IMAP4.error as e:
-            raise MailError(
-                "Gmail refused the login. Check the address and the app password, "
-                "and that IMAP is enabled in Gmail settings.") from e
+            raise MailError(LOGIN_HELP.format(address=self.address), "gmail_login") from e
         except OSError as e:
-            raise MailError(f"Cannot reach {self.host}: {e}") from e
+            raise MailError(f"Cannot reach Gmail ({self.host}). Check your internet connection. ({e})",
+                            "offline") from e
         return self
 
     def __exit__(self, *exc):

@@ -255,9 +255,9 @@ details.colors small { display: block; margin: 6px 0; }
   font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .ghead span { color: var(--faint); font-weight: 600; }
 .ghead .dot { width: 8px; height: 8px; border-radius: 50%; }
-.mail { display: grid; grid-template-columns: 30px 190px minmax(0, 1fr) auto 46px 58px; gap: 12px; align-items: center;
+.mail { display: grid; grid-template-columns: 30px 190px minmax(0, 1fr) auto 46px 88px; gap: 12px; align-items: center;
   padding: 5px 12px; border-radius: 10px; font-size: 13.5px; min-height: 42px; transition: background .12s; }
-.mail.sel { grid-template-columns: 18px 30px 190px minmax(0, 1fr) auto 46px 58px; }
+.mail.sel { grid-template-columns: 18px 30px 190px minmax(0, 1fr) auto 46px 88px; }
 .mail:hover { background: var(--row); }
 .av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 12.5px;
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
@@ -280,6 +280,48 @@ details.colors small { display: block; margin: 6px 0; }
 .mini.ok { background: var(--green-soft); color: var(--green); }
 .mini.del { background: var(--red-soft); color: var(--red); display: inline-flex; align-items: center; gap: 4px; }
 .mini.del .keep { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0 2px; font-size: 13px; line-height: 1; }
+.mini.chk { background: color-mix(in srgb, #a46a21 16%, transparent); color: #b7772a; cursor: help; }
+.mail button.why { color: var(--muted); display: grid; place-items: center; border-radius: 8px; width: 28px; height: 28px;
+  border: 0; background: transparent; cursor: pointer; padding: 0; }
+.mail button.why:hover { color: var(--accent); background: var(--accent-soft); }
+/* why: how the model decided one mail */
+.whybox { margin-top: 14px; display: grid; gap: 10px; }
+.whyrow { display: flex; gap: 10px; align-items: center; font-size: 13px; }
+.whyrow > span:first-child { color: var(--muted); width: 92px; flex: none; }
+.whyrow > span:last-child { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.whyrow .mini { margin-left: 2px; }
+.conf { display: inline-flex; gap: 3px; align-items: center; }
+.conf i { width: 14px; height: 6px; border-radius: 3px; background: var(--border); }
+.conf.c-high i { background: var(--green); } .conf.c-medium i:nth-child(-n+2) { background: var(--amber); }
+.conf.c-low i:first-child { background: var(--red); }
+.conf em { font-style: normal; margin-left: 6px; color: var(--muted); }
+.reason { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; font-size: 13.5px; line-height: 1.55; }
+.reason.empty-r { color: var(--muted); padding: 10px 14px; text-align: left; }
+/* journal */
+#journalDlg { width: min(1040px, calc(100vw - 32px)); margin: 5vh auto auto; }
+.jtools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+.jtools .search { flex: 1; min-width: 200px; }
+.jlist { margin-top: 12px; max-height: min(62vh, 680px); overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
+.jline { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 7px 12px; font-size: 12.5px; border-bottom: 1px solid var(--border); }
+.jline:last-child { border-bottom: 0; }
+.jline time { color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.jline .jt { min-width: 0; word-break: break-word; color: var(--muted); }
+.jline .jt b { color: var(--text); font-weight: 600; }
+.jline.run { background: var(--surface-2); } .jline.run .jt { color: var(--text); font-weight: 600; }
+.jline .jc { color: #b7772a; } .jline .jl { color: var(--green); }
+.jfoot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+.jfoot code { font-size: 12px; }
+/* learning card: proposed rules */
+.card-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-h h2 { margin: 0; }
+.props { display: grid; gap: 8px; margin: 12px 0; }
+.prop { padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); font-size: 13px; }
+.prop .who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prop .to { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; margin: 2px 0 8px; }
+.prop .row2 { display: flex; gap: 6px; }
+.alert .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; justify-content: flex-start; }
+.alert ol { margin: 6px 0 0; padding-left: 18px; color: var(--text); opacity: .9; }
+.alert ol li { margin: 2px 0; }
 .delcount { display: flex; align-items: baseline; gap: 8px; margin: 12px 0; color: var(--muted); font-size: 13px; }
 .delcount > b { font-size: 28px; color: var(--text); letter-spacing: -.02em; }
 .delcount span b { color: var(--text); }
@@ -476,7 +518,8 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
     <div class="brand"><b>Mail Adagio</b><span>Your inbox, sorted calmly</span></div></div>
   <nav class="nav hidden" id="pageSeg">
     <button data-p="sort" class="on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></svg><span>Sort</span></button>
-    <button data-p="senders"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Senders</span></button>
+    <button data-p="senders" id="sendersNav"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Senders</span></button>
+    <button type="button" id="journalBtn" title="Everything Mail Adagio did, mail by mail"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M8 7h8M8 11h6"/></svg><span>Journal</span></button>
   </nav>
   <div id="leftPane">
     <div class="side-h"><span>Views</span><span><button type="button" class="linkbtn" id="kwBtn" title="Typical words of each theme, to help the model">Keywords</button><button type="button" class="linkbtn" id="orderBtn2" title="Label order and numbers in Gmail">Order</button></span></div>
@@ -552,6 +595,8 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
             <span><b>Mark low-interest mails as read</b><small><span id="markReadWhat"></span> · status Info only. Undo makes them unread again.
               <a href="#" id="markReadEdit">Change themes</a></small>
               <span class="chooser hidden" id="markReadThemes"></span></span></label>
+          <label class="switch"><input type="checkbox" id="learnGmail"><span class="knob"></span>
+            <span><b>Learn from my changes in Gmail</b><small>Before each batch, reads the labels of the mails already sorted (no content, no AI). A mail you moved to another theme becomes a correction.</small></span></label>
         </div>
           <div class="estimate" id="estimate"></div>
         </div>
@@ -573,7 +618,7 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
       </div>
     <div class="alert hidden" id="sortAlert">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex:none;margin-top:1px"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-        <div><b id="sortAlertTitle"></b><span id="sortAlertText"></span></div>
+        <div><b id="sortAlertTitle"></b><span id="sortAlertText"></span><div id="sortAlertHelp"></div></div>
       </div>
     <div class="listhead">
       <div class="ttl"><h2 id="mailsTitle">Mails</h2><p class="sub" id="mailsSub">Analyze a batch to see your mails here.</p></div>
@@ -666,14 +711,16 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
     </section>
 
     <section class="card">
-      <h2>Learned rules</h2>
-      <p class="sub">Applied before the model, no AI call. Created when you correct a mail.</p>
+      <div class="card-h"><h2>Learning</h2>
+        <button type="button" class="btn sm" id="learnBtn" title="Reads the labels of the mails already sorted (no content, no AI) and learns from the ones you moved in Gmail">Learn from Gmail</button></div>
+      <p class="sub">Your corrections, here or in Gmail, become examples for the model. Rules are applied before the model, with no AI call.</p>
+      <div class="props" id="proposals"></div>
       <div class="rules" id="rules"></div>
     </section>
 
     <section class="card">
-      <h2>Activity log</h2>
-      <p class="sub">Everything the agent did, newest first. Also saved in adagio.log.</p>
+      <div class="card-h"><h2>Activity log</h2><button type="button" class="linkbtn" id="journalBtn2">Full journal</button></div>
+      <p class="sub">One line per run, newest first. The journal has every mail.</p>
       <pre class="log" id="log">Nothing yet.</pre>
     </section>
   </aside>
@@ -730,7 +777,7 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
   <h2>Label order</h2>
   <p class="sub">Drag a label, or use the arrows. Gmail lists labels alphabetically, so a number in front keeps them in this order.</p>
   <label class="switch" style="margin-top:14px"><input type="checkbox" id="orderNum"><span class="knob"></span>
-    <span><b>Number the labels in Gmail</b><small>Statuses 01, 02, 03 · themes 11, 12... · Other always 99.</small></span></label>
+    <span><b>Number the labels in Gmail</b><small>Statuses 01, 02, 03 · themes 11, 12... · To check 97, To delete 98, Other 99.</small></span></label>
   <div class="olists">
     <div><h3>Statuses</h3><ol class="olist" id="olStatuses"></ol></div>
     <div><h3>Themes</h3><ol class="olist" id="olThemes"></ol></div>
@@ -753,6 +800,37 @@ input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; 
   </div>
 </form></dialog>
 
+<dialog id="whyDlg"><form class="dlg" method="dialog">
+  <h2>Why this sort?</h2>
+  <div class="fixmail"><b id="whyFrom"></b><span id="whySubj"></span></div>
+  <div class="whybox">
+    <div class="whyrow"><span>Sorted as</span><span id="whyTo"></span></div>
+    <div class="whyrow"><span>Decided by</span><span id="whyHow"></span></div>
+    <div class="whyrow" id="whyConfRow"><span>Confidence</span><span id="whyConf"></span></div>
+    <div class="reason" id="whyReason"></div>
+  </div>
+  <div class="foot">
+    <button type="button" class="btn" id="whyAsk">Ask the model why</button>
+    <button type="button" class="btn hidden" id="whyFix">Correct it</button>
+    <button type="button" class="btn primary" id="whyClose">Close</button>
+  </div>
+</form></dialog>
+
+<dialog id="journalDlg"><form class="dlg" method="dialog">
+  <h2>Journal</h2>
+  <p class="sub">Everything Mail Adagio did, newest first: each mail it sorted, how (your rule or the model, and how sure it was), the labels it added and what it learned from you.</p>
+  <div class="jtools">
+    <div class="seg" id="jSeg"><button type="button" data-k="all" class="on">All</button><button type="button" data-k="mails">Mails</button><button type="button" data-k="check">To check</button><button type="button" data-k="learned">Learning</button></div>
+    <input class="search" id="jFind" placeholder="Search a sender, a subject, a theme…">
+  </div>
+  <div class="jlist" id="jList"></div>
+  <div class="jfoot"><span id="jCount"></span><span>Saved on this PC in <code id="jPath">adagio.log</code></span></div>
+  <div class="foot">
+    <button type="button" class="btn hidden" id="jMore">Show more</button>
+    <button type="button" class="btn primary" id="jClose">Close</button>
+  </div>
+</form></dialog>
+
 <dialog id="confirmDlg"><form class="dlg" method="dialog">
   <h2 id="confirmTitle"></h2>
   <p class="sub" id="confirmText"></p>
@@ -770,7 +848,7 @@ const PALETTE = ["#4f7df3","#1f9d63","#e0a106","#d6457a","#8e6cef","#14a3b8","#f
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let M = null, ollMode = "active";
-let S = null, themeFilter = "", statusFilter = "", delFilter = false, query = "", provider = "anthropic", polling = null, lastTotal = null;
+let S = null, themeFilter = "", statusFilter = "", delFilter = false, chkFilter = false, query = "", provider = "anthropic", polling = null, lastTotal = null;
 let waiting = false;  // a job was just started: report its end even if it was very quick
 let page = "sort", SD = null, senderFilter = "all", senderQuery = "";
 let scope = { kind: "count", value: 500 }, batchSize = 100, skip = new Set(), planId = null, inited = false, hintHidden = false;
@@ -880,8 +958,9 @@ function drawOrder() {
       <button type="button" class="mv" data-mv="1" ${fixed || i >= last ? "disabled" : ""} aria-label="Move down">▼</button></li>`;
   };
   $("#olStatuses").innerHTML = ord.statuses.map((n, i) => row(ord.statuses, n, i)).join("");
-  const del = `<li class="fixed"><span class="grip"></span><span class="onum">${ord.numbered ? "98" : ""}</span>
-      <span class="dot" style="background:${S.colors?.["To delete"]?.hex || "#822111"}"></span><span class="nm">To delete</span></li>`;
+  const fixedRow = (num, name, hex) => `<li class="fixed"><span class="grip"></span><span class="onum">${ord.numbered ? num : ""}</span>
+      <span class="dot" style="background:${S.colors?.[name]?.hex || hex}"></span><span class="nm">${name}</span></li>`;
+  const del = fixedRow("97", "To check", "#a46a21") + fixedRow("98", "To delete", "#822111");
   $("#olThemes").innerHTML = ord.themes.map((n, i) => (isOther(n) ? del : "") + row(ord.themes, n, i)).join("");
   for (const [el, key] of [[$("#olStatuses"), "statuses"], [$("#olThemes"), "themes"]]) {
     el.querySelectorAll("li[data-n]").forEach(li => {
@@ -1028,6 +1107,9 @@ function jobEnded() {
   if (n && n.kind === "undo") toast(`Undone: ${fmt(n.undone)} mails back as they were.`);
   if (n && n.kind === "scan") toast(`${fmt(n.mails)} mails from ${fmt(n.senders)} senders · ${fmt(n.with_unsubscribe)} with an unsubscribe link.`);
   if (n && n.kind === "suggest") toast(`Rules proposed for ${fmt(n.suggested)} senders.`);
+  if (n && n.kind === "learn") toast(n.changed || n.checked_off
+    ? `Learned from Gmail: ${fmt(n.changed)} change${n.changed === 1 ? "" : "s"}` + (n.checked_off ? `, ${fmt(n.checked_off)} checked` : "") + (n.proposals ? ` · ${n.proposals} rule${n.proposals === 1 ? "" : "s"} proposed` : "") + "."
+    : `Nothing changed in Gmail (${fmt(n.checked)} sorted mails read again).`);
   if (n && (n.kind === "scan" || n.kind === "suggest")) loadSenders();
 }
 
@@ -1037,6 +1119,7 @@ function initControls() {
   scope = saved || (p ? { kind: p.kind, value: p.value } : scope);
   batchSize = S.sort.batch_size;
   $("#actAlone").checked = S.sort.act_alone;
+  $("#learnGmail").checked = S.sort.learn_gmail;
   drawScope(); estimate();
 }
 function drawMarkRead() {
@@ -1053,7 +1136,7 @@ function drawMarkRead() {
 function drawSummary() {
   const s = scope.kind === "all" ? "Whole inbox" : scope.kind === "days" ? `Last ${fmt(scope.value)} days` : `Newest ${fmt(scope.value)}`;
   $("#optsSummary").textContent = `${s} · ${batchSize} per batch · ${$("#actAlone").checked ? "acts alone" : "asks before applying"}`
-    + ($("#markRead").checked ? " · marks low-interest as read" : "");
+    + ($("#markRead").checked ? " · marks low-interest as read" : "") + ($("#learnGmail").checked ? " · learns from Gmail" : "");
 }
 /* sort settings menu: opens under its button, closes on a click outside or Escape */
 const closeOpts = () => $("#sortOpts").classList.add("hidden");
@@ -1095,7 +1178,7 @@ function render() {
     ? "Each mail gets a theme and a status. Nothing changes in Gmail until you apply."
     : "Who writes to you, their unsubscribe links, and ready-made rules.";
   $("#pageSeg").classList.toggle("hidden", !ready);
-  $("#pageSeg").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.p === page));
+  $("#pageSeg").querySelectorAll("button[data-p]").forEach(b => b.classList.toggle("on", b.dataset.p === page));
 
   const conn = $("#conn");
   conn.className = "pill " + (ready ? "ok" : "warn");
@@ -1112,13 +1195,14 @@ function render() {
   const finished = p && p.finished && !plan && sameScope(p);
   const btn = $("#runBtn");
   btn.disabled = busy || (!!plan && !alone) || finished;
-  btn.querySelector("span").textContent = busy ? ({ plan: "Analysing…", auto: "Sorting…", apply: "Applying…", undo: "Undoing…", load: "Loading the model…" }[job.kind] || "Working…")
+  btn.querySelector("span").textContent = busy ? ({ plan: "Analysing…", auto: "Sorting…", apply: "Applying…", undo: "Undoing…", load: "Loading the model…", learn: "Learning…" }[job.kind] || "Working…")
     : plan && !alone ? "Plan ready" : finished ? "All done" : alone ? (p && !p.finished && sameScope(p) && p.done ? "Continue sorting" : "Start sorting")
     : (p && p.done && sameScope(p) ? "Analyze next batch" : "Analyze first batch");
   $("#stopBtn").classList.toggle("hidden", !(busy && (job.kind === "auto" || job.kind === "plan")));
   $("#stopBtn").disabled = S.stopping; $("#stopBtn").textContent = S.stopping ? "Stopping…" : "Stop";
   $("#restartBtn").classList.toggle("hidden", busy || !!plan || !p || !p.done);
-  ["#scopeSeg button", "#scopeVal", "#batchRange", "#actAlone", "#markRead"].forEach(q => document.querySelectorAll(q).forEach(el => el.disabled = busy));
+  $("#learnBtn").disabled = busy; $("#learnBtn").textContent = busy && job.kind === "learn" ? "Reading Gmail…" : "Learn from Gmail";
+  ["#scopeSeg button", "#scopeVal", "#batchRange", "#actAlone", "#markRead", "#learnGmail"].forEach(q => document.querySelectorAll(q).forEach(el => el.disabled = busy));
 
   // progress
   const showBar = busy || (p && p.done);
@@ -1132,6 +1216,7 @@ function render() {
   } else if (busy) {
     $("#barFill").style.width = "100%";
     $("#progressText").textContent = { apply: "Adding labels in Gmail…", undo: "Putting the mails back as they were…",
+      learn: "Reading the labels of your sorted mails in Gmail (no content, no AI)…",
       load: `Loading ${job.model} into Ollama. Can take up to a minute…` }[job.kind] || "Working…";
   } else if (p) {
     $("#barFill").style.width = Math.max(3, Math.round(100 * p.done / Math.max(p.total, 1))) + "%";
@@ -1159,11 +1244,51 @@ function render() {
 
   const alert = S.error && !busy;
   $("#sortAlert").classList.toggle("hidden", !alert);
-  if (alert) { $("#sortAlertTitle").textContent = "The last action stopped."; $("#sortAlertText").textContent = S.error; }
+  if (alert) drawAlert(S.error, S.error_code);
+  drawProposals(sort.proposals || []);
 
   $("#log").textContent = S.log.length ? S.log.join("\n") : "Nothing yet.";
   renderResult();
   renderScanJob();
+}
+/* errors: say what to do, with the right button */
+function drawAlert(error, code) {
+  const help = $("#sortAlertHelp");
+  if (code === "gmail_login") {
+    $("#sortAlertTitle").textContent = "Gmail refused the login.";
+    $("#sortAlertText").textContent = "Check these 3 things:";
+    help.innerHTML = `<ol><li>IMAP is on: in Gmail, gear › See all settings › Forwarding and POP/IMAP › Enable IMAP.</li>
+      <li>You use an app password (16 letters), not your Google password. It needs 2-Step Verification.</li>
+      <li>Paste it in Settings here.</li></ol>
+      <div class="acts"><a class="btn sm" href="https://mail.google.com/mail/u/0/#settings/fwdandpop" target="_blank" rel="noopener">IMAP settings ↗</a>
+      <a class="btn sm" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">Create an app password ↗</a>
+      <button type="button" class="btn sm primary" data-open="settings">Open Settings</button></div>`;
+  } else if (code === "ollama_down" || code === "ollama_missing") {
+    $("#sortAlertTitle").textContent = code === "ollama_down" ? "Ollama is not running." : "Ollama is not installed.";
+    $("#sortAlertText").textContent = error;
+    help.innerHTML = `<div class="acts">${code === "ollama_missing" ? `<a class="btn sm" href="https://ollama.com/download" target="_blank" rel="noopener">Download Ollama ↗</a>` : ""}
+      <button type="button" class="btn sm" data-open="retry">Check again</button></div>`;
+  } else {
+    $("#sortAlertTitle").textContent = code === "offline" ? "No connection to Gmail." : "The last action stopped.";
+    $("#sortAlertText").textContent = error; help.innerHTML = "";
+  }
+  help.querySelectorAll("[data-open]").forEach(b => b.onclick = () => b.dataset.open === "settings" ? openFresh() : loadModel().then(() => toast(M.ok ? "Ollama answers. You can sort again." : M.error, !M.ok)));
+}
+/* rules proposed after the same correction twice */
+function drawProposals(list) {
+  $("#proposals").innerHTML = list.map((x, i) => `<div class="prop">
+      <div class="who" title="${esc(x.sender)}">${esc(x.sender)}</div>
+      <div class="to">You corrected it ${x.count}× to <span class="dot" style="background:${color(x.theme)}"></span>${esc(x.theme)} · ${esc(x.status)}</div>
+      <div class="row2"><button type="button" class="btn sm primary" data-p="${i}" data-a="yes">Make it a rule</button>
+        <button type="button" class="btn sm" data-p="${i}" data-a="no">Ignore</button></div></div>`).join("");
+  $("#proposals").querySelectorAll("button").forEach(b => b.onclick = async () => {
+    const x = list[+b.dataset.p];
+    const r = b.dataset.a === "yes" ? await api("/api/rule", { kind: "sender", value: x.sender, theme: x.theme, status: x.status })
+                                    : await api("/api/proposal/ignore", x);
+    if (!r.ok) return toast(r.error, true);
+    toast(b.dataset.a === "yes" ? `Rule saved: ${x.sender} → ${x.theme} · ${x.status}` : "Ignored. It will not be proposed again.");
+    loadRules(); refresh();
+  });
 }
 const sameScope = p => p.kind === scope.kind && (p.kind === "all" || p.value === +scope.value);
 const describe = p => p.kind === "count" ? `newest ${fmt(p.value)}` : p.kind === "days" ? `last ${fmt(p.value)} days` : "whole inbox";
@@ -1174,28 +1299,31 @@ function renderResult() {
   if (plan && plan.batch_id !== planId) { planId = plan.batch_id; skip = new Set(); }
   // left pane: all, statuses, to delete, themes (label order, like Gmail)
   const counts = r ? r.by_theme : {}, scounts = r ? r.by_status : {};
-  const num = n => !S.numbered ? "" : n === "__del" ? (r?.delete_label || "").slice(0, 2) : ((sort.labels || {})[n] || "").slice(0, 2);
+  const num = n => !S.numbered ? "" : n === "__del" ? (r?.delete_label || "").slice(0, 2) : n === "__chk" ? (r?.check_label || "").slice(0, 2) : ((sort.labels || {})[n] || "").slice(0, 2);
   const frow = (kind, key, label, n, dot, on) => `<button type="button" class="frow ${on ? "on" : ""} ${r && !n ? "zero" : ""}" data-k="${kind}" data-v="${esc(key)}">
       <span class="fnum">${esc(num(key))}</span>${dot ? `<span class="dot" style="background:${dot}"></span>` : ""}<span class="nm">${esc(label)}</span><span class="n">${r ? fmt(n) : ""}</span></button>`;
   const sdot = i => ["var(--red)", "var(--amber)", "var(--slate)"][Math.min(i, 2)];
   const delName = r && r.delete_label ? r.delete_label.replace(/^\d{2} - /, "") : "To delete";
+  const chkName = r && r.check_label ? r.check_label.replace(/^\d{2} - /, "") : "To check";
   $("#folders").innerHTML =
-    frow("all", "", r ? (plan ? "All mails in this plan" : "All mails of the last batch") : "All mails", r ? r.processed : 0, "", !themeFilter && !statusFilter && !delFilter)
+    frow("all", "", r ? (plan ? "All mails in this plan" : "All mails of the last batch") : "All mails", r ? r.processed : 0, "", !themeFilter && !statusFilter && !delFilter && !chkFilter)
     + `<div class="fsep"></div>` + st.map((n, i) => frow("s", n, n, scounts[n] || 0, sdot(i), statusFilter === n)).join("")
+    + (r && r.to_check ? frow("c", "__chk", chkName, r.to_check, S.colors?.["To check"]?.hex || "#a46a21", chkFilter) : "")
     + (r && r.to_delete ? frow("d", "__del", delName, r.to_delete, S.colors?.["To delete"]?.hex || "#822111", delFilter) : "")
     + `<div class="fsep"></div>` + S.themes.map(t => frow("t", t, t, counts[t] || 0, color(t), themeFilter === t)).join("");
   $("#folders").querySelectorAll(".frow").forEach(b => b.onclick = () => {
     const k = b.dataset.k, v = b.dataset.v;
-    if (k === "all") { themeFilter = statusFilter = ""; delFilter = false; }
+    if (k === "all") { themeFilter = statusFilter = ""; delFilter = chkFilter = false; }
+    if (k === "c") chkFilter = !chkFilter;
     if (k === "s") statusFilter = statusFilter === v ? "" : v;
     if (k === "t") themeFilter = themeFilter === v ? "" : v;
     if (k === "d") delFilter = !delFilter;
     $("#mails").scrollTop = 0; renderResult();
   });
-  const active = [themeFilter && ["t", themeFilter], statusFilter && ["s", statusFilter], delFilter && ["d", delName]].filter(Boolean);
+  const active = [themeFilter && ["t", themeFilter], statusFilter && ["s", statusFilter], chkFilter && ["c", chkName], delFilter && ["d", delName]].filter(Boolean);
   $("#filters").innerHTML = active.map(([k, v]) => `<span class="chip">${k === "t" ? `<span class="dot" style="background:${color(v)}"></span>` : ""}${esc(v)}<button type="button" data-k="${k}" aria-label="Remove this filter">×</button></span>`).join("");
   $("#filters").querySelectorAll("button").forEach(b => b.onclick = () => {
-    if (b.dataset.k === "t") themeFilter = ""; if (b.dataset.k === "s") statusFilter = ""; if (b.dataset.k === "d") delFilter = false;
+    if (b.dataset.k === "t") themeFilter = ""; if (b.dataset.k === "s") statusFilter = ""; if (b.dataset.k === "d") delFilter = false; if (b.dataset.k === "c") chkFilter = false;
     renderResult();
   });
   const order = S.themes;
@@ -1210,7 +1338,7 @@ function renderResult() {
     return;
   }
   const q = query.toLowerCase();
-  const rows = r.mails.filter(m => (!themeFilter || m.theme === themeFilter) && (!statusFilter || m.status === statusFilter) && (!delFilter || m.to_delete)
+  const rows = r.mails.filter(m => (!themeFilter || m.theme === themeFilter) && (!statusFilter || m.status === statusFilter) && (!delFilter || m.to_delete) && (!chkFilter || m.to_check)
     && (!q || (m.sender + " " + m.subject).toLowerCase().includes(q)));
   const model = (r.model || "").split(" · ")[0], ruled = r.mails.filter(m => m.rule).length;
   $("#mailsTitle").textContent = plan ? `Plan for batch ${p ? p.batch_no : ""}` : "Last batch applied";
@@ -1231,6 +1359,7 @@ function renderResult() {
   });
   box.querySelectorAll(".mail input").forEach(cb => cb.onchange = () => { cb.checked ? skip.delete(cb.dataset.id) : skip.add(cb.dataset.id); renderResult(); });
   box.querySelectorAll("button.fix").forEach(b => b.onclick = () => openFix(r.mails.find(m => m.gm_msgid === b.dataset.id)));
+  box.querySelectorAll("button.why").forEach(b => b.onclick = () => openWhy(r.mails.find(m => m.gm_msgid === b.dataset.id), !!plan));
   box.querySelectorAll("button.keep").forEach(b => b.onclick = async e => {
     e.preventDefault(); e.stopPropagation();
     const k = await api("/api/keep", { gm_msgid: b.dataset.keep });
@@ -1242,6 +1371,7 @@ function renderResult() {
     $("#applyCount").textContent = `${n} of ${r.processed} mails selected`;
     $("#applyWhat").textContent = (sort.archive ? "Adds the theme and status labels, and moves them out of the Inbox into their theme." : "Adds the theme and status labels.") +
       (sort.mark_read && r.low_interest ? ` ${r.low_interest} low-interest mails will be marked as read.` : "") +
+      (r.to_check ? ` ${r.to_check} get "${r.check_label}": the model was not sure, have a look.` : "") +
       (r.to_delete ? ` ${r.to_delete} get the label "${r.delete_label}" (nothing goes to the Trash).` : "") + " Unticked mails stay as they are.";
     $("#applyBtn").textContent = n === r.processed ? `Apply to all ${n}` : `Apply to ${n} mails`;
     $("#applyBtn").disabled = S.job.running;
@@ -1251,7 +1381,7 @@ function renderResult() {
 
 /* senders page */
 function setPage(p) { page = p; store.set("adagio-page", p); render(); if (p === "senders") loadSenders(); window.scrollTo(0, 0); }
-$("#pageSeg").querySelectorAll("button").forEach(b => b.onclick = () => setPage(b.dataset.p));
+$("#pageSeg").querySelectorAll("button[data-p]").forEach(b => b.onclick = () => setPage(b.dataset.p));
 async function loadSenders() { const r = await api("/api/senders"); if (r.ok) { SD = r; renderSenders(); } }
 function renderScanJob() {
   const job = S.job, busy = job.running, mine = busy && (job.kind === "scan" || job.kind === "suggest");
@@ -1393,6 +1523,7 @@ function mailRow(m, t, selectable) {
   const name = (m.sender.split("<")[0].replace(/"/g, "").trim()) || m.sender;
   const letter = (name.replace(/[^\p{L}\p{N}]/gu, "")[0] || "?").toUpperCase();
   const tags = (m.corrected ? `<span class="mini ok">corrected</span>` : m.rule ? `<span class="mini" title="${esc(m.rule)}">rule</span>` : "")
+    + (m.to_check ? `<span class="mini chk" title="${esc(m.reason || "The model was not sure: have a look")}">to check</span>` : "")
     + (m.to_delete ? `<span class="mini del" title="Gets the label for mails to delete. Only you send them to the Trash.">to delete${selectable ? `<button class="keep" data-keep="${esc(m.gm_msgid)}" title="Keep this mail" aria-label="Keep this mail">×</button>` : ""}</span>` : "")
     + (!selectable ? `<span class="state ${esc(m.state)}">${{ applied: m.archived ? "filed" : "labelled", skipped: "left as is", undone: "undone" }[m.state] || ""}</span>` : "");
   const url = /^https:\/\/mail\.google\.com\//.test(m.gmail_url) ? m.gmail_url : "";
@@ -1405,11 +1536,82 @@ function mailRow(m, t, selectable) {
     ${status}
     <div class="date">${esc((m.date || "").slice(5).replace("-", "/"))}</div>
     <div class="acts2">
+    <button class="why" data-id="${esc(m.gm_msgid)}" title="Why this theme and status?"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6M12 17h.01"/></svg></button>
     ${selectable ? `<button class="fix" data-id="${esc(m.gm_msgid)}" title="Correct theme or status"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>` : ""}
     ${url ? `<a class="open" href="${esc(url)}" target="_blank" rel="noopener" title="Open in Gmail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>` : ""}
     </div>
   </div>`;
 }
+
+/* why: how one mail was sorted, and the model's reason on demand */
+let whyMail = null;
+function openWhy(m, inPlan) {
+  whyMail = m;
+  const name = (m.sender.split("<")[0].replace(/"/g, "").trim()) || m.sender;
+  $("#whyFrom").textContent = name; $("#whySubj").textContent = m.subject || "(no subject)";
+  $("#whyTo").innerHTML = `<span class="dot" style="background:${color(m.theme)}"></span> ${esc(m.theme)} · ${esc(m.status)}` + (m.to_check ? ` <span class="mini chk">to check</span>` : "");
+  $("#whyHow").textContent = m.corrected ? "You (a correction)" : m.rule ? `Your rule (${m.rule}), no AI call` : !m.classified ? "Nobody: the model gave no valid answer" : `The model (${(S.sort?.plan || S.sort?.last || {}).model || "AI"})`;
+  const c = m.confidence;
+  $("#whyConfRow").classList.toggle("hidden", !c || !!m.rule || !!m.corrected);
+  $("#whyConf").innerHTML = c ? `<span class="conf c-${esc(c)}"><i></i><i></i><i></i><em>${{ high: "sure", medium: "fairly sure", low: "not sure" }[c] || esc(c)}</em></span>` : "";
+  drawReason(m.reason);
+  $("#whyAsk").classList.toggle("hidden", !!m.rule || !!m.corrected);
+  $("#whyAsk").disabled = false; $("#whyAsk").textContent = m.reason ? "Ask again" : "Ask the model why";
+  $("#whyFix").classList.toggle("hidden", !inPlan);
+  $("#whyDlg").showModal();
+}
+function drawReason(text) {
+  $("#whyReason").className = "reason" + (text ? "" : " empty-r");
+  $("#whyReason").textContent = text || (whyMail.rule ? "Every mail from this sender is sorted this way, by your rule." : whyMail.corrected ? "You chose this theme and status." :
+    "No reason saved: the model only explains the mails it was not sure about. Ask it, it reads the mail again (a few seconds).");
+}
+$("#whyAsk").onclick = async () => {
+  $("#whyAsk").disabled = true; $("#whyAsk").textContent = "Asking the model…";
+  const r = await api("/api/why", { gm_msgid: whyMail.gm_msgid });
+  $("#whyAsk").disabled = false; $("#whyAsk").textContent = "Ask again";
+  if (!r.ok) return toast(r.error, true);
+  whyMail.reason = r.reason; drawReason(r.reason);
+};
+$("#whyClose").onclick = () => $("#whyDlg").close();
+$("#whyFix").onclick = () => { $("#whyDlg").close(); openFix(whyMail); };
+
+/* journal: every run and every mail, in a window of its own (not in the main view) */
+let jKind = "all", jN = 300, jTimer = null;
+async function loadJournal() {
+  const r = await api(`/api/journal?kind=${jKind}&n=${jN}&q=${encodeURIComponent($("#jFind").value.trim())}`);
+  if (!r.ok) return toast(r.error, true);
+  $("#jPath").textContent = r.path || "adagio.log";
+  $("#jCount").textContent = r.total ? `${fmt(Math.min(r.lines.length, r.total))} of ${fmt(r.total)} lines` : "";
+  $("#jMore").classList.toggle("hidden", r.lines.length >= r.total);
+  $("#jList").innerHTML = r.lines.length ? r.lines.map(jLine).join("") : `<div class="empty">Nothing yet. The journal fills in as you sort.</div>`;
+}
+function jLine(x) {
+  const when = x.slice(0, 16).replace(/^\d{4}-/, ""), text = x.slice(21);
+  const mail = text.startsWith("mail · ");
+  let body = esc(mail ? text.slice(7) : text);
+  if (mail) {
+    const parts = body.split(" · ");
+    body = parts.map((p, i) => i === 1 || i === 2 ? `<b>${p}</b>` : /^to check:/.test(p) ? `<span class="jc">${p}</span>` : p === "learned from Gmail" ? `<span class="jl">${p}</span>` : p).join(" · ");
+  }
+  return `<div class="jline${mail ? "" : " run"}"><time>${esc(when)}</time><div class="jt">${body}</div></div>`;
+}
+const openJournal = () => { jN = 300; $("#jFind").value = ""; loadJournal(); $("#journalDlg").showModal(); };
+$("#journalBtn").onclick = openJournal; $("#journalBtn2").onclick = openJournal;
+$("#jClose").onclick = () => $("#journalDlg").close();
+$("#jMore").onclick = () => { jN += 500; loadJournal(); };
+$("#jFind").oninput = () => { clearTimeout(jTimer); jTimer = setTimeout(loadJournal, 250); };
+$("#jSeg").querySelectorAll("button").forEach(b => b.onclick = () => {
+  jKind = b.dataset.k; $("#jSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); loadJournal();
+});
+
+/* learn from the changes you made in Gmail */
+$("#learnBtn").onclick = () => start("/api/learn", {});
+$("#learnGmail").onchange = async e => {
+  const r = await api("/api/behavior", { learn_gmail: e.target.checked });
+  if (!r.ok) return toast(r.error, true);
+  toast(e.target.checked ? "Before each batch, Mail Adagio learns from the mails you moved in Gmail." : "Learning from Gmail only when you click the button.");
+  refresh();
+};
 
 /* events */
 function scopeChanged() { store.set("adagio-scope", scope); drawScope(); estimate(); render(); }

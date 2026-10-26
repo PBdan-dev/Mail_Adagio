@@ -2,6 +2,7 @@
 
 The command line and the JSON mode are only doors to `handle()`.
 """
+import json
 import math
 import time
 from collections import Counter
@@ -11,29 +12,39 @@ from . import batches, classify, config, hardware, memory, models, senders
 from .mail import Gmail, MailError, chunks
 
 AGENT = "mail-adagio"
-VERSION = "0.4.2"
-ACTIONS = ("check", "hardware", "preview", "correct", "rules", "delete_rule",
+VERSION = "0.5.0"
+ACTIONS = ("capabilities", "check", "hardware", "preview", "correct", "rules", "delete_rule",
            "estimate", "plan", "apply", "discard", "undo", "status",
            "scan", "senders", "sender_state", "suggest", "add_rule", "label_order",
-           "keep", "to_delete", "trash", "restore")
+           "keep", "to_delete", "trash", "restore", "learn_gmail", "why", "journal",
+           "proposals", "ignore_proposal")
+UI_ONLY = ("trash", "restore", "label_order")  # a person must click them in the window: refused from the JSON door
+MAIL_LINE = "mail · "  # journal lines about one mail: kept out of the activity list, shown in the Journal
 LOG_PATH = config.ROOT / "adagio.log"  # readable journal of every run; None turns it off
 MEMORY_PATH = config.ROOT / "adagio.db"  # rules and examples learned from your corrections
 
 
-def handle(request, cfg=None, gmail_factory=Gmail, ask=None, progress=None):
-    """Run one request and always return a dict (errors included, never raised)."""
+def handle(request, cfg=None, gmail_factory=Gmail, ask=None, progress=None, door="app"):
+    """Run one request and always return a dict (errors included, never raised).
+
+    door: "app" (the window, the command line) or "json" (another program: some actions are refused)."""
     action = request.get("action")
     started = time.time()
     try:
         if action not in ACTIONS:
             raise ValueError(f"Unknown action '{action}'. Expected one of: {', '.join(ACTIONS)}")
+        if door == "json" and action in UI_ONLY:
+            raise ValueError(f"'{action}' is only available in the Mail Adagio window: a person must click it "
+                             f"there. Mail Adagio never does it on a program's request.")
         if action == "hardware":
             result = hardware_report(cfg)
+        elif action == "capabilities":
+            result = capabilities()
         else:
             cfg = cfg or config.load(request.get("config") or config.DEFAULT_PATH)
             if action == "check":
                 result = check(cfg, gmail_factory)
-            elif action in ("correct", "rules", "delete_rule", "add_rule"):
+            elif action in ("correct", "rules", "delete_rule", "add_rule", "proposals", "ignore_proposal"):
                 result = learn(cfg, request)
             elif action == "preview":
                 result = preview(cfg, request, gmail_factory, ask, progress)
@@ -41,7 +52,7 @@ def handle(request, cfg=None, gmail_factory=Gmail, ask=None, progress=None):
                 result = STEP3[action](cfg, request, gmail_factory, ask, progress)
         result["ok"] = True
     except (config.ConfigError, MailError, models.ModelError, ValueError) as e:
-        result = {"ok": False, "error": str(e)}
+        result = {"ok": False, "error": str(e), "error_code": getattr(e, "code", "")}
     except Exception as e:  # a bug must not crash the caller (Orchestra, a chatbot...)
         result = {"ok": False, "error": f"Unexpected error: {type(e).__name__}: {e}"}
     result.update(agent=AGENT, version=VERSION, action=action,
@@ -57,9 +68,11 @@ def summary_line(r):
         return (f"preview: read {r['processed']} mails, {r['fallbacks']} not classified, "
                 f"0 changes in Gmail ({r['model']})")
     if r["action"] in ("correct", "rules", "delete_rule", "estimate", "status", "discard", "senders",
-                       "sender_state", "add_rule", "keep", "to_delete"):
+                       "sender_state", "add_rule", "keep", "to_delete", "journal", "proposals", "capabilities",
+                       "ignore_proposal"):
         return ""
-    if r["action"] in ("plan", "apply", "undo", "scan", "suggest", "label_order", "trash", "restore"):
+    if r["action"] in ("plan", "apply", "undo", "scan", "suggest", "label_order", "trash", "restore",
+                       "learn_gmail", "why"):
         return r.get("log", "")
     if r["action"] == "check":
         return f"check: connected to {r['email']}, {r['total_in_mailbox']} mails in {r['mailbox']}"
@@ -76,12 +89,36 @@ def log(text):
             pass
 
 
-def read_log(n=30):
+def read_log(n=30, mails=False):
+    """The last n lines of the journal, newest first. Without mails: only the run summaries."""
     try:
         lines = LOG_PATH.read_text(encoding="utf-8").splitlines()
     except (OSError, AttributeError):
         return []
+    if not mails:
+        lines = [x for x in lines if x[21:].lstrip()[:len(MAIL_LINE)] != MAIL_LINE]
     return lines[-n:][::-1]
+
+
+def journal(cfg, request, gmail_factory=None, ask=None, progress=None):
+    """The full journal: every run and every mail. kind: all | mails | check | learned; q: words to find."""
+    kind, words = request.get("kind") or "all", str(request.get("q") or "").lower().split()
+    n = max(1, min(int(request.get("n") or 500), 5000))
+    lines = read_log(10**9, mails=True)
+    test = {"mails": lambda x: MAIL_LINE in x, "check": lambda x: "to check:" in x,
+            "learned": lambda x: "learned from Gmail" in x or "correction" in x or "rule" in x}.get(kind)
+    out = [x for x in lines if (not test or test(x)) and all(w in x.lower() for w in words)]
+    return {"lines": out[:n], "total": len(out), "path": str(LOG_PATH or "")}
+
+
+def capabilities():
+    """What Mail Adagio can do, for another agent: the contract in agent.json, and its limits."""
+    try:
+        contract = json.loads((config.ROOT / "agent.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        contract = {}
+    return {"name": AGENT, "contract": contract, "actions": [a for a in ACTIONS if a not in UI_ONLY],
+            "ui_only": list(UI_ONLY), "how_to_call": "python adagio.py call  (JSON on stdin, JSON on stdout)"}
 
 
 def hardware_report(cfg=None):
@@ -109,7 +146,7 @@ def resolve_model(cfg):
             raise models.ModelError("No model name set. Open Settings and choose a model.")
         m["model_name"] = name
         return m, f"{name} · {m['provider']}"
-    have = models.ollama_models(m.get("base_url"))
+    have = models.ollama_models(m.get("base_url"), start=True)  # not running: try to start it once
     if name.lower() == "active":
         if have["running"]:
             m["model_name"] = have["running"][0]
@@ -166,7 +203,13 @@ def learn(cfg, request):
             mem.add_rule(kind, request.get("value", ""), theme, status)
             log(f"rule added: mails from {request.get('value')} -> {theme} / {status}")
             update_plan(cfg, mem, None, theme, status)
-        return {"rules": mem.rules()}
+        themes, statuses = config.names(cfg["themes"]), config.names(cfg["statuses"])
+        if request["action"] == "ignore_proposal":
+            mem.ignore(request.get("sender", ""), request.get("theme", ""), request.get("status", ""))
+            log(f"rule proposal ignored: {request.get('sender')} -> {request.get('theme')} / {request.get('status')}")
+        if request["action"] in ("proposals", "ignore_proposal"):
+            return {"proposals": mem.proposals(themes, statuses)}
+        return {"rules": mem.rules(), "proposals": mem.proposals(themes, statuses)}
     finally:
         mem.close()
 
@@ -227,11 +270,19 @@ def sort_mails(cfg, mails, ask, model_note, progress=None):
         rows, model_calls, timeouts = [], 0, 0
         for i, mail in enumerate(mails, 1):
             rule = mem.match(mail.sender, themes, statuses)
+            reason, check = "", False
             if rule:  # your rule wins: no model call
                 r = classify.Result(rule["theme"], rule["status"], True, 0)
             else:
                 r = classify.classify(mail, ask, cfg, examples=examples)
                 model_calls += 1
+                check = classify.to_check(r, cfg)
+                if check and r.ok:  # only for the mails to check: one more short call, the reason
+                    reason = classify.explain(mail, ask, r.theme, r.status)
+                    model_calls += 1
+                elif check:
+                    reason = ("the model took too long on this mail" if r.timed_out
+                              else "the model gave no valid answer") + f" ({r.error[:120]})"
                 if model_calls == 1 and not r.ok and r.provider_error:
                     # the model cannot answer at all: stop now instead of filing every mail in Other
                     raise models.ModelError(f"The model {model_note.split(' · ')[0]} did not answer: {r.error}")
@@ -247,6 +298,8 @@ def sort_mails(cfg, mails, ask, model_note, progress=None):
                 "existing_labels": [x for x in mail.labels if not x.startswith("\\")],
                 "theme": r.theme, "status": r.status, "classified": r.ok, "to_delete": r.to_delete,
                 "rule": f"{rule['kind']}: {rule['value']}" if rule else "",
+                "confidence": "" if rule else (r.confidence if r.ok else "low"), "to_check": check,
+                "reason": reason,
                 **({"error": r.error} if not r.ok else {}),
             })
             if progress and progress(i, len(mails), rows[-1]) == "stop":
@@ -285,6 +338,7 @@ def summarize(cfg, rows):
         "by_status": {s: n for s, n in sorted(Counter(r["status"] for r in rows).items(),
                                               key=lambda kv: status_order.get(kv[0], 99))},
         "fallbacks": sum(not r["classified"] for r in rows),
+        "to_check": sum(bool(r.get("to_check")) for r in rows),
         "by_rule": sum(bool(r["rule"]) for r in rows),
         "first_error": next((r["error"] for r in rows if not r["classified"]), ""),
         "mails": rows,
@@ -368,7 +422,7 @@ def plan_result(cfg, store, batch):
             "low_interest": sum(config.low_interest(cfg, r["theme"], r["status"]) for r in rows),
             "marked_read": sum(r["marked_read"] for r in rows),
             "to_delete": sum(r["to_delete"] for r in rows), "delete_label": config.delete_label(cfg),
-            **summarize(cfg, rows), "mails": rows}
+            **summarize(cfg, rows), "check_label": config.check_label(cfg), "mails": rows}
 
 
 def plan(cfg, request, gmail_factory, ask=None, progress=None):
@@ -393,6 +447,13 @@ def plan(cfg, request, gmail_factory, ask=None, progress=None):
         if progress:
             progress(0, 0, {"model": model_note})
         with connect(cfg, gmail_factory) as gmail:
+            learned = None
+            if cfg["behavior"]["learn_gmail"]:  # first, what you changed in Gmail since the last batch
+                try:
+                    learned = gmail_changes(cfg, gmail)
+                    log(learned_line(learned))
+                except MailError:
+                    learned = None  # never block the sorting for it
             gmail.open(mailbox)
             same = job and (job["kind"], job["value"]) == (kind, value) and not request.get("restart")
             if not same:  # a new sort (a finished one starts again only when asked: restart)
@@ -411,7 +472,8 @@ def plan(cfg, request, gmail_factory, ask=None, progress=None):
             return {"plan": None, "stopped": True, "progress": progress_of(store, job, size)}
         batch_id = store.add_batch(job["id"], model_note.split(" · ")[0], time.time() - started, calls, rows)
         batch = store.one("SELECT * FROM batches WHERE id = ?", batch_id)
-        result = {"plan": plan_result(cfg, store, batch), "progress": progress_of(store, job, size)}
+        result = {"plan": plan_result(cfg, store, batch), "progress": progress_of(store, job, size),
+                  "learned": learned}
         result["log"] = (f"plan: batch {result['progress']['batch_no']} of {result['progress']['batches']}, "
                          f"{len(rows)} mails analysed ({model_note}), waiting for approval"
                          + (" (stopped: the other mails come next time)" if stopped else ""))
@@ -461,7 +523,7 @@ def apply(cfg, request, gmail_factory, ask=None, progress=None):
             with connect(cfg, gmail_factory) as gmail:
                 folders = gmail.folders()
                 known = {f.lower() for f in folders}
-                dlabel = config.delete_label(cfg)
+                dlabel, clabel = config.delete_label(cfg), config.check_label(cfg)
                 for label in all_labels(cfg):  # every label, even empty ones: the list in Gmail is complete
                     if label.lower() not in known:
                         gmail.create_label(label)
@@ -474,7 +536,8 @@ def apply(cfg, request, gmail_factory, ask=None, progress=None):
                     if uid is None:  # deleted or moved to Trash/Spam meanwhile
                         store.mark(r["gm_msgid"], "skipped")
                         continue
-                    key = (names[r["theme"]], names[r["status"]]) + ((dlabel,) if r["to_delete"] else ())
+                    key = ((names[r["theme"]], names[r["status"]]) + ((clabel,) if r["to_check"] else ())
+                           + ((dlabel,) if r["to_delete"] else ()))
                     groups.setdefault(key, []).append((r, uid))
                 for labels, items in groups.items():
                     uids = [uid for _, uid in items]
@@ -489,7 +552,8 @@ def apply(cfg, request, gmail_factory, ask=None, progress=None):
                         have = {x.lower() for x in current.get(uid, ("", []))[1]}
                         added = [x for x in labels if x.lower() not in have]
                         archived = archive and uid in in_inbox
-                        store.mark(r["gm_msgid"], "applied", added, archived, uid in unread)
+                        store.mark(r["gm_msgid"], "applied", added, archived, uid in unread, uid)
+                        journal_mail(r, added, archived, uid in unread)
                         done += 1
                         moved += archived
                         read += uid in unread
@@ -497,6 +561,7 @@ def apply(cfg, request, gmail_factory, ask=None, progress=None):
             for r in rows:
                 if r["gm_msgid"] in skip:
                     store.mark(r["gm_msgid"], "skipped")
+                    journal_mail(r, None)
             if done:  # even if it stopped half way, what was done can be undone...
                 store.set_state(batch["id"], "applied")
                 store.release_planned(batch["id"])  # ...and what was not will be proposed again
@@ -513,6 +578,23 @@ def apply(cfg, request, gmail_factory, ask=None, progress=None):
                 "changes_made": done, "progress": prog, "log": line, "plan": None}
     finally:
         store.close()
+
+
+def journal_mail(r, added, archived=False, read=False):
+    """One journal line per mail: what it is, how it was sorted, what was done in Gmail."""
+    how = (f"rule {r['rule']}" if r.get("rule") else "your correction" if r.get("corrected")
+           else f"model ({r.get('confidence') or 'no answer'})")
+    if added is None:
+        done = "left as it was (you unticked it)"
+    else:
+        done = ", ".join([f"+{x}" for x in added] + (["out of the Inbox"] if archived else [])
+                         + (["marked as read"] if read else [])) or "labels already there"
+    subject = " ".join((r.get("subject") or "(no subject)").split())[:90]
+    line = (f"{MAIL_LINE}{(r.get('date') or '')[:10]} · {r.get('sender', '')[:60]} · \"{subject}\" · {how} · "
+            f"{r['theme']} / {r['status']} · {done}")
+    if r.get("to_check"):
+        line += f" · to check: {r.get('reason') or 'the model was not sure'}"
+    log(line)
 
 
 def discard(cfg, request, gmail_factory=None, ask=None, progress=None):
@@ -573,9 +655,18 @@ def status(cfg, request, gmail_factory=None, ask=None, progress=None):
                 "last": plan_result(cfg, store, last) if last else None,
                 "act_alone": cfg["behavior"]["act_alone"], "batch_size": cfg["behavior"]["batch_size"],
                 "archive": cfg["behavior"]["archive"], "labels": config.labels(cfg),
-                "mark_read": cfg["behavior"]["mark_read"], "mark_read_themes": cfg["behavior"]["mark_read_themes"]}
+                "mark_read": cfg["behavior"]["mark_read"], "mark_read_themes": cfg["behavior"]["mark_read_themes"],
+                "learn_gmail": cfg["behavior"]["learn_gmail"], "proposals": proposals(cfg)}
     finally:
         store.close()
+
+
+def proposals(cfg):
+    mem = memory.Memory(MEMORY_PATH)
+    try:
+        return mem.proposals(config.names(cfg["themes"]), config.names(cfg["statuses"]))
+    finally:
+        mem.close()
 
 
 STEP3 = {"estimate": estimate, "plan": plan, "apply": apply, "discard": discard, "undo": undo,
@@ -683,11 +774,11 @@ def suggest(cfg, request, gmail_factory, ask=None, progress=None):
 
 
 def all_labels(cfg):
-    """Every label the agent uses, in order: statuses, themes, "To delete"."""
+    """Every label the agent uses, in order: statuses, themes, "To check", "To delete", Other."""
     names = config.labels(cfg)
     statuses, themes = config.order(cfg)
     out = [names[n] for n in statuses + themes]
-    return out[:-1] + [config.delete_label(cfg)] + out[-1:] if out else out
+    return out[:-1] + [config.check_label(cfg), config.delete_label(cfg)] + out[-1:] if out else out
 
 
 def keep(cfg, request, gmail_factory=None, ask=None, progress=None):
@@ -785,6 +876,7 @@ def label_order(cfg, request, gmail_factory, ask=None, progress=None):
     config.check(new_cfg)
     old, new = config.labels(cfg), config.labels(new_cfg)
     old[config.TO_DELETE], new[config.TO_DELETE] = config.delete_label(cfg), config.delete_label(new_cfg)
+    old[config.TO_CHECK], new[config.TO_CHECK] = config.check_label(cfg), config.check_label(new_cfg)
     renames = [{"name": n, "old": old[n], "new": new[n]} for n in old if old[n] != new[n]]
     s2, t2 = config.order(new_cfg)
     result = {"numbered": numbered, "statuses": s2, "themes": t2, "labels": new, "renames": renames,
@@ -826,4 +918,132 @@ def label_order(cfg, request, gmail_factory, ask=None, progress=None):
             "log": "\n".join(lines)}
 
 
-STEP3.update(keep=keep, to_delete=to_delete, trash=trash, restore=restore, label_order=label_order, scan=scan, senders=list_senders, sender_state=sender_state, suggest=suggest)
+# --- Learn from your changes in Gmail ------------------------------------------------------
+#
+# You moved a sorted mail to another theme (or status) in Gmail: Mail Adagio reads the labels of the
+# mails it sorted (labels only, no content, no AI), and takes each change as a correction: the mail
+# keeps its new theme, and the sender and subject become an example shown to the model.
+# The same correction twice for one sender: a rule is proposed (you accept or ignore it).
+
+CHECK_AT_MOST = 2000  # most recent sorted mails whose labels are read again
+FIND_AT_MOST = 200    # mails sorted before v0.5 (their All Mail id is unknown): searched one by one
+
+
+def gmail_changes(cfg, gmail):
+    """Read the labels of the sorted mails again and learn from what you changed. Gmail is not changed."""
+    store, mem = batches.Store(MEMORY_PATH), memory.Memory(MEMORY_PATH)
+    try:
+        rows = store.applied(CHECK_AT_MOST)
+        out = {"checked": 0, "changed": 0, "checked_off": 0, "changes": []}
+        if not rows:
+            return {**out, "proposals": proposals(cfg)}
+        gmail.open(gmail.all_mail(), readonly=True)
+        known = [r for r in rows if r["all_uid"] > 0]
+        meta = gmail.meta(r["all_uid"] for r in known)
+        current = {}
+        for r in known:
+            m = meta.get(r["all_uid"])
+            if m and m[0] == r["gm_msgid"]:
+                current[r["gm_msgid"]] = m[1]
+            else:  # the id changed (rare): search it again next time
+                store.set_all_uid(r["gm_msgid"], 0)
+        unknown = [r for r in rows if r["all_uid"] == 0][:FIND_AT_MOST]
+        found = gmail.find(r["gm_msgid"] for r in unknown)
+        meta = gmail.meta(found.values()) if found else {}
+        for r in unknown:
+            uid = found.get(r["gm_msgid"])
+            store.set_all_uid(r["gm_msgid"], uid or -1)  # -1: no longer in Gmail (deleted), not searched again
+            if uid in meta:
+                current[r["gm_msgid"]] = meta[uid][1]
+        names = config.labels(cfg)
+        themes, statuses = config.names(cfg["themes"]), config.names(cfg["statuses"])
+        by_label = {label.lower(): name for name, label in names.items()}
+        check = config.check_label(cfg).lower()
+        for r in rows:
+            labels = current.get(r["gm_msgid"])
+            if labels is None or r["theme"] not in names or r["status"] not in names:
+                continue
+            out["checked"] += 1
+            have = {x.lower() for x in labels}
+            theme = changed_to(r["theme"], have, names, by_label, themes)
+            status = changed_to(r["status"], have, names, by_label, statuses)
+            if (theme, status) != (r["theme"], r["status"]):
+                store.changed_in_gmail(r["gm_msgid"], theme, status, True)
+                mem.add_example(r["sender"], r["subject"], theme, status)
+                out["changed"] += 1
+                out["changes"].append({"gm_msgid": r["gm_msgid"], "sender": r["sender"], "subject": r["subject"],
+                                       "old": [r["theme"], r["status"]], "new": [theme, status]})
+                log(f"{MAIL_LINE}learned from Gmail · {r['sender'][:60]} · \"{' '.join(r['subject'].split())[:90]}\" · "
+                    f"{r['theme']} / {r['status']} -> {theme} / {status}")
+            elif r["to_check"] and check not in have:  # you removed "To check": you looked at it
+                store.checked(r["gm_msgid"])
+                out["checked_off"] += 1
+        out["proposals"] = mem.proposals(themes, statuses)
+        return out
+    finally:
+        store.close()
+        mem.close()
+
+
+def changed_to(old, have, names, by_label, allowed):
+    """The theme (or status) the mail has now in Gmail: the old one if its label is still there,
+    else the only other one it carries. None or several: unchanged (nothing sure to learn)."""
+    if names[old].lower() in have:
+        return old
+    now = [by_label[x] for x in have if x in by_label and by_label[x] in allowed]
+    return now[0] if len(now) == 1 else old
+
+
+def learn_gmail(cfg, request, gmail_factory, ask=None, progress=None):
+    """The "Learn from my Gmail changes" button (also done before each new batch)."""
+    with connect(cfg, gmail_factory) as gmail:
+        out = gmail_changes(cfg, gmail)
+    out["log"] = learned_line(out, always=True)
+    out["changes_made"] = 0
+    return out
+
+
+def learned_line(out, always=False):
+    if not out or (not always and not out["changed"] and not out["checked_off"]):
+        return ""
+    return (f"learn: {out['checked']} sorted mails read again in Gmail (labels only), "
+            f"{out['changed']} change{'s' if out['changed'] != 1 else ''} learned" + (f", {out['checked_off']} checked" if out["checked_off"] else "")
+            + (f", {len(out['proposals'])} rule{'s' if len(out['proposals']) > 1 else ''} proposed"
+               if out["proposals"] else ""))
+
+
+def why(cfg, request, gmail_factory, ask=None, progress=None):
+    """The "Why?" button: asks the model why it chose this theme and status for one mail."""
+    store = batches.Store(MEMORY_PATH)
+    try:
+        row = store.mail(request.get("gm_msgid"))
+        if not row:
+            raise ValueError("Unknown mail")
+        ask, model_note = get_model(cfg, request, ask)
+        with connect(cfg, gmail_factory) as gmail:
+            gmail.open(gmail.all_mail(), readonly=True)
+            uid = row["all_uid"] if row["all_uid"] > 0 else None
+            mails = gmail.fetch([uid], cfg["behavior"]["body_chars"]) if uid else []
+            if not mails or mails[0].gm_msgid != row["gm_msgid"]:  # id unknown or changed: search it
+                uid = gmail.find([row["gm_msgid"]]).get(row["gm_msgid"])
+                mails = gmail.fetch([uid], cfg["behavior"]["body_chars"]) if uid else []
+        if not mails or mails[0].gm_msgid != row["gm_msgid"]:
+            raise ValueError("This mail is no longer in Gmail")
+        if row["rule"]:
+            reason = f"Your rule ({row['rule']}) sorts every mail of this sender this way."
+        else:
+            reason = classify.explain(mails[0], ask, row["theme"], row["status"])
+        if not reason:
+            raise models.ModelError(f"The model {model_note.split(' · ')[0]} gave no reason. Try again.")
+        store.set_reason(row["gm_msgid"], reason)
+        subject = " ".join(row["subject"].split())[:90]
+        return {"gm_msgid": row["gm_msgid"], "reason": reason, "model": model_note,
+                "log": f"{MAIL_LINE}why · {row['sender'][:60]} · \"{subject}\" · {row['theme']} / {row['status']} · "
+                       f"{reason}"}
+    finally:
+        store.close()
+
+
+STEP3.update(keep=keep, to_delete=to_delete, trash=trash, restore=restore, label_order=label_order, scan=scan,
+             senders=list_senders, sender_state=sender_state, suggest=suggest, learn_gmail=learn_gmail, why=why,
+             journal=journal)

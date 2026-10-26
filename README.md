@@ -60,7 +60,12 @@ echo '{"action": "preview", "limit": 5}' | python adagio.py call
 echo '{"action": "plan", "scope": {"kind": "count", "value": 200}}' | python adagio.py call
 echo '{"action": "apply", "batch_id": 1, "skip": []}' | python adagio.py call
 echo '{"action": "scan"}' | python adagio.py call
+echo '{"action": "capabilities"}' | python adagio.py call   # what it can do, for another agent
 ```
+
+Through this door, **trash**, **restore** and **label_order** are refused: a person must click them in
+the window. `capabilities` returns the contract (`agent.json`), the allowed actions and those
+reserved for the window.
 
 ## How sorting works (step 3)
 
@@ -80,7 +85,7 @@ Gmail reserves the name *Important*, so that status uses the label **Priority** 
 
 - **Order and numbers** (Labels in Gmail > Order and numbers): drag the labels into the order you
   want. With numbering on, Gmail lists them in that order: statuses `01 - Priority`, `02 - To Do`,
-  `03 - Info`, themes `11 - Health` ... `21 - Promotions`, `98 - To delete`, `99 - Other`. Applying
+  `03 - Info`, themes `11 - Health` ... `21 - Promotions`, `97 - To check`, `98 - To delete`, `99 - Other`. Applying
   renames the labels in Gmail (mails and colours stay), `config.yaml` (`label_order:`) and `adagio.db`.
 - **Colours**: each theme and status has one of Gmail's label colours (`color:` in `config.yaml`).
   IMAP cannot colour a label, so pick the same colour once in Gmail (the app lists them).
@@ -96,6 +101,37 @@ Gmail reserves the name *Important*, so that status uses the label **Priority** 
   its own, even when it acts alone. In the **To delete** card you check the mails in Gmail, then click
   **Move to Trash** and confirm the count. Gmail keeps the Trash 30 days; **Restore** brings the last
   ones back. Nothing is ever deleted for good (no EXPUNGE).
+
+## "To check", reasons and the journal
+
+- **To check** (`97 - To check`): the model says how sure it is (high, medium, low). A mail gets this
+  extra label when the model is not sure, when it chose *Other*, or when it gave no valid answer (or
+  took too long). Only for these mails, one more short call asks the model for its reason in one
+  sentence. A correction (here or in Gmail) removes the mail from the list.
+- **Why?** (the ? on a mail): shows who decided (your rule, your correction or the model), how sure
+  the model was and its reason. **Ask the model why** reads the mail again for any other mail.
+- **Journal** (left menu): every mail sorted, with its sender, subject, rule or model and confidence,
+  theme and status, the labels added and the reason for the mails to check; also what it learned.
+  Search and filter it. It is saved in `adagio.log`; the activity list on the right keeps one line per
+  run.
+
+## Learning from your changes in Gmail
+
+You moved a sorted mail to another theme (or status) directly in Gmail? Before each batch (option
+*Learn from my changes in Gmail*, `learn_gmail: true`) or with **Learn from Gmail**, the agent reads
+the labels of the mails it sorted: labels only, no content, no AI, a few seconds. Each change becomes a
+correction: the mail keeps its new theme, and its sender and subject become an example for the model.
+After the same correction twice for one sender, a rule is proposed in the **Learning** card: **Make it
+a rule** or **Ignore**. Gmail is not changed. Removing the label "To check" in Gmail marks the mail as
+checked.
+
+## Clear errors
+
+- Ollama not running: the agent starts it once if it is installed, else says how to start it (or where
+  to download it). The model itself is loaded on the first mail (up to 5 minutes for a big one).
+- Gmail refuses the login: the page lists the 3 things to check (IMAP on, an app password, paste it in
+  Settings) with buttons to the Gmail pages and to Settings. Results carry an `error_code`
+  (`gmail_login`, `offline`, `ollama_down`, `ollama_missing`) for other programs.
 
 ## Senders: subscriptions and ready-made rules
 
@@ -161,6 +197,6 @@ tests/               python -m unittest   (fake Gmail, fake model)
 
 - The agent reads the start of each mail (1500 characters by default, `body_chars`) and sends it to the
   model you chose. With Ollama, nothing leaves your computer.
-- It does not store mail content. From step 3, only the mail id, subject and tags go into a local
+- It does not store mail content (the journal has the sender and the subject, never the text). From step 3, only the mail id, subject and tags go into a local
   SQLite file, to resume after a stop and to undo the last run. The Senders page stores each sender's
   address, name, mail count and unsubscribe link.

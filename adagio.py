@@ -188,7 +188,7 @@ def call_mode(config_path):
     try:
         request = json.loads(sys.stdin.read() or "{}")
         request.setdefault("config", config_path)
-        result = core.handle(request)
+        result = core.handle(request, door="json")  # trash, restore, renaming: refused, window only
     except json.JSONDecodeError as e:
         result = {"ok": False, "error": f"Invalid JSON request: {e}", "agent": core.AGENT}
     return print_json(result)
