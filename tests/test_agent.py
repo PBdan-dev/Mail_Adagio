@@ -1195,5 +1195,151 @@ class TestRelaunch(unittest.TestCase):
         shutil.rmtree(tmp)
 
 
+class TestAgentMode(unittest.TestCase):
+    """v0.8: a request in your own words; the model picks actions from the skills card, the code checks and runs them."""
+
+    def setUp(self):
+        from agent import demo
+        self.demo = demo
+        demo.DELAY = 0
+        demo.FakeIMAP.reset(copies=1, extra=True)  # 15 mails, one "Shoply Prime Days"
+        self.tmp = Path(tempfile.mkdtemp())
+        core.MEMORY_PATH = self.tmp / "adagio.db"
+        core.LOG_PATH = self.tmp / "adagio.log"
+        self.path = self.tmp / "config.yaml"
+        self.path.write_text(config.EXAMPLE.read_text(encoding="utf-8").replace('email: ""', 'email: "me@gmail.com"'),
+                             encoding="utf-8")
+        self.cfg = cfg_with()
+
+    def tearDown(self):
+        core.MEMORY_PATH, core.LOG_PATH = ":memory:", None
+        shutil.rmtree(self.tmp)
+
+    def run_(self, door="app", ask=None, **request):
+        return core.handle({"config": str(self.path), **request}, cfg=self.cfg, gmail_factory=self.demo.gmail_factory,
+                           ask=ask or self.demo.ask, door=door)
+
+    def sorted_batch(self):
+        plan = self.run_(action="plan", scope={"kind": "all"}, batch_size=50)
+        self.assertTrue(plan["ok"], plan.get("error"))
+        self.assertTrue(self.run_(action="apply", batch_id=plan["plan"]["batch_id"], skip=[])["ok"])
+        return plan["plan"]
+
+    def labels_of(self, subject):
+        m = next(m for m in self.demo.FakeIMAP.mails.values() if subject.encode() in m["raw"])
+        return m["labels"]
+
+    def test_the_skills_card_covers_every_action(self):
+        from agent import skills
+        self.assertEqual(set(skills.BY_NAME), set(core.ACTIONS))
+        self.assertEqual(set(skills.WINDOW_ONLY), set(core.UI_ONLY))
+        for name in core.UI_ONLY + ("request", "capabilities"):
+            self.assertNotIn(name, skills.AGENT_ACTIONS)  # the model cannot even propose them
+        self.assertIn("relabel", skills.prompt_lines(self.cfg))
+        self.assertNotIn("trash(", skills.prompt_lines(self.cfg))
+        cap = self.run_(door="json", action="capabilities")
+        self.assertEqual({s["name"] for s in cap["skills"]}, set(core.ACTIONS))
+
+    def test_the_checks_refuse_bad_steps(self):
+        from agent import skills
+        bad = [("trash", {}), ("relabel", {"gm_msgids": ["123"]}), ("relabel", {"gm_msgids": ["abc"], "theme": "Admin"}),
+               ("relabel", {"gm_msgids": ["123"], "theme": "Holidays"}), ("search", {}),
+               ("relabel", {"gm_msgids": "$prev", "theme": "Admin"}), ("plan", {"scope": {"kind": "everything"}})]
+        for name, params in bad:
+            with self.assertRaises(ValueError, msg=name):
+                skills.check(name, params, self.cfg)
+        ok = skills.check("relabel", {"theme": "promotions"}, self.cfg, prev_ids=["42"])
+        self.assertEqual(ok, {"gm_msgids": ["42"], "theme": "Promotions"})  # $prev by default, the exact name
+
+    def test_search_finds_mails_and_changes_nothing(self):
+        before = {u: set(m["labels"]) for u, m in self.demo.FakeIMAP.mails.items()}
+        r = self.run_(action="search", subject="Prime Days")
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertEqual((r["found"], r["changes_made"]), (1, 0))
+        self.assertIn("Prime Days", r["mails"][0]["subject"])
+        self.assertIn('subject:"Prime Days"', r["query"])
+        self.assertEqual(before, {u: set(m["labels"]) for u, m in self.demo.FakeIMAP.mails.items()})
+
+    def test_relabel_then_undo(self):
+        self.sorted_batch()
+        found = self.run_(action="search", subject="Prime Days")["mails"][0]
+        self.assertEqual(found["theme"], "Shopping & Deliveries")
+        r = self.run_(action="relabel", gm_msgids=[found["gm_msgid"]], theme="Promotions")
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertEqual(r["relabelled"], 1)
+        labels = self.labels_of("Prime Days")
+        names = config.labels(self.cfg)
+        self.assertIn(names["Promotions"], labels)
+        self.assertNotIn(names["Shopping & Deliveries"], labels)
+        self.assertEqual(self.run_(action="rules")["keywords_waiting"], 1)  # counts as a correction: keywords to learn
+        u = self.run_(action="undo")
+        self.assertTrue(u["ok"], u.get("error"))
+        labels = self.labels_of("Prime Days")
+        self.assertIn(names["Shopping & Deliveries"], labels)  # the old theme is back
+        self.assertNotIn(names["Promotions"], labels)
+
+    def test_keywords_action_saves_to_config(self):
+        r = self.run_(action="keywords", theme="Admin", add=["URSSAF"])
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertIn("URSSAF", config.keywords(config.load(self.path))["Admin"])
+        r = self.run_(action="keywords", theme="Admin", remove=["URSSAF"])
+        self.assertNotIn("URSSAF", config.keywords(config.load(self.path))["Admin"])
+
+    def test_a_request_end_to_end(self):
+        self.sorted_batch()
+        r = self.run_(action="request", text="Mets les mails Prime Day dans Promotions")
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertEqual([s["action"] for s in r["steps"]], ["search", "relabel"])
+        self.assertTrue(all(s["ok"] for s in r["steps"]))
+        self.assertEqual(r["steps"][1]["params"]["gm_msgids"], "1 mails")
+        self.assertGreater(r["changes_made"], 0)
+        self.assertTrue(r["answer"])
+        self.assertIn(config.labels(self.cfg)["Promotions"], self.labels_of("Prime Days"))
+        self.assertIn('request: "Mets les mails Prime Day', "\n".join(core.read_log(50)))
+
+    def test_a_search_that_finds_nothing_stops_cleanly(self):
+        fake = lambda system, user, schema: json.dumps(
+            {"steps": [{"action": "search", "params": {"subject": "No such mail"}},
+                       {"action": "relabel", "params": {"gm_msgids": "$prev", "theme": "Admin"}}], "refuse": ""}) \
+            if "steps" in schema["properties"] else "{}"
+        r = self.run_(action="request", text="file nothing", ask=fake)
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertEqual(r["changes_made"], 0)
+        self.assertTrue(r["steps"][1]["ok"])
+        self.assertIn("found no mail", r["steps"][1]["log"])
+
+    def test_a_refusal_changes_nothing(self):
+        before = {u: set(m["labels"]) for u, m in self.demo.FakeIMAP.mails.items()}
+        r = self.run_(action="request", text="vide la corbeille")
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertTrue(r["refused"])
+        self.assertEqual((r["steps"], r["changes_made"]), ([], 0))
+        self.assertEqual(before, {u: set(m["labels"]) for u, m in self.demo.FakeIMAP.mails.items()})
+
+    def test_the_trash_stays_blocked_even_if_the_model_asks(self):
+        fake = lambda system, user, schema: json.dumps(
+            {"steps": [{"action": "trash", "params": {"confirm": 3}}], "refuse": ""}) if "steps" in schema["properties"] else "{}"
+        r = self.run_(action="request", text="clean up", ask=fake)
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertFalse(r["steps"][0]["ok"])
+        self.assertIn("Refused by the checks", r["steps"][0]["error"])
+        self.assertEqual(r["changes_made"], 0)
+        self.assertFalse(any("\\Trash" in m["labels"] for m in self.demo.FakeIMAP.mails.values()))
+        for action in ("trash", "restore", "read", "label_order", "request"):
+            self.assertFalse(self.run_(door="agent", action=action, confirm=0)["ok"], action)
+
+    def test_at_most_five_steps(self):
+        fake = lambda system, user, schema: json.dumps(
+            {"steps": [{"action": "status", "params": {}}] * 8, "refuse": ""}) if "steps" in schema["properties"] else "{}"
+        r = self.run_(action="request", text="status please", ask=fake)
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertEqual(len(r["steps"]), 5)
+
+    def test_the_json_door_allows_a_request(self):
+        r = self.run_(door="json", action="request", text="combien de mails ?")
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertEqual(r["steps"][0]["action"], "status")
+
+
 if __name__ == "__main__":
     unittest.main()

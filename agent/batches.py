@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS mails (
     confidence TEXT NOT NULL DEFAULT '',  -- high | medium | low, from the model ('' = a rule decided)
     to_check   INTEGER NOT NULL DEFAULT 0, -- 1 = the model was not sure: label "To check"
     reason     TEXT NOT NULL DEFAULT '',  -- one sentence from the model, only for the mails to check
-    all_uid    INTEGER NOT NULL DEFAULT 0 -- id in All Mail, to read its labels again later (0 = unknown)
+    all_uid    INTEGER NOT NULL DEFAULT 0, -- id in All Mail, to read its labels again later (0 = unknown)
+    removed    TEXT NOT NULL DEFAULT '[]' -- labels the agent removed (relabel), put back by undo
 );
 CREATE TABLE IF NOT EXISTS trash (
     gm_msgid TEXT NOT NULL,
@@ -64,7 +65,8 @@ CREATE TABLE IF NOT EXISTS trash (
 
 NEW_COLUMNS = [("marked_read", "INTEGER NOT NULL DEFAULT 0"), ("to_delete", "INTEGER NOT NULL DEFAULT 0"),
                ("confidence", "TEXT NOT NULL DEFAULT ''"), ("to_check", "INTEGER NOT NULL DEFAULT 0"),
-               ("reason", "TEXT NOT NULL DEFAULT ''"), ("all_uid", "INTEGER NOT NULL DEFAULT 0")]
+               ("reason", "TEXT NOT NULL DEFAULT ''"), ("all_uid", "INTEGER NOT NULL DEFAULT 0"),
+               ("removed", "TEXT NOT NULL DEFAULT '[]'")]
 
 
 def now():
@@ -145,10 +147,28 @@ class Store:
                      r.get("reason", "")[:300]))
         return cur.lastrowid
 
+    def add_relabel(self, rows):
+        """Mails given another theme or status on request (agent mode): one applied batch, outside any
+        sort job, so undo can put their labels back. rows: [{gm_msgid, uid, date, sender, subject, theme,
+        status, added, removed, archived}]"""
+        with self.db:
+            cur = self.db.execute("INSERT INTO batches (job_id, state, model, created, applied) "
+                                  "VALUES (0, 'applied', 'relabel', ?, ?)", (now(), now()))
+            for r in rows:
+                self.db.execute(
+                    "INSERT OR REPLACE INTO mails (gm_msgid, batch_id, uid, date, sender, subject, theme, status, "
+                    "classified, corrected, state, added, removed, archived, all_uid) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 'applied', ?, ?, ?, ?)",
+                    (r["gm_msgid"], cur.lastrowid, r["uid"], r["date"], r["sender"], r["subject"][:300],
+                     r["theme"], r["status"], json.dumps(r["added"]), json.dumps(r["removed"]),
+                     int(r["archived"]), r["uid"]))
+        return cur.lastrowid
+
     def mails(self, batch_id):
         rows = self.all("SELECT * FROM mails WHERE batch_id = ? ORDER BY date DESC, uid DESC", batch_id)
         for r in rows:
             r["added"] = json.loads(r["added"])
+            r["removed"] = json.loads(r.get("removed") or "[]")
             r["classified"], r["corrected"], r["archived"] = (bool(r["classified"]), bool(r["corrected"]),
                                                               bool(r["archived"]))
             r["marked_read"], r["to_delete"] = bool(r["marked_read"]), bool(r["to_delete"])

@@ -150,6 +150,27 @@ Gmail), the agent learns keywords on its own, before the next batch or with **Le
   corrected in the last batches (fewer corrections = better sort). Keywords stay clues for the model,
   never strict rules; see or change them in **Views > Keywords** (at most 40 per theme).
 
+## Agent mode: ask in your own words
+
+Type a request in the **Ask Adagio** bar, in any language: "put the Prime Days mails in Promotions",
+"how many mails are left to check?", "add URSSAF as an Admin keyword".
+
+1. The model reads the request and the **skills card** (`agent/skills.py`): the actions it may use, what
+   each one does and its parameters. It answers with 1 to 5 steps, or a refusal.
+2. The code checks every step before it runs: known action, valid parameters, existing theme or status.
+   A step that fails the checks stops the request.
+3. The steps run one after the other, with no confirmation, each one written in the activity log. A
+   change in Gmail (`relabel`, a sorted batch) is undone with **Undo** like any batch.
+4. The model sums up what was done in one to three sentences, under the bar, with the list of steps.
+
+Never on the card, and refused by the code if the model asks anyway: the Trash, restoring, reading a
+whole mail, renaming labels. Unsubscribing, sending mail and settings do not exist as actions. Words
+found inside mails are data for the model, never instructions.
+
+New actions, also open to other programs: `search` (Gmail's search, changes nothing), `relabel`
+(another theme or status; counts as a correction, so keywords are learned), `keywords` (read or change
+a theme's keywords) and `request`. `capabilities` returns the whole skills card.
+
 ## Clear errors
 
 - Ollama not running: the agent starts it once if it is installed, else says how to start it (or where
@@ -215,6 +236,9 @@ agent/web/index.html the interface: one page, no external files
 agent/demo.py        made-up mails for the demo mode
 agent/memory.py      what you taught it: rules and corrections, kept in adagio.db
 agent/senders.py     who writes to you: counts, unsubscribe links, suggested rules, in adagio.db
+agent/keywords.py    keywords learned from your corrections
+agent/skills.py      the skills card: every action, its parameters, the checks of agent mode
+agent/ask.py         agent mode: a request in your own words -> checked steps -> results
 tests/               python -m unittest   (fake Gmail, fake model)
 ```
 

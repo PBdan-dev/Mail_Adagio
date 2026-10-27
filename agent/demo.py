@@ -127,6 +127,8 @@ class FakeIMAP:
                                                 "raw": _raw(sender, subject, text, when, theme), "date": when,
                                                 "seen": n % 3 == 0}
 
+    literal = None  # the words of the next search (imaplib sends them as a literal)
+
     def __init__(self, host):
         if FakeIMAP.mails is None:
             FakeIMAP.reset(extra=FakeIMAP.extra)
@@ -183,6 +185,9 @@ class FakeIMAP:
         FakeIMAP.commands.append((command,) + args)
         box = self.visible()
         if command == "SEARCH":
+            if "X-GM-RAW" in args:  # a few of Gmail's search words, enough for the demo and the tests
+                raw, self.literal = (self.literal or b"").decode("utf-8"), None
+                return "OK", [" ".join(map(str, sorted(u for u, m in box.items() if gmail_match(m, raw)))).encode()]
             if "X-GM-MSGID" in args:
                 hits = [u for u, m in box.items() if m["gm"] == args[-1]]
             elif "SINCE" in args:
@@ -229,6 +234,28 @@ class FakeIMAP:
         return "OK", out
 
 
+def gmail_match(m, raw):
+    """Does this made-up mail match a Gmail search? from:, subject:, label:, newer_than:Nd, in:inbox, words."""
+    from email import message_from_bytes
+    head = message_from_bytes(m["raw"])
+    text = m["raw"].decode("utf-8", "replace").lower()
+    for key, quoted, plain in re.findall(r'(?:(\w+):)?(?:"([^"]*)"|(\S+))', raw):
+        value = (quoted or plain).lower()
+        if key == "from" and value not in str(head["From"]).lower():
+            return False
+        if key == "subject" and value not in str(head["Subject"]).lower():
+            return False
+        if key == "label" and value not in {x.lower() for x in m["labels"]}:
+            return False
+        if key == "in" and value == "inbox" and "\\Inbox" not in m["labels"]:
+            return False
+        if key == "newer_than" and m["date"] < datetime(2026, 10, 24, 23, tzinfo=timezone.utc) - timedelta(days=int(value.rstrip("d"))):
+            return False
+        if not key and value not in text:
+            return False
+    return True
+
+
 def gmail_factory(address, password, host):
     return Gmail(address, password, host, imap_class=FakeIMAP)
 
@@ -248,8 +275,54 @@ UNSURE = {  # subject: (reason, confidence) for the mails the made-up model is n
 WORDS = {"Shoply Prime Days: up to 40% off": ["Shoply Prime Days", "up to 40% off", "electronics"]}
 
 
+def agent_steps(user):
+    """What the made-up model answers in agent mode: a few requests it understands, in French or English."""
+    text = user.lower()
+    if any(w in text for w in ("trash", "corbeille", "supprime", "delete", "efface")):
+        return {"steps": [], "refuse": "Mail Adagio never deletes mail: only you can move mails to the Trash, "
+                                       "from the window."}
+    if "prime day" in text:
+        return {"steps": [{"action": "search", "params": {"subject": "Prime Days"}},
+                          {"action": "relabel", "params": {"gm_msgids": "$prev", "theme": "Promotions"}}],
+                "refuse": ""}
+    if "urssaf" in text:
+        return {"steps": [{"action": "keywords", "params": {"theme": "Admin", "add": ["URSSAF"]}}], "refuse": ""}
+    if any(w in text for w in ("to check", "vérifier", "verifier", "incertain")):
+        return {"steps": [{"action": "search", "params": {"label": "To check"}}], "refuse": ""}
+    if any(w in text for w in ("trie", "sort ")):
+        return {"steps": [{"action": "plan", "params": {"scope": {"kind": "count", "value": 50}, "act_alone": True}}],
+                "refuse": ""}
+    if any(w in text for w in ("où en", "status", "combien", "how many")):
+        return {"steps": [{"action": "status", "params": {}}], "refuse": ""}
+    return {"steps": [], "refuse": "The demo model only knows a few requests: Prime Day mails, sorting, "
+                                   "mails to check, the URSSAF keyword."}
+
+
+def agent_answer(steps):
+    """What the made-up model says once the steps ran (a real model writes it in the language of the request)."""
+    if not all(st.get("ok") for st in steps):
+        return "Je me suis arrêté : une étape a échoué (détail ci-dessous)."
+    last = steps[-1]
+    r = last.get("result") or {}
+    if last["action"] == "relabel":
+        n = r.get("relabelled", 0)
+        return f"C'est fait : {n} mail{'s' if n > 1 else ''} déplacé{'s' if n > 1 else ''} dans Promotions. Annuler les remet comme avant." \
+            if n else "Aucun mail trouvé, rien n'a changé."
+    if last["action"] == "search":
+        n = r.get("found", 0)
+        subjects = ", ".join(m["subject"] for m in r.get("mails", [])[:2])
+        return f"{n} mail{'s' if n > 1 else ''} à vérifier, dont : {subjects}." if n else "Aucun mail à vérifier."
+    if last["action"] == "keywords":
+        return "Mot-clé URSSAF ajouté au thème Admin. Il servira dès le prochain lot."
+    return "C'est fait."
+
+
 def ask(system, user, schema):
     time.sleep(DELAY)  # feel of a real model
+    if "steps" in schema.get("properties", {}):
+        return json.dumps(agent_steps(user))
+    if "answer" in schema.get("properties", {}):
+        return json.dumps({"answer": agent_answer(json.loads(user))})
     for sender, subject, _text, theme, status, _day in SAMPLES + EXTRA:
         if subject in user:
             if "keywords" in schema.get("properties", {}):

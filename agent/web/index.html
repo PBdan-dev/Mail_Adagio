@@ -757,6 +757,30 @@ details.rulesfold[open] > summary { margin-bottom: 8px; }
 #sideCol > .card:nth-child(3), #sendersCol > :nth-child(3) { --i: 5; } #sideCol > .card:nth-child(4) { --i: 6; } #sideCol > .card:nth-child(5) { --i: 7; }
 @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.995); filter: blur(6px); } }
 
+/* agent mode: a request in your own words */
+.askbar { flex: none; display: flex; gap: 8px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.askbar .askin { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 6px 0 14px; height: 42px;
+  border-radius: 999px; border: 1px solid var(--border-2); background: var(--surface-2); transition: border-color .2s, box-shadow .2s; }
+.askbar .askin:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.askbar .askin svg { flex: none; color: var(--accent); }
+.askbar input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 14px; padding: 0; height: 100%; }
+.askbar input::placeholder { color: var(--faint); }
+.askbar .btn { height: 32px; padding: 0 14px; }
+.askres { flex: none; position: relative; margin: 10px 16px 0; padding: 14px 44px 12px 16px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); animation: rise .35s var(--ease) both; }
+.askres.refused { background: var(--red-soft); border-color: color-mix(in srgb, var(--red) 28%, transparent); }
+.askres .q { color: var(--muted); font-size: 12.5px; margin: 0 0 4px; overflow-wrap: anywhere; }
+.askres .a { margin: 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.askres ol { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
+.askres li { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.askres li b { color: var(--text); font-weight: 600; }
+.askres li i { font-style: normal; flex: none; width: 16px; text-align: center; font-weight: 700; color: var(--green); }
+.askres li.ko i { color: var(--red); }
+.askres .foot { margin: 8px 0 0; font-size: 12px; color: var(--faint); }
+.askres .x { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border-radius: 50%; border: 0; background: transparent;
+  color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.askres .x:hover { background: var(--surface-2); color: var(--text); }
+@media (max-width: 640px) { .askbar { padding: 10px 12px; } .askres { margin: 10px 12px 0; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
   .aurora i { animation: none; }
@@ -866,6 +890,12 @@ details.rulesfold[open] > summary { margin-bottom: 8px; }
         <select id="loadSel" class="hidden" aria-label="Model to load"></select>
         <button type="button" class="btn sm hidden" id="loadBtn" title="Loads the model into Ollama now. It stays loaded 30 min after the last mail.">Load</button></div>
     </div>
+    <form class="askbar" id="askForm" autocomplete="off">
+      <label class="askin"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+        <input id="askText" maxlength="1000" placeholder="Ask Adagio: “put the Prime Days mails in Promotions”, “how many mails to check?”" aria-label="Ask Adagio">
+        <button class="btn primary" id="askBtn" type="submit">Ask</button></label>
+    </form>
+    <div class="askres hidden" id="askRes" role="status" aria-live="polite"></div>
     <div class="hint hidden" id="autoHint">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
         <span id="autoHintText"></span>
@@ -1402,10 +1432,23 @@ $("#restoreBtn").onclick = async () => {
   loadDelete(); refresh();
 };
 
+function drawAsk(n) {
+  const box = $("#askRes"), refused = !!n.refused || !n.ok;
+  box.classList.toggle("refused", refused);
+  const steps = (n.steps || []).map(st => `<li class="${st.ok ? "" : "ko"}"><i>${st.ok ? "✓" : "✗"}</i><span><b>${esc(st.action)}</b> · ${esc((st.ok ? st.log || "done" : st.error || "failed").replace(st.action + ": ", ""))}</span></li>`).join("");
+  box.innerHTML = `<button type="button" class="x" title="Close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`
+    + `<p class="q">“${esc(n.text)}”</p><p class="a">${esc(n.answer || (n.ok ? "Done." : "Failed."))}</p>`
+    + (steps ? `<ol>${steps}</ol>` : "")
+    + (n.changes ? `<p class="foot">${fmt(n.changes)} change${n.changes === 1 ? "" : "s"} in Gmail · Undo puts them back.</p>` : n.refused ? `<p class="foot">Nothing was changed.</p>` : "");
+  box.classList.remove("hidden");
+  box.querySelector(".x").onclick = () => box.classList.add("hidden");
+}
+
 function jobEnded() {
   loadModel(); loadRules(); loadDelete();
   if (S.error) return toast(S.error, true);
   const n = S.notice;
+  if (n && n.kind === "ask") { drawAsk(n); if (n.changes) loadRules(); }
   if (n && n.kind === "apply") toast(`Done: ${fmt(n.applied)} mails labelled, ${fmt(n.moved)} moved out of the Inbox` + (n.read ? `, ${fmt(n.read)} marked as read.` : "."));
   if (n && n.kind === "stopped") toast(n.analysed ? `Stopped. ${fmt(n.analysed)} mails analysed wait in the plan below; the others come next time.` : "Stopped. Nothing was analysed yet.");
   if (n && n.kind === "load") toast(`${n.model} is loaded (${n.seconds} s). Ollama keeps it 30 min after the last mail.`);
@@ -1508,6 +1551,8 @@ function render() {
   $("#stopBtn").classList.toggle("hidden", !(busy && (job.kind === "auto" || job.kind === "plan")));
   $("#stopBtn").disabled = S.stopping; $("#stopBtn").textContent = S.stopping ? "Stopping…" : "Stop";
   $("#restartBtn").classList.toggle("hidden", busy || !!plan || !p || !p.done);
+  $("#askBtn").disabled = busy; $("#askText").disabled = busy && job.kind === "ask";
+  $("#askBtn").textContent = busy && job.kind === "ask" ? "Working…" : "Ask";
   $("#learnBtn").disabled = busy; $("#learnBtn").textContent = busy && job.kind === "learn" ? "Reading Gmail…" : "Learn from Gmail";
   ["#scopeSeg button", "#scopeVal", "#batchRange", "#actAlone", "#markRead", "#learnGmail"].forEach(q => document.querySelectorAll(q).forEach(el => el.disabled = busy));
 
@@ -1524,6 +1569,7 @@ function render() {
     $("#barFill").style.width = "100%";
     $("#progressText").textContent = { apply: "Adding labels in Gmail…", undo: "Putting the mails back as they were…",
       learn: "Reading your changes in Gmail, then the AI learns keywords from your corrections…",
+      ask: `Adagio is working on “${(job.text || "").slice(0, 80)}”…`,
       load: `Loading ${job.model} into Ollama. Can take up to a minute…` }[job.kind] || "Working…";
   } else if (p) {
     $("#barFill").style.width = Math.max(3, Math.round(100 * p.done / Math.max(p.total, 1))) + "%";
@@ -2105,6 +2151,13 @@ async function start(path, body) {
   refresh();
 }
 $("#runBtn").onclick = () => start("/api/plan", { scope, batch_size: batchSize });
+$("#askForm").onsubmit = e => {
+  e.preventDefault();
+  const text = $("#askText").value.trim();
+  if (!text) return $("#askText").focus();
+  $("#askRes").classList.add("hidden");
+  start("/api/request", { text });
+};
 $("#restartBtn").onclick = () => { if (confirm("Start a new sort from the newest mail? Mails already filed stay filed.")) start("/api/plan", { scope, batch_size: batchSize, restart: true }); };
 $("#stopBtn").onclick = () => start("/api/stop", {});
 $("#applyBtn").onclick = () => start("/api/apply", { batch_id: S.sort.plan.batch_id, skip: [...skip] });

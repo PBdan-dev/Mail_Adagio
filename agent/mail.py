@@ -194,6 +194,18 @@ class Gmail:
         if status != "OK":
             raise MailError(f"Cannot rename the label '{old}' to '{new}'")
 
+    def search(self, raw=""):
+        """Mail ids of the open folder matching a Gmail search ("from:shop.com newer_than:30d"), newest first.
+        Nothing is read or changed. The words go as a literal, so any language works."""
+        if raw:
+            self.imap.literal = raw.encode("utf-8")
+            status, data = self.imap.uid("SEARCH", "CHARSET", "UTF-8", "X-GM-RAW")
+        else:
+            status, data = self.imap.uid("SEARCH", None, "ALL")
+        if status != "OK":
+            raise MailError("Gmail search failed")
+        return sorted((int(u) for u in (data[0] or b"").split()), reverse=True)
+
     def find(self, gm_msgids):
         """{gm_msgid: uid} in the open folder (open All Mail to find a mail wherever it is)."""
         found = {}

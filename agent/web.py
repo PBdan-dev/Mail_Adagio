@@ -71,6 +71,8 @@ class App:
         learned = result.get("keywords_learned") or {}
         if self.demo and learned.get("keywords") is not None:
             self.demo_keywords = learned["keywords"]
+        if self.demo and result.get("new_keywords") is not None:  # keywords changed by a request
+            self.demo_keywords = result["new_keywords"]
         return result
 
     def state(self):
@@ -213,7 +215,7 @@ class App:
             if self.job["running"]:
                 return False
             self.job = {"running": True, "kind": kind, "done": 0, "total": 0, "model": "", "stop": False}
-            self.error, self.error_code = "", ""
+            self.error, self.error_code, self.notice = "", "", None
 
         def run():
             try:
@@ -241,6 +243,21 @@ class App:
             else:
                 self.fail(r)
         return self.start("learn", work)
+
+    def start_ask(self, body):
+        """Agent mode: a request in your own words; the model picks the actions, the code checks and runs them."""
+        cfg, text = self.cfg(), " ".join(str(body.get("text") or "").split())[:1000]
+        request = {"action": "request", "text": text}
+        if self.demo:
+            request["model_note"] = "demo-model · demo"
+
+        def work():
+            self.job.update(kind="ask", text=text)
+            r = self.call(request, progress=self.progress, cfg=cfg)
+            self.notice = {"kind": "ask", "text": text, "ok": r["ok"], "answer": r.get("answer") or r.get("error", ""),
+                           "refused": r.get("refused", ""), "steps": r.get("steps", []),
+                           "changes": r.get("changes_made", 0)}
+        return self.start("ask", work)
 
     def progress(self, i, n, row):
         if i == 0:
@@ -427,6 +444,7 @@ def make_handler(app, port):
             starters = {"/api/plan": lambda: app.start_plan(body), "/api/apply": lambda: app.start_apply(body),
                         "/api/load": lambda: app.start_load(body),
                         "/api/undo": app.start_undo, "/api/learn": app.start_learn,
+                        "/api/request": lambda: app.start_ask(body),
                         "/api/scan": lambda: app.start_simple("scan", {"action": "scan"}),
                         "/api/suggest": lambda: app.start_simple("suggest", {"action": "suggest",
                                                                              "top": body.get("top") or 20})}
