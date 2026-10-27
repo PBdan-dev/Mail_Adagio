@@ -1,0 +1,100 @@
+# Mail Adagio configuration.
+# `python adagio.py setup` copies this file to config.yaml and fills in your details.
+# config.yaml stays on your computer: it is never committed and never sent anywhere.
+
+gmail:
+  email: ""                 # your Gmail address
+  app_password: ""          # Google app password (16 letters). Asked on first run if empty.
+  imap_host: imap.gmail.com
+  mailbox: INBOX            # which mailbox the agent reads
+
+model:
+  provider: anthropic       # anthropic | openrouter | ollama
+  model_name: claude-haiku-5-5   # for ollama: active (model already loaded), auto (from your graphics card) or a name
+  api_key: ""               # not needed for ollama
+  base_url: ""              # "" = provider default
+  timeout_s: 60             # ollama: seconds per mail; a mail that takes longer is left unsorted
+
+behavior:
+  act_alone: false          # true = apply each batch without asking (you can always undo the last one)
+  batch_size: 100           # mails per batch, 50 to 1000
+  to_delete: true           # the model may label useless mails "To delete"; only you move them to the Trash
+  mark_read: false          # true = mark low-interest mails as read (themes below, status Info only)
+  mark_read_themes: ["Newsletters", "Promotions", "Social & Notifications"]
+  archive: true             # true = move sorted mails out of the Inbox (they stay in their theme label)
+  learn_gmail: true         # before each batch, learn from the sorted mails you moved in Gmail (labels only)
+  body_chars: 1500          # how many characters of each mail the model reads
+
+# Themes: one per mail. Add, rename or remove freely. Each theme is a Gmail label (a "folder").
+# "hint" tells the model what belongs there. Keep a theme named "Other".
+# Typical words of each theme (clues for the model): change them in the app, Views > Keywords.
+# Optional "label": Gmail label name when it must differ from the name.
+# Optional "color": one of Gmail's label colours (Red, Orange, Yellow, Green, Mint, Teal, Blue, Purple,
+# Pink, Brown, Dark Red, Dark Orange, Dark Green, Dark Blue, Dark Purple, Dark Pink, Gray, Light Gray,
+# Dark Gray, Black). The app shows it; in Gmail pick the same once (label menu > Label colour).
+themes:
+  - name: Health
+    color: Teal
+    hint: doctors, hospitals, pharmacy, health insurance, medical results
+  - name: Finance
+    color: Green
+    hint: bank, cards, payments, invoices, taxes, investments, insurance, salary
+  - name: Admin
+    color: Dark Blue
+    hint: government, utilities, contracts, housing, official paperwork
+  - name: Work & Projects
+    color: Blue
+    hint: your current work, colleagues, clients, personal projects, professional tools
+  - name: Job Search
+    color: Purple
+    hint: job offers and job alerts (LinkedIn, Indeed...), applications, recruiters, interviews
+  - name: Shopping & Deliveries
+    color: Orange
+    hint: orders, receipts, shipping and delivery updates, returns
+  - name: Travel
+    color: Mint
+    hint: flights, trains, hotels, rentals, bookings, itineraries
+  - name: Family & Friends
+    color: Pink
+    hint: personal mail written by people you know
+  - name: Newsletters
+    color: Dark Green
+    hint: content you subscribed to (articles, digests, blogs)
+  - name: Promotions
+    color: Gray
+    hint: marketing, sales, discounts, ads
+  - name: Social & Notifications
+    color: Light Gray
+    hint: social networks, app and service notifications, security alerts, forums (job alerts go to Job Search)
+  - name: Other
+    color: Brown
+    hint: anything that does not clearly fit another theme
+
+# Statuses: one per mail, independent from the theme.
+# "label" = the Gmail label name when it must differ from the name (Gmail reserves "Important").
+statuses:
+  - name: Important
+    label: Priority
+    color: Red
+    hint: needs your attention soon (deadline, money at stake, security, personal and urgent)
+  - name: To Do
+    color: Yellow
+    hint: asks you to do something (reply, pay, sign, book, confirm) but is not urgent
+  - name: Info
+    color: Dark Gray
+    hint: for information only, nothing to do
+
+# Used when the model fails twice to give a valid answer.
+fallback:
+  theme: Other
+  status: To Do
+
+# Local models (provider: ollama, model_name: ""): first row your machine meets wins.
+# Model names change fast: check https://ollama.com/library before relying on them.
+local_models:
+  - min_vram_gb: 20          # 24 GB cards: fast and reliable. More precise but slower: qwen3.6:27b
+    use: qwen3.5:9b
+  - min_vram_gb: 8
+    use: qwen3.5:4b
+  - min_vram_gb: 0
+    use: qwen3.5:2b

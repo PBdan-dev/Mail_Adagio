@@ -1,0 +1,2206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mail Adagio</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f2f0eb; --surface: rgba(255,255,255,.58); --surface-2: rgba(255,255,255,.8); --row: rgba(255,255,255,.8);
+  --dense: rgba(250,249,246,.92); --border: rgba(17,20,27,.08); --border-2: rgba(17,20,27,.16); --sidebar: var(--surface);
+  --text: #11141b; --muted: #474f60; --faint: #757d8e;
+  --accent: #4b63e0; --accent-2: #8a4fe0; --on-accent: #ffffff;
+  --red: #d64545; --amber: #c27d00; --slate: #5c6b8a; --green: #12996b;
+  --shadow: 0 30px 70px -45px rgba(40,40,60,.45); --rim: rgba(255,255,255,.9); --rim-2: rgba(255,255,255,.3);
+  --au1: #3a3fd8; --au2: #0fb3a6; --au3: #b2399b; --au-opacity: .38; --soft: 12%;
+  /* soft tints follow the theme's colours */
+  --accent-soft: color-mix(in srgb, var(--accent) var(--soft), transparent);
+  --red-soft: color-mix(in srgb, var(--red) var(--soft), transparent);
+  --amber-soft: color-mix(in srgb, var(--amber) var(--soft), transparent);
+  --slate-soft: color-mix(in srgb, var(--slate) var(--soft), transparent);
+  --green-soft: color-mix(in srgb, var(--green) var(--soft), transparent);
+  --radius: 28px; --radius-sm: 16px;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", Inter, system-ui, -apple-system, sans-serif;
+  --ease: cubic-bezier(.22,1,.36,1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #06080e; --surface: rgba(255,255,255,.045); --surface-2: rgba(255,255,255,.075); --row: rgba(255,255,255,.075);
+    --dense: rgba(17,21,32,.82); --border: rgba(255,255,255,.085); --border-2: rgba(255,255,255,.16); --sidebar: var(--surface);
+    --text: #eef1f7; --muted: #aab3c5; --faint: #727d92;
+    --accent: #8ea6ff; --accent-2: #b48cff; --on-accent: #0a0e1a;
+    --red: #ff7a7a; --amber: #f5b84a; --slate: #8ea0c4; --green: #4fd1a5;
+    --shadow: 0 30px 80px -40px rgba(0,0,0,.9); --rim: rgba(255,255,255,.22); --rim-2: rgba(255,255,255,.06);
+    --au1: #3a3fd8; --au2: #0fb3a6; --au3: #b2399b; --au-opacity: .55; --soft: 16%;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #06080e; --surface: rgba(255,255,255,.045); --surface-2: rgba(255,255,255,.075); --row: rgba(255,255,255,.075);
+  --dense: rgba(17,21,32,.82); --border: rgba(255,255,255,.085); --border-2: rgba(255,255,255,.16); --sidebar: var(--surface);
+  --text: #eef1f7; --muted: #aab3c5; --faint: #727d92;
+  --accent: #8ea6ff; --accent-2: #b48cff; --on-accent: #0a0e1a;
+  --red: #ff7a7a; --amber: #f5b84a; --slate: #8ea0c4; --green: #4fd1a5;
+  --shadow: 0 30px 80px -40px rgba(0,0,0,.9); --rim: rgba(255,255,255,.22); --rim-2: rgba(255,255,255,.06);
+  --au1: #3a3fd8; --au2: #0fb3a6; --au3: #b2399b; --au-opacity: .55; --soft: 16%;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.5 "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", Inter, system-ui, -apple-system, Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select { font: inherit; color: inherit; }
+a { color: var(--accent); text-decoration: none; }
+
+/* layout: sidebar on the left, then the work area with its own panes (like a mail program) */
+html, body { height: 100%; }
+body { overflow: hidden; }
+.frame { display: flex; height: 100%; }
+.logo { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; flex: none;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff;
+  box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--accent) 70%, transparent); }
+.sidebar { flex: none; width: 256px; display: flex; flex-direction: column; gap: 18px; padding: 16px 12px 14px;
+  background: var(--sidebar); border-right: 1px solid var(--border); overflow: auto; }
+.brand-row { display: flex; align-items: center; gap: 11px; padding: 2px 8px; }
+.brand b { font-size: 15.5px; letter-spacing: -.01em; display: block; line-height: 1.2; }
+.brand span { display: block; color: var(--muted); font-size: 12px; }
+.nav { display: grid; gap: 2px; }
+.nav button { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 10px; border: 0; background: transparent;
+  color: var(--muted); font-weight: 550; cursor: pointer; text-align: left; width: 100%; }
+.nav button svg { flex: none; }
+.nav button:hover { background: var(--surface-2); color: var(--text); }
+.nav button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.05), inset 0 0 0 1px var(--border); }
+.nav button.on svg { color: var(--accent); }
+.side-h { display: flex; align-items: center; justify-content: space-between; padding: 0 10px 6px; font-size: 11px; font-weight: 650;
+  text-transform: uppercase; letter-spacing: .08em; color: var(--faint); }
+.linkbtn { border: 0; background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; padding: 2px 4px;
+  text-transform: none; letter-spacing: 0; border-radius: 6px; }
+.linkbtn:hover { background: var(--accent-soft); }
+.side-foot { margin-top: auto; padding: 10px 8px 0; border-top: 1px solid var(--border); }
+.side-foot .pill { width: 100%; justify-content: flex-start; overflow: hidden; }
+.side-foot .pill span { overflow: hidden; text-overflow: ellipsis; }
+.mainwrap { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.topbar { flex: none; display: flex; align-items: center; gap: 8px; padding: 14px 20px 12px; }
+.topbar .ttl { min-width: 0; }
+.topbar h1 { font-size: 21px; letter-spacing: -.025em; margin: 0; line-height: 1.25; }
+.topbar small { color: var(--muted); font-size: 13px; }
+.spacer { flex: 1; }
+.banners { flex: none; display: grid; gap: 8px; padding: 0 20px 12px; }
+.banners:not(:has(> .banner:not(.hidden))) { display: none; }
+main.shell { flex: 1; min-height: 0; display: grid; gap: 16px; padding: 0 20px 20px;
+  grid-template-columns: minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); }
+.shell.nopanel { grid-template-columns: minmax(0, 1fr); }
+.shell.nopanel #sideCol { display: none; }
+.pane { min-height: 0; min-width: 0; overflow: auto; }
+.pane.stack { display: grid; gap: 14px; align-content: start; padding: 0 2px 4px; }
+.pane.stack .card { padding: 16px 18px; }
+.pane.stack .card h2 { font-size: 14px; }
+.pane.stack .card .sub { margin-bottom: 12px; font-size: 12.5px; }
+.center { display: flex; flex-direction: column; overflow: hidden; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+.sortbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px;
+  border-bottom: 1px solid var(--border); position: relative; z-index: 3; }
+.listhead { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 14px 18px 8px; }
+.listhead .ttl { flex: 1; min-width: 220px; }
+.listhead h2 { font-size: 15px; margin: 0; letter-spacing: -.01em; }
+.listhead .sub { color: var(--muted); margin: 0; font-size: 12.5px; }
+.listhead .search { flex: 0 1 300px; }
+.mails { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 10px; }
+.center > .hint, .center > .alert { margin: 12px 16px 0; }
+#panelBtn.on { background: var(--accent-soft); color: var(--accent); }
+/* sort settings: a menu under the sort bar */
+.optwrap { position: relative; }
+#optsBtn { max-width: min(420px, 100%); }
+.optwrap { max-width: 100%; min-width: 0; }
+#optsBtn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+#optsBtn svg { flex: none; color: var(--muted); }
+.popover { position: absolute; top: calc(100% + 8px); left: 0; width: 380px; max-width: calc(100vw - 32px); z-index: 20;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px;
+  box-shadow: 0 24px 60px -18px rgba(10,12,30,.35), 0 2px 6px rgba(10,12,30,.06); }
+@media (max-width: 1440px) {
+  #sideCol, .shell.nopanel #sideCol { display: grid; position: fixed; top: 0; right: 0; bottom: 0; width: 360px; max-width: 92vw; z-index: 30;
+    background: var(--bg); padding: 16px; border-left: 1px solid var(--border); box-shadow: -18px 0 40px -12px rgba(0,0,0,.25);
+    transform: translateX(105%); transition: transform .22s ease; }
+  main.shell { grid-template-columns: minmax(0, 1fr); }
+  .shell.panelopen #sideCol { transform: none; }
+}
+@media (max-width: 1000px) { .sidebar { width: 216px; } }
+@media (max-width: 780px) {
+  body { overflow: auto; height: auto; }
+  html { height: auto; }
+  .frame { display: block; height: auto; }
+  .sidebar { width: auto; border-right: 0; border-bottom: 1px solid var(--border); gap: 12px; }
+  .nav { grid-auto-flow: column; }
+  .side-foot { display: none; }
+  #leftPane .flist { max-height: 240px; overflow: auto; }
+  main.shell { display: block; padding: 0 12px 12px; }
+  .topbar { padding: 14px 12px 10px; } .banners { padding: 0 12px 12px; }
+  .pane { overflow: visible; }
+  .center { margin-bottom: 14px; }
+  .mails { overflow: visible; }
+  #settingsBtn .lbl { display: none; } #settingsBtn { padding: 8px 10px; }
+  .popover { position: fixed; left: 12px; right: 12px; top: 80px; width: auto; max-height: calc(100vh - 100px); overflow: auto; }
+}
+
+/* pieces */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 20px; min-width: 0; }
+.card h2 { font-size: 15px; margin: 0 0 4px; letter-spacing: -.01em; }
+.card .sub { color: var(--muted); margin: 0 0 16px; font-size: 13px; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.btn { border: 1px solid var(--border); background: var(--surface); padding: 8px 14px; border-radius: 10px; box-shadow: 0 1px 1px rgba(18,20,40,.03);
+  cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-weight: 550; transition: .15s; }
+.btn:hover:not(:disabled) { background: var(--surface-2); }
+.btn.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: 0;
+  padding: 9px 17px; box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 8px 20px -8px color-mix(in srgb, var(--accent) 80%, transparent); }
+.btn.primary:hover:not(:disabled) { background: linear-gradient(135deg, var(--accent), var(--accent-2)); filter: brightness(1.08); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.ghost { border-color: transparent; background: transparent; box-shadow: none; color: var(--muted); }
+.btn.ghost:hover:not(:disabled) { color: var(--text); }
+.icon-btn { width: 36px; height: 36px; padding: 0; justify-content: center; }
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px;
+  background: var(--slate-soft); color: var(--muted); font-size: 12.5px; font-weight: 550; white-space: nowrap; }
+.pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.pill.ok { background: var(--green-soft); color: var(--green); } .pill.ok i { background: var(--green); }
+.pill.warn { background: var(--amber-soft); color: var(--amber); } .pill.warn i { background: var(--amber); }
+.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+.seg button { border: 0; background: transparent; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: var(--muted); font-weight: 550; }
+.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.banner { display: flex; gap: 10px; align-items: center; padding: 9px 14px;
+  border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-weight: 550; font-size: 13px; }
+.cardtop { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+#orderDlg { width: min(640px, calc(100vw - 32px)); }
+#kwDlg { width: min(820px, calc(100vw - 32px)); margin: 6vh auto auto; }
+.kwfind { width: 100%; margin-top: 14px; }
+.kwlist { display: grid; gap: 10px; margin-top: 12px; max-height: min(60vh, 620px); overflow: auto; padding-right: 4px; }
+.kwrow { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--surface); }
+.kwrow:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.kwhead { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin-bottom: 8px; }
+.kwhead b { font-weight: 650; }
+.kwhead small { color: var(--faint); font-size: 12px; }
+.kwhead .linkbtn { margin-left: auto; }
+.kwbox { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; cursor: text; }
+.kw { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 550;
+  background: color-mix(in srgb, var(--c) 14%, var(--surface)); color: var(--text); border: 1px solid color-mix(in srgb, var(--c) 30%, transparent); }
+.kw button { border: 0; background: transparent; color: var(--muted); cursor: pointer; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; padding: 0; font-size: 13px; line-height: 1; }
+.kw button:hover { background: var(--red-soft); color: var(--red); }
+.kwbox input { border: 0; outline: none; background: transparent; min-width: 160px; flex: 1; padding: 4px 2px; font-size: 13px; }
+.olists { display: grid; grid-template-columns: 1fr 1.4fr; gap: 16px; margin-top: 16px; }
+.olists h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+.olist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.olist li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border);
+  border-radius: 9px; background: var(--surface-2); font-size: 13.5px; user-select: none; }
+.olist li[draggable="true"] { cursor: grab; }
+.olist li.dragging { opacity: .4; }
+.olist li.over { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.olist li.fixed { opacity: .75; }
+.olist .grip { color: var(--faint); font-size: 14px; line-height: 1; }
+.olist .onum { font-variant-numeric: tabular-nums; font-weight: 650; color: var(--muted); min-width: 20px; }
+.olist .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.olist .mv { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+.olist .mv:hover:not(:disabled) { background: var(--surface); color: var(--text); }
+.olist .mv:disabled { opacity: .25; cursor: default; }
+.opreview { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13px; color: var(--muted); max-height: 160px; overflow: auto; }
+.opreview b { color: var(--text); }
+.opreview div { display: flex; gap: 6px; padding: 1px 0; }
+@media (max-width: 560px) { .olists { grid-template-columns: 1fr; } }
+details.colors { margin-top: 6px; }
+details.colors summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 550; }
+details.colors small { display: block; margin: 6px 0; }
+.banner.warn { background: var(--amber-soft); color: var(--amber); }
+.banner svg { flex: none; }
+
+/* run card */
+.run { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), var(--surface) 70%); }
+.run h2 { font-size: 20px; letter-spacing: -.02em; }
+.progress { grid-column: 1 / -1; display: none; }
+.progress.on { display: block; }
+.sortbar .progress { flex: 1 1 260px; min-width: 200px; }
+.sortbar .progress small { margin-top: 3px; font-size: 12px; }
+.bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--border); }
+.bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s; }
+.progress small { color: var(--muted); display: block; margin-top: 6px; }
+@media (max-width: 640px) { .run { grid-template-columns: 1fr; } }
+
+/* stats */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.stat { padding: 16px 18px; }
+.stat .k { color: var(--muted); font-size: 12.5px; font-weight: 550; display: flex; align-items: center; gap: 7px; }
+.stat .k i { width: 8px; height: 8px; border-radius: 50%; }
+.stat .v { font-size: 28px; font-weight: 650; letter-spacing: -.03em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* view list in the left pane: all, statuses, themes, with counts */
+.flist { display: grid; gap: 1px; }
+.frow { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 8px; cursor: pointer;
+  font-size: 13.5px; border: 0; background: transparent; width: 100%; text-align: left; }
+.frow:hover { background: var(--surface-2); }
+.frow.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.frow .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frow .fnum { color: var(--faint); font-size: 11.5px; font-variant-numeric: tabular-nums; width: 16px; flex: none; }
+.frow .n { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.frow.on .n { color: var(--accent); }
+.frow.zero { color: var(--faint); }
+.frow.zero .dot { opacity: .45; }
+.fsep { height: 1px; background: var(--border); margin: 6px 4px; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12.5px; }
+.filters .chip button { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 0 0 4px; font-size: 14px; line-height: 1; }
+
+/* themes */
+.dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.track { height: 10px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.track > div { height: 100%; border-radius: 99px; }
+
+/* mails */
+.tools { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.search { flex: 1; min-width: 160px; border: 1px solid var(--border); background: var(--surface-2);
+  border-radius: 10px; padding: 8px 12px; outline: none; }
+.search:focus { border-color: var(--accent); }
+.group { margin-top: 6px; }
+.ghead { display: flex; align-items: center; gap: 9px; position: sticky; top: 0; z-index: 1; padding: 12px 12px 6px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent); backdrop-filter: blur(8px);
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.ghead span { color: var(--faint); font-weight: 600; }
+.ghead .dot { width: 8px; height: 8px; border-radius: 50%; }
+.mail { display: grid; grid-template-columns: 30px 190px minmax(0, 1fr) auto 46px 88px; gap: 12px; align-items: center;
+  padding: 5px 12px; border-radius: 10px; font-size: 13.5px; min-height: 42px; transition: background .12s; }
+.mail.sel { grid-template-columns: 18px 30px 190px minmax(0, 1fr) auto 46px 88px; }
+.mail:hover { background: var(--row); }
+.av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 12.5px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+.mail .from { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mail .subj { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.mail .date { color: var(--faint); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.mail .acts2 { display: flex; gap: 2px; justify-content: flex-end; opacity: 0; transition: opacity .12s; }
+.mail:hover .acts2, .mail:focus-within .acts2 { opacity: 1; }
+@media (hover: none) { .mail .acts2 { opacity: 1; } }
+.mail a.open, .mail button.fix { color: var(--muted); display: grid; place-items: center; border-radius: 8px; width: 28px; height: 28px;
+  border: 0; background: transparent; cursor: pointer; padding: 0; }
+.mail a.open:hover, .mail button.fix:hover { color: var(--accent); background: var(--accent-soft); }
+.st { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px 3px 8px;
+  border-radius: 999px; white-space: nowrap; }
+.st i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.st-0, .st-x { background: var(--red-soft); color: var(--red); }
+.st-1 { background: var(--amber-soft); color: var(--amber); }
+.st-2 { background: var(--slate-soft); color: var(--slate); }
+.mini { font-size: 11px; font-weight: 650; padding: 1px 7px; border-radius: 6px; margin-left: 8px; background: var(--accent-soft); color: var(--accent); }
+.mini.ok { background: var(--green-soft); color: var(--green); }
+.mini.del { background: var(--red-soft); color: var(--red); display: inline-flex; align-items: center; gap: 4px; }
+.mini.del .keep { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0 2px; font-size: 13px; line-height: 1; }
+.mini.chk { background: color-mix(in srgb, #a46a21 16%, transparent); color: #b7772a; cursor: help; }
+.mail button.why { color: var(--muted); display: grid; place-items: center; border-radius: 8px; width: 28px; height: 28px;
+  border: 0; background: transparent; cursor: pointer; padding: 0; }
+.mail button.why:hover { color: var(--accent); background: var(--accent-soft); }
+/* why: how the model decided one mail */
+.whybox { margin-top: 14px; display: grid; gap: 10px; }
+.whyrow { display: flex; gap: 10px; align-items: center; font-size: 13px; }
+.whyrow > span:first-child { color: var(--muted); width: 92px; flex: none; }
+.whyrow > span:last-child { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.whyrow .mini { margin-left: 2px; }
+.conf { display: inline-flex; gap: 3px; align-items: center; }
+.conf i { width: 14px; height: 6px; border-radius: 3px; background: var(--border); }
+.conf.c-high i { background: var(--green); } .conf.c-medium i:nth-child(-n+2) { background: var(--amber); }
+.conf.c-low i:first-child { background: var(--red); }
+.conf em { font-style: normal; margin-left: 6px; color: var(--muted); }
+.reason { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; font-size: 13.5px; line-height: 1.55; }
+.reason.empty-r { color: var(--muted); padding: 10px 14px; text-align: left; }
+/* journal */
+#journalDlg { width: min(1040px, calc(100vw - 32px)); margin: 5vh auto auto; }
+.jtools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+.jtools .search { flex: 1; min-width: 200px; }
+.jlist { margin-top: 12px; max-height: min(62vh, 680px); overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
+.jline { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 7px 12px; font-size: 12.5px; border-bottom: 1px solid var(--border); }
+.jline:last-child { border-bottom: 0; }
+.jline time { color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.jline .jt { min-width: 0; word-break: break-word; color: var(--muted); }
+.jline .jt b { color: var(--text); font-weight: 600; }
+.jline.run { background: var(--surface-2); } .jline.run .jt { color: var(--text); font-weight: 600; }
+.jline .jc { color: #b7772a; } .jline .jl { color: var(--green); }
+.jfoot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+.jfoot code { font-size: 12px; }
+/* learning card: proposed rules */
+.card-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-h h2 { margin: 0; }
+.kwl { margin: 12px 0 4px; font-size: 13px; }
+.kwl h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--faint); }
+.kwl h3 .linkbtn { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.kwl .kw { display: flex; align-items: center; gap: 8px; padding: 5px 0; min-width: 0; }
+.kwl .kw + .kw { border-top: 1px solid var(--border); }
+.kwl .sign { flex: none; width: 20px; height: 20px; border-radius: 7px; display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+.kwl .sign.learned { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+.kwl .sign.removed { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
+.kwl .sign.moved { background: var(--accent-soft); color: var(--accent); }
+.kwl .w { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kwl .t { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12.5px; white-space: nowrap; margin-left: auto; }
+.kwl .note { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+.kwl .rate { display: flex; gap: 4px; align-items: flex-end; height: 26px; margin-top: 8px; }
+.kwl .rate span { flex: 1; border-radius: 4px 4px 0 0; background: var(--accent); opacity: .75; min-height: 2px; }
+.props { display: grid; gap: 8px; margin: 12px 0; }
+.prop { padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); font-size: 13px; }
+.prop .who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prop .to { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; margin: 2px 0 8px; }
+.prop .row2 { display: flex; gap: 6px; }
+.alert .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; justify-content: flex-start; }
+.alert ol { margin: 6px 0 0; padding-left: 18px; color: var(--text); opacity: .9; }
+.alert ol li { margin: 2px 0; }
+.delcount { display: flex; align-items: baseline; gap: 8px; margin: 12px 0; color: var(--muted); font-size: 13px; }
+.delcount > b { font-size: 28px; color: var(--text); letter-spacing: -.02em; }
+.delcount span b { color: var(--text); }
+.delacts { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn.primary.danger-fill { background: var(--red); }
+.badge { font-size: 11.5px; font-weight: 650; padding: 3px 8px; border-radius: 6px; text-align: center; white-space: nowrap; }
+.b-0 { background: var(--red-soft); color: var(--red); }
+.b-1 { background: var(--amber-soft); color: var(--amber); }
+.b-2 { background: var(--slate-soft); color: var(--slate); }
+.b-x { background: var(--red-soft); color: var(--red); }
+@media (max-width: 760px) {
+  .mail { grid-template-columns: 30px minmax(0, 1fr) auto; grid-template-areas: "a f k" "a j s"; row-gap: 0; padding: 7px 10px; }
+  .mail.sel { grid-template-columns: 18px 30px minmax(0, 1fr) auto; grid-template-areas: "c a f k" "c a j s"; }
+  .mail > input { grid-area: c; } .mail .av { grid-area: a; } .mail .from { grid-area: f; } .mail .subj { grid-area: j; }
+  .mail .st { grid-area: s; justify-self: end; } .mail .date { display: none; } .mail .acts2 { grid-area: k; opacity: 1; }
+}
+.empty { text-align: center; padding: 36px 12px; color: var(--muted); }
+.empty svg { color: var(--faint); margin-bottom: 8px; }
+
+/* side */
+.kv { display: grid; grid-template-columns: 92px 1fr; gap: 8px 12px; font-size: 13px; margin-bottom: 16px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.action { display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: var(--surface-2); border-radius: 12px; margin-top: 10px; }
+.action .ic { width: 32px; height: 32px; border-radius: 9px; background: var(--surface); display: grid; place-items: center; color: var(--muted); flex: none; }
+.action b { display: block; font-size: 13.5px; }
+.action small { color: var(--muted); }
+.tag { white-space: nowrap; font-size: 11px; font-weight: 650; padding: 2px 7px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; }
+.log { font: 12px/1.6 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--muted); max-height: 260px; overflow: auto;
+  background: var(--surface-2); border-radius: 10px; padding: 10px 12px; margin: 0; white-space: pre-wrap; word-break: break-word; }
+
+/* settings */
+dialog { border: 0; border-radius: 18px; padding: 0; width: min(520px, calc(100vw - 32px));
+  background: var(--surface); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+dialog::backdrop { background: rgba(10,12,18,.45); backdrop-filter: blur(3px); }
+.dlg { padding: 24px; }
+.dlg h2 { margin: 0 0 4px; font-size: 18px; }
+.field { display: grid; gap: 6px; margin-top: 16px; }
+.field label { font-weight: 600; font-size: 13px; }
+.field small { color: var(--muted); }
+.input { border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; padding: 10px 12px; outline: none; width: 100%; }
+.input:focus { border-color: var(--accent); background: var(--surface); }
+.dlg .foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+
+.welcome { grid-column: 1 / -1; text-align: center; padding: 48px 24px; align-self: start; overflow: auto; max-height: 100%; }
+.welcome h1 { font-size: 28px; letter-spacing: -.03em; margin: 14px 0 6px; }
+.welcome p { color: var(--muted); max-width: 520px; margin: 0 auto 22px; }
+.steps { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 0 auto 26px; max-width: 760px; }
+.step { flex: 1; min-width: 200px; text-align: left; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.step b { display: block; margin-bottom: 2px; } .step small { color: var(--muted); }
+.step .num { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 700; font-size: 12px; margin-bottom: 8px; }
+
+.toast { position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0;
+  background: var(--text); color: var(--bg); padding: 11px 18px; border-radius: 12px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.4); font-weight: 550; transition: .25s; z-index: 20; max-width: calc(100vw - 32px); }
+.toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err { background: var(--red); color: #fff; }
+.hidden { display: none !important; }
+.rules { display: grid; gap: 8px; }
+.rule { display: grid; grid-template-columns: minmax(0, 1fr) 28px; gap: 8px; align-items: center; padding: 9px 10px;
+  border: 1px solid var(--border); border-radius: 10px; font-size: 13px; }
+.rule .who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rule .to { color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.rule button { border: 0; background: transparent; color: var(--faint); cursor: pointer; border-radius: 7px; height: 26px; }
+.rule button:hover { color: var(--red); background: var(--red-soft); }
+.chooser { display: flex; flex-wrap: wrap; gap: 6px; }
+#markReadThemes { margin-top: 8px; }
+#markReadThemes button { font-size: 12.5px; padding: 4px 9px; display: inline-flex; align-items: center; gap: 6px; }
+.chooser button { border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 5px 11px;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 7px; font-size: 13px; }
+.chooser button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.radio { display: grid; gap: 6px; }
+.radio label { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; font-weight: 500; }
+.radio label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.radio input { accent-color: var(--accent); margin: 0; }
+.fixmail { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 13px; }
+.fixmail b { display: block; } .fixmail span { color: var(--muted); }
+.model-chip { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 6px 12px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--border); font-size: 13px; max-width: 100%; }
+.model-chip b { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.model-chip small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.model-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; }
+.model-chip.err { border-color: color-mix(in srgb, var(--red) 40%, transparent); background: var(--red-soft); color: var(--red); }
+.model-chip.err i { background: var(--red); }
+.sortbar .model-chip { margin: 0 0 0 auto; flex-wrap: wrap; border-radius: 999px; padding: 5px 12px; background: var(--surface-2); border-color: transparent; }
+.model-chip.warn i { background: var(--amber); }
+.model-chip select { border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px; padding: 3px 6px; font-size: 12.5px; max-width: 170px; }
+.running i { animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+.alert { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; margin-bottom: 14px;
+  background: var(--red-soft); color: var(--red); font-size: 13px; }
+.alert b { display: block; }
+.alert span { color: var(--text); opacity: .85; word-break: break-word; }
+.kv dd.err { color: var(--red); white-space: normal; }
+
+/* step 3: sort options, plan, apply bar */
+.opts { display: grid; gap: 14px; margin-top: 4px; }
+.popover .seg button { padding: 5px 9px; font-size: 12.5px; }
+.popover input[type=range] { flex: 1; width: auto; }
+.popover .switch { padding: 9px 10px; gap: 10px; margin-top: 8px; }
+.popover .estimate { margin-top: 10px; gap: 4px 12px; font-size: 12.5px; }
+#runSub { display: block; color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+.sortopts summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; }
+.sortopts summary::-webkit-details-marker { display: none; }
+.sortopts summary > span { flex: 1; min-width: 0; }
+.sortopts summary b { display: block; font-size: 14px; }
+.sortopts summary small { display: block; color: var(--muted); font-size: 12.5px; }
+.sortopts .chev { color: var(--muted); transition: transform .15s; flex: none; }
+.sortopts[open] .chev { transform: rotate(180deg); }
+.popover .opt { gap: 8px; }
+.popover .opt > label { width: 100%; margin-bottom: -2px; }
+.popover .rangeval { min-width: 0; font-size: 13px; }
+.popover .num { width: 86px; }
+.opt { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.opt > label { width: 86px; color: var(--muted); font-size: 13px; font-weight: 550; }
+.num { width: 92px; border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 6px 10px; outline: none; font-variant-numeric: tabular-nums; }
+.num:focus { border-color: var(--accent); }
+.unit { color: var(--muted); font-size: 13px; }
+input[type=range] { accent-color: var(--accent); width: 220px; max-width: 100%; }
+.rangeval { font-variant-numeric: tabular-nums; font-weight: 650; min-width: 64px; }
+.switch { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: 12px; background: var(--surface); max-width: 520px; }
+.switch input { position: absolute; opacity: 0; pointer-events: none; }
+.knob { width: 38px; height: 22px; border-radius: 99px; background: var(--border); position: relative; flex: none; transition: .2s; margin-top: 1px; }
+.knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: .2s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.switch input:checked + .knob { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.switch input:checked + .knob::after { left: 19px; }
+.switch input:focus-visible + .knob { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch b { display: block; font-size: 13.5px; } .switch small { color: var(--muted); font-size: 12.5px; }
+.estimate { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+.estimate b { color: var(--text); font-variant-numeric: tabular-nums; }
+.runside { display: grid; gap: 10px; justify-items: end; align-self: start; }
+@media (max-width: 640px) { .runside { justify-items: stretch; } .runside .btn { justify-content: center; } }
+.hint { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-radius: 12px;
+  background: var(--green-soft); color: var(--green); font-size: 13px; font-weight: 550; }
+.hint .btn { margin-left: auto; }
+.mail.off { opacity: .42; }
+.mail input, .ghead input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; cursor: pointer; }
+.ghead .to { margin-left: auto; color: var(--faint); font-weight: 500; font-size: 12px; }
+.applybar { flex: none; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 16px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface)); border-top: 1px solid var(--border); }
+.applybar .what { flex: 1; min-width: 200px; font-size: 13px; }
+.applybar .what b { display: block; font-size: 14px; }
+.applybar .what small { color: var(--muted); }
+.state { font-size: 11px; font-weight: 650; padding: 1px 7px; border-radius: 6px; margin-left: 8px; }
+.state.applied { background: var(--green-soft); color: var(--green); }
+.state.skipped, .state.undone { background: var(--slate-soft); color: var(--slate); }
+
+.btn.danger { color: var(--red); }
+a.btn { color: var(--text); }
+
+/* pages and senders */
+.tabs { margin-left: 18px; }
+@media (max-width: 760px) { .tabs { margin-left: 4px; } .tabs button { padding: 6px 9px; } }
+.slist { display: grid; gap: 2px; }
+.srow { display: grid; grid-template-columns: 36px minmax(0, 1fr) 132px minmax(0, 1.25fr) 168px; gap: 12px; align-items: center;
+  padding: 10px; border-radius: 10px; }
+.srow:hover { background: var(--surface-2); }
+.avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px; }
+.who b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who small { display: block; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.cnt { font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.cnt .track { height: 6px; margin-top: 4px; }
+.cnt .track > div { background: var(--accent); }
+.sugg { display: flex; gap: 6px; align-items: center; min-width: 0; font-size: 12.5px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: var(--surface-2);
+  border: 1px solid var(--border); font-weight: 600; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.chip .dot { flex: none; }
+.sugg .btn { flex: none; }
+.chip.rule { background: var(--green-soft); color: var(--green); border-color: transparent; font: inherit; font-weight: 600; cursor: pointer; }
+.chip.rule svg { opacity: .55; flex: none; }
+.chip.rule:hover { box-shadow: inset 0 0 0 1px var(--green); }
+.chip.rule:hover svg { opacity: 1; }
+.sugg small { color: var(--faint); }
+.btn.sm { padding: 5px 10px; font-size: 12.5px; border-radius: 8px; }
+.btn.sm.primary { padding: 5px 11px; box-shadow: none; }
+.acts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+.acts .iconb { border: 0; background: transparent; color: var(--faint); cursor: pointer; border-radius: 7px; width: 28px; height: 28px; display: grid; place-items: center; }
+.acts .iconb:hover { color: var(--text); background: var(--surface-2); }
+.opened { font-size: 11.5px; font-weight: 650; color: var(--green); white-space: nowrap; }
+.more { text-align: center; color: var(--muted); font-size: 13px; padding: 12px; }
+@media (max-width: 760px) {
+  .srow { grid-template-columns: 36px minmax(0, 1fr) auto; grid-template-areas: "a w x" "a c c" "a s s"; row-gap: 6px; }
+  .srow .avatar { grid-area: a; align-self: start; } .srow .who { grid-area: w; } .srow .cnt { grid-area: c; }
+  .srow .sugg { grid-area: s; } .srow .acts { grid-area: x; }
+  .acts .btn.sm { padding: 5px 8px; }
+}
+.undo { width: 100%; justify-content: center; margin-top: 4px; }
+
+/* reader: one whole mail, read-only */
+#readDlg { width: min(980px, calc(100vw - 32px)); height: min(90vh, 980px); max-height: calc(100vh - 32px); }
+.reader { display: flex; flex-direction: column; height: 100%; gap: 0; padding: 18px 22px 18px; }
+.rtop { display: flex; align-items: center; gap: 12px; }
+.rtop .av { width: 40px; height: 40px; font-size: 16px; flex: none; }
+.rwho { min-width: 0; }
+.rwho b { display: block; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rwho small { display: block; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rtop .icon-btn { width: 36px; height: 36px; }
+#rSubj { font-size: 20px; letter-spacing: -.015em; line-height: 1.3; margin: 14px 0 10px; word-break: break-word; }
+.rmeta { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 4px 12px; margin: 0 0 10px; font-size: 13px; }
+.rmeta dt { color: var(--faint); }
+.rmeta dd { margin: 0; color: var(--muted); min-width: 0; word-break: break-word; }
+.rmeta dd b { color: var(--text); font-weight: 550; }
+.rmeta dd .chip { margin: 0 4px 2px 0; font-size: 12px; }
+.ratt { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.ratt span { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px;
+  background: var(--surface-2); border: 1px solid var(--border); max-width: 100%; }
+.ratt span b { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ratt span small { color: var(--faint); white-space: nowrap; }
+.rbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0 10px; border-top: 1px solid var(--border); }
+.rbar small { color: var(--faint); font-size: 12px; margin-left: auto; }
+.rbar .seg button { padding: 4px 11px; font-size: 12.5px; }
+.rbody { flex: 1; min-height: 160px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); background: var(--surface); position: relative; }
+.rbody iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+.rbody.dark iframe { background: #11151f; }
+.rsw { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); cursor: pointer; user-select: none; }
+.rsw input { position: absolute; opacity: 0; pointer-events: none; }
+.rsw .knob { width: 30px; height: 18px; margin: 0; }
+.rsw .knob::after { top: 2px; left: 2px; width: 14px; height: 14px; }
+.rsw input:checked + .knob { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.rsw input:checked + .knob::after { left: 14px; }
+.rsw input:focus-visible + .knob { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rbody .rtext { height: 100%; overflow: auto; margin: 0; padding: 18px 20px; white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.6; }
+.rbody .alert { margin: 16px; }
+.rbody .rwarn { margin: 0; padding: 8px 14px; font-size: 12.5px; color: var(--amber); background: var(--amber-soft); }
+.skel { padding: 20px; display: grid; gap: 12px; }
+.skel i { display: block; height: 12px; border-radius: 99px; background: linear-gradient(90deg, var(--surface-2), var(--border-2), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+.skel i:nth-child(2) { width: 86%; } .skel i:nth-child(3) { width: 92%; } .skel i:nth-child(4) { width: 60%; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.reader .foot { margin-top: 14px; }
+.mail { cursor: pointer; }
+.mail:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mail input, .mail button, .mail a { cursor: pointer; }
+@media (max-width: 640px) { .reader { padding: 14px; } .rbar small { margin-left: 0; } .rmeta { grid-template-columns: 58px minmax(0, 1fr); } }
+
+/* ===== Aurore: the design of Workspace (glass on a living light background) ===== */
+body { background: var(--bg); }
+h1, h2, h3, .brand b { font-family: var(--font-display); font-weight: 600; }
+.aurora { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.aurora i { position: absolute; border-radius: 50%; filter: blur(90px); opacity: var(--au-opacity); will-change: transform; }
+.aurora .a1 { width: 60vmax; height: 60vmax; left: -18vmax; top: -24vmax; background: radial-gradient(circle at 40% 40%, var(--au1), transparent 65%); animation: drift1 46s ease-in-out infinite alternate; }
+.aurora .a2 { width: 55vmax; height: 55vmax; right: -20vmax; top: 8vmax; background: radial-gradient(circle at 50% 50%, var(--au2), transparent 62%); animation: drift2 58s ease-in-out infinite alternate; }
+.aurora .a3 { width: 50vmax; height: 50vmax; left: 20vmax; bottom: -30vmax; background: radial-gradient(circle at 50% 50%, var(--au3), transparent 60%); animation: drift3 64s ease-in-out infinite alternate; }
+.aurora .grain { inset: -50%; width: auto; height: auto; border-radius: 0; filter: none; opacity: .06; animation: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+@keyframes drift1 { to { transform: translate(14vmax, 10vmax) scale(1.15) rotate(20deg); } }
+@keyframes drift2 { to { transform: translate(-12vmax, 14vmax) scale(.9) rotate(-25deg); } }
+@keyframes drift3 { to { transform: translate(-10vmax, -16vmax) scale(1.2); } }
+
+/* glass: translucent, blurred, 1 px border, light rim on top */
+.frame { position: relative; z-index: 1; padding: 14px; gap: 14px; }
+.sidebar, .topbar, .card, .center, #sideCol .card {
+  position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  backdrop-filter: blur(26px) saturate(150%); -webkit-backdrop-filter: blur(26px) saturate(150%); box-shadow: var(--shadow); }
+.sidebar::before, .topbar::before, .card::before, .center::before, dialog::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; padding: 1px; z-index: 0;
+  background: linear-gradient(160deg, var(--rim), transparent 30%, transparent 70%, var(--rim-2));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.sidebar { width: 264px; gap: 14px; padding: 16px 14px 12px; border-right: 1px solid var(--border); }
+.mainwrap { gap: 14px; }
+.topbar { padding: 14px 16px 14px 24px; border-radius: var(--radius); }
+.topbar h1 { font-size: 22px; letter-spacing: -.02em; }
+.banners { padding: 0; }
+main.shell { padding: 0; gap: 14px; }
+.card { padding: 22px 24px; }
+.pane.stack { gap: 14px; padding: 0 0 4px; }
+.pane.stack .card { padding: 18px 20px; border-radius: 24px; }
+/* the mail list stays more opaque, for reading */
+.center { background: var(--dense); border-color: var(--border); }
+.sortbar { padding: 14px 16px; border-bottom-color: var(--border); }
+.listhead { padding: 16px 22px 8px; }
+.mails { padding: 0 10px 12px; }
+.ghead { background: color-mix(in srgb, var(--dense) 94%, transparent); border-radius: 12px; }
+.mail { border-radius: 14px; }
+.mail:hover { background: var(--row); }
+.applybar { background: color-mix(in srgb, var(--accent) 7%, transparent); border-top-color: var(--border); }
+
+/* left menu */
+.logo { border-radius: 12px; color: var(--on-accent); background: linear-gradient(110deg, var(--accent), var(--accent-2));
+  box-shadow: 0 10px 24px -12px var(--accent); }
+.nav button { border-radius: 999px; padding: 9px 12px; }
+.nav button:hover { background: var(--surface-2); }
+.nav button.on { background: linear-gradient(110deg, color-mix(in srgb, var(--accent) 22%, transparent), color-mix(in srgb, var(--accent-2) 12%, transparent));
+  color: var(--text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+.frow { border-radius: 12px; padding: 6px 10px; }
+.frow:hover { background: var(--surface-2); }
+.frow.on { background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent); }
+.side-foot { border-top-color: var(--border); }
+
+/* buttons: pills; primary in the accent gradient, secondary transparent with a border */
+.btn { border-radius: 999px; border: 1px solid var(--border-2); background: transparent; box-shadow: none; padding: 8px 16px;
+  transition: transform .4s var(--ease), background .3s, filter .3s, border-color .3s; }
+.btn:hover:not(:disabled) { background: var(--surface-2); transform: translateY(-1px); }
+.btn.primary, .btn.primary:hover:not(:disabled) { background: linear-gradient(110deg, var(--accent), var(--accent-2)); color: var(--on-accent);
+  border-color: transparent; font-weight: 600; box-shadow: 0 12px 26px -14px var(--accent); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+.btn.primary.danger-fill { background: var(--red); color: #fff; }
+.btn.ghost { border-color: transparent; }
+.btn:disabled { transform: none; }
+.icon-btn { width: 40px; height: 40px; padding: 0; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); }
+.icon-btn:hover:not(:disabled) { border-color: var(--border-2); }
+.btn.sm { border-radius: 999px; padding: 5px 12px; }
+.linkbtn { border-radius: 999px; padding: 2px 8px; }
+.seg { border-radius: 999px; background: var(--surface-2); border-color: var(--border); }
+.seg button { border-radius: 999px; }
+.seg button.on { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border-2), 0 4px 12px -6px rgba(0,0,0,.35); }
+.search, .input, .num { border-radius: 999px; border-color: var(--border); background: var(--surface); }
+.input { border-radius: var(--radius-sm); }
+.search:focus, .input:focus, .num:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); background: var(--surface-2); }
+.model-chip, .sortbar .model-chip { border-radius: 999px; background: var(--surface); border: 1px solid var(--border); }
+.model-chip select { border-radius: 999px; background: var(--surface-2); border-color: var(--border); }
+.banner, .hint, .alert { border-radius: var(--radius-sm); }
+.banner { border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); backdrop-filter: blur(18px); }
+.banner.warn { border-color: color-mix(in srgb, var(--amber) 30%, transparent); }
+.hint { border: 1px solid color-mix(in srgb, var(--green) 28%, transparent); }
+.alert { border: 1px solid color-mix(in srgb, var(--red) 28%, transparent); }
+.bar { background: var(--surface-2); border-color: var(--border); }
+.knob { background: var(--border-2); }
+.switch { border-radius: var(--radius-sm); background: var(--surface); }
+.popover { background: var(--dense); border: 1px solid var(--border-2); border-radius: 22px;
+  backdrop-filter: blur(26px) saturate(150%); -webkit-backdrop-filter: blur(26px) saturate(150%); box-shadow: var(--shadow), 0 2px 8px rgba(0,0,0,.12);
+  animation: pop .45s var(--ease); }
+.pill { background: var(--surface-2); border: 1px solid var(--border); }
+.pill.ok { border-color: color-mix(in srgb, var(--green) 30%, transparent); }
+.pill.warn { border-color: color-mix(in srgb, var(--amber) 30%, transparent); }
+.stat .v, .delcount > b { font-family: var(--font-display); font-weight: 200; font-size: 34px; letter-spacing: -.04em; }
+.log, .reason, .fixmail, .opreview, .action, .step { border-radius: var(--radius-sm); }
+.run { background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, var(--accent-2) 7%, transparent) 55%, var(--surface)); }
+.toast { border-radius: 999px; }
+
+/* dialogs: denser glass, open with a slight zoom */
+dialog { position: fixed; background: var(--dense); border: 1px solid var(--border-2); border-radius: 24px; color: var(--text);
+  backdrop-filter: blur(26px) saturate(150%); -webkit-backdrop-filter: blur(26px) saturate(150%); box-shadow: var(--shadow), 0 20px 60px -20px rgba(0,0,0,.4); }
+dialog[open] { animation: pop .45s var(--ease); }
+dialog::backdrop { background: color-mix(in srgb, var(--bg) 45%, transparent); backdrop-filter: blur(6px); }
+dialog > * { position: relative; z-index: 1; }
+@keyframes pop { from { transform: translateY(14px) scale(.97); opacity: 0; } }
+
+/* side drawer (narrow screens): glass too */
+@media (max-width: 1440px) {
+  #sideCol, .shell.nopanel #sideCol { background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(26px) saturate(150%);
+    border-left: 1px solid var(--border); top: 14px; bottom: 14px; right: 14px; border-radius: var(--radius); border: 1px solid var(--border); }
+}
+@media (max-width: 780px) {
+  .center { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .frame { padding: 10px; } .sidebar { width: auto; border-right: 1px solid var(--border); margin-bottom: 10px; }
+  .topbar { padding: 12px 14px; margin-bottom: 10px; } .banners { padding: 0 0 10px; } main.shell { padding: 0; }
+}
+
+
+/* the rest of the tool: same radii and glass as the main view */
+.olist li { border-radius: 12px; background: var(--surface); border-color: var(--border); }
+.olist li.over { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.kwrow, .prop, .opreview, .jlist { border-radius: var(--radius-sm); }
+.kwrow { background: var(--surface); }
+.kwrow:focus-within { box-shadow: 0 0 0 4px var(--accent-soft); }
+.srow, .rule, .radio label { border-radius: 14px; }
+.srow:hover { background: var(--row); }
+.rule { background: var(--surface); }
+.jlist { background: var(--surface); }
+.jline.run { background: var(--accent-soft); }
+.step { background: var(--surface); }
+.step .num { background: linear-gradient(110deg, var(--accent), var(--accent-2)); color: var(--on-accent); }
+.welcome h1 { font-family: var(--font-display); font-weight: 300; font-size: 34px; letter-spacing: -.03em; }
+.cnt .track > div { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.track { background: var(--surface-2); }
+.kv dt { color: var(--faint); }
+.toast { backdrop-filter: blur(18px); }
+/* side panel: Learning folds, the safety note lives in To delete */
+details.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary h2 { margin: 0; }
+details.fold .fcount { color: var(--faint); font-size: 12.5px; }
+details.fold .chev { margin-left: auto; color: var(--muted); transition: transform .3s var(--ease); flex: none; }
+details.fold[open] .chev { transform: rotate(180deg); }
+details.fold[open] > summary { margin-bottom: 6px; }
+details.fold > summary .mini { margin-left: 0; }
+#learnCard .learnhead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+#learnCard .learnhead h2 { margin: 0; }
+details.rulesfold { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+details.rulesfold > summary { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
+details.rulesfold > summary .fcount { text-transform: none; letter-spacing: 0; font-weight: 500; }
+details.rulesfold[open] > summary { margin-bottom: 8px; }
+.never { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
+  font-size: 12.5px; color: var(--muted); }
+.never svg { flex: none; margin-top: 2px; color: var(--green); }
+.never b { display: block; color: var(--text); font-size: 13px; font-weight: 600; }
+/* Color & Order: a colour per label */
+.olist .cdot { width: 18px; height: 18px; border-radius: 6px; border: 2px solid transparent; padding: 0; cursor: pointer; flex: none;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.olist .cdot:hover, .olist .cdot:focus-visible { border-color: var(--text); outline: none; }
+.olist li.recolored .cdot { border-color: var(--accent); }
+.olist .gname { color: var(--faint); font-size: 11.5px; white-space: nowrap; }
+.palette { position: absolute; z-index: 50; display: grid; grid-template-columns: repeat(5, 30px); gap: 6px; padding: 10px; border-radius: 16px;
+  background: var(--dense); border: 1px solid var(--border-2); box-shadow: var(--shadow), 0 10px 30px -10px rgba(0,0,0,.4); backdrop-filter: blur(26px); }
+.palette button { width: 30px; height: 30px; border-radius: 9px; border: 2px solid transparent; cursor: pointer; padding: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.palette button:hover, .palette button.on { border-color: var(--text); }
+.onote { display: block; color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+/* scrollbars, thin and quiet */
+* { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; }
+
+/* opening: panels rise with a blur fade, one after the other */
+.ready .sidebar, .ready .topbar, .ready .center, .ready #sideCol > .card, .ready #welcome, .ready #sendersCol > * {
+  animation: rise 1s var(--ease) both; animation-delay: calc(var(--i, 0) * 90ms); }
+.sidebar { --i: 0; } .topbar { --i: 1; } .center, #welcome { --i: 2; }
+#sideCol > .card:nth-child(1), #sendersCol > :nth-child(1) { --i: 3; } #sideCol > .card:nth-child(2), #sendersCol > :nth-child(2) { --i: 4; }
+#sideCol > .card:nth-child(3), #sendersCol > :nth-child(3) { --i: 5; } #sideCol > .card:nth-child(4) { --i: 6; } #sideCol > .card:nth-child(5) { --i: 7; }
+@keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.995); filter: blur(6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
+  .aurora i { animation: none; }
+}
+</style>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"><i class="a1"></i><i class="a2"></i><i class="a3"></i><i class="grain"></i></div>
+<div class="frame">
+<aside class="sidebar" id="sidebar">
+  <div class="brand-row"><div class="logo" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="3"/></svg>
+  </div>
+    <div class="brand"><b>Mail Adagio</b><span>Your inbox, sorted calmly</span></div></div>
+  <nav class="nav hidden" id="pageSeg">
+    <button data-p="sort" class="on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></svg><span>Sort</span></button>
+    <button data-p="senders" id="sendersNav"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Senders</span></button>
+    <button type="button" id="journalBtn" title="Everything Mail Adagio did, mail by mail"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M8 7h8M8 11h6"/></svg><span>Journal</span></button>
+  </nav>
+  <div id="leftPane">
+    <div class="side-h"><span>Views</span><span><button type="button" class="linkbtn" id="kwBtn" title="Typical words of each theme, to help the model">Keywords</button><button type="button" class="linkbtn" id="orderBtn2" title="Colours, order and numbers of the labels in Gmail">Color &amp; Order</button></span></div>
+    <div class="flist" id="folders"></div>
+  </div>
+  <div class="side-foot"><span id="conn" class="pill"><i></i><span>Not set up</span></span></div>
+</aside>
+
+<div class="mainwrap">
+<header class="topbar">
+  <div class="ttl"><h1 id="pageTitle">Sort my inbox</h1><small id="pageSub">Each mail gets a theme and a status. Nothing changes in Gmail until you apply.</small></div>
+  <div class="spacer"></div>
+  <button class="btn ghost icon-btn" id="themeBtn" title="Light / dark">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  </button>
+  <button class="btn ghost icon-btn" id="panelBtn" title="Show or hide the side panel (undo, rules, log)">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
+  </button>
+  <button class="btn" id="settingsBtn">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    <span class="lbl">Settings</span>
+  </button>
+</header>
+
+<div class="banners">
+  <div class="banner hidden" id="demoBanner">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+    Demo mode: made-up mails, no Gmail account used.
+  </div>
+  <div class="banner warn hidden" id="oldBanner">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+    <span>Mail Adagio was updated while it was open. Close the black window, then double-click <b>Mail Adagio.bat</b> again.</span>
+  </div>
+</div>
+
+<main id="app" class="shell">
+  <section class="card welcome hidden" id="welcome">
+    <div class="logo" style="width:56px;height:56px;border-radius:16px;margin:0 auto">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="3"/></svg>
+    </div>
+    <h1>Welcome to Mail Adagio</h1>
+    <p>Each mail gets a theme and a status, then goes into its theme like a folder. You approve each batch first, and the agent never deletes anything.</p>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><b>Turn on IMAP</b><small>Gmail → Settings → Forwarding and POP/IMAP → Enable IMAP.</small></div>
+      <div class="step"><div class="num">2</div><b>Create an app password</b><small>Needs 2-step verification. <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">Open the page ↗</a></small></div>
+      <div class="step"><div class="num">3</div><b>Enter your details</b><small>Address, app password and the AI model key. Stored on this PC only.</small></div>
+    </div>
+    <button class="btn primary" id="welcomeBtn">Set up Mail Adagio</button>
+  </section>
+
+  <section class="center" id="mainCol">
+    <div class="sortbar">
+      <button class="btn primary" id="runBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        <span>Analyze next batch</span>
+      </button>
+      <div class="optwrap" id="optWrap">
+        <button type="button" class="btn" id="optsBtn" aria-haspopup="true" title="Sort settings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+          <span id="optsSummary"></span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="popover hidden" id="sortOpts" role="dialog" aria-label="Sort settings">
+          <small id="runSub"></small>
+          <div class="opts">
+          <div class="opt"><label>What</label>
+            <div class="seg" id="scopeSeg"><button data-k="count" class="on">Newest</button><button data-k="days">Recent days</button><button data-k="all">Whole inbox</button></div>
+            <input class="num" id="scopeVal" type="number" min="1" value="500" aria-label="How many"><span class="unit" id="scopeUnit">mails</span></div>
+          <div class="opt"><label for="batchRange">Batch size</label>
+            <input type="range" id="batchRange" min="50" max="1000" step="50" value="100"><span class="rangeval" id="batchVal">100 mails</span></div>
+          <label class="switch"><input type="checkbox" id="actAlone"><span class="knob"></span>
+            <span><b>Let the agent act alone</b><small>Applies each batch without asking, one after the other. The last batch can always be undone.</small></span></label>
+          <label class="switch"><input type="checkbox" id="markRead"><span class="knob"></span>
+            <span><b>Mark low-interest mails as read</b><small><span id="markReadWhat"></span> · status Info only. Undo makes them unread again.
+              <a href="#" id="markReadEdit">Change themes</a></small>
+              <span class="chooser hidden" id="markReadThemes"></span></span></label>
+          <label class="switch"><input type="checkbox" id="learnGmail"><span class="knob"></span>
+            <span><b>Learn from my changes in Gmail</b><small>Before each batch, reads the labels of the mails already sorted. A mail you moved to another theme becomes a correction, and the AI learns keywords from it.</small></span></label>
+        </div>
+          <div class="estimate" id="estimate"></div>
+        </div>
+      </div>
+      <button class="btn danger hidden" id="stopBtn" title="Stops after the mail in progress. The mails already analysed wait in the plan; the others come next time.">Stop</button>
+      <button class="btn ghost hidden" id="restartBtn" title="Start again from the newest mail">Start a new sort</button>
+      <div class="progress" id="progress">
+        <div class="bar"><div id="barFill"></div></div>
+        <small id="progressText">Starting…</small>
+      </div>
+      <div class="model-chip" id="modelChip"><i></i><span id="chipLbl">Model</span> <b id="chipName">…</b> <small id="chipHow"></small>
+        <select id="loadSel" class="hidden" aria-label="Model to load"></select>
+        <button type="button" class="btn sm hidden" id="loadBtn" title="Loads the model into Ollama now. It stays loaded 30 min after the last mail.">Load</button></div>
+    </div>
+    <div class="hint hidden" id="autoHint">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+        <span id="autoHintText"></span>
+        <button class="btn" id="autoHintBtn">Let it act alone</button>
+      </div>
+    <div class="alert hidden" id="sortAlert">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex:none;margin-top:1px"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        <div><b id="sortAlertTitle"></b><span id="sortAlertText"></span><div id="sortAlertHelp"></div></div>
+      </div>
+    <div class="listhead">
+      <div class="ttl"><h2 id="mailsTitle">Mails</h2><p class="sub" id="mailsSub">Analyze a batch to see your mails here.</p></div>
+      <div class="filters" id="filters"></div>
+      <input class="search" id="search" placeholder="Search sender or subject">
+    </div>
+    <div class="mails" id="mails"></div>
+    <div class="applybar hidden" id="applyBar">
+      <div class="what"><b id="applyCount"></b><small id="applyWhat"></small></div>
+      <button class="btn" id="discardBtn" title="Forget this plan. Its mails are analysed again next time.">Discard plan</button>
+      <button class="btn primary" id="applyBtn">Apply</button>
+    </div>
+  </section>
+
+  <section class="pane stack hidden" id="sendersCol">
+    <section class="card run">
+      <div>
+        <h2>Scan your mailbox</h2>
+        <p class="sub" style="margin:4px 0 0">A quick look at who writes to you. The scan reads only the sender, the date and the unsubscribe link of each mail. It is fast and free, uses no AI and changes nothing.</p>
+        <div class="estimate" id="scanInfo"></div>
+      </div>
+      <div class="runside">
+        <button class="btn primary" id="scanBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <span>Scan my mailbox</span></button>
+      </div>
+      <div class="progress" id="scanProgress"><div class="bar"><div id="scanFill"></div></div><small id="scanText"></small></div>
+    </section>
+
+    <section class="stats">
+      <div class="card stat"><div class="k">Senders</div><div class="v" id="tSenders">–</div></div>
+      <div class="card stat"><div class="k">Mails scanned</div><div class="v" id="tMails">–</div></div>
+      <div class="card stat"><div class="k"><i style="background:var(--accent)"></i>Subscriptions</div><div class="v" id="tSubs">–</div></div>
+      <div class="card stat"><div class="k"><i style="background:var(--green)"></i>Rules</div><div class="v" id="tRules">–</div></div>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px;align-items:flex-start">
+        <div style="min-width:0;flex:1"><h2>Who writes the most</h2><p class="sub" style="margin:0" id="sendersSub">Scan your mailbox to see your senders.</p></div>
+        <button class="btn" id="suggestBtn" title="Classifies 3 recent mails of each of your 20 biggest senders and proposes a rule">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-5 3.7L16.2 20 12 16.6 7.8 20 9 13.7 4 10l6.1-1.2z"/></svg>
+          Suggest rules for the top 20</button>
+      </div>
+      <div class="tools">
+        <div class="seg" id="senderSeg"><button data-f="all" class="on">All</button><button data-f="subs">Subscriptions</button><button data-f="sugg">Suggested rules</button><button data-f="hidden">Hidden</button></div>
+        <input class="search" id="senderSearch" placeholder="Search a sender">
+      </div>
+      <div class="slist" id="senders"></div>
+    </section>
+  </section>
+
+  <aside class="pane stack" id="sideCol">
+    <section class="card">
+      <h2>Connection</h2>
+      <p class="sub">Labels and Inbox only. Never deletes.</p>
+      <dl class="kv">
+        <dt>Account</dt><dd id="kAccount">–</dd>
+        <dt>Mailbox</dt><dd id="kMailbox">–</dd>
+        <dt>Mails</dt><dd id="kTotal">–</dd>
+        <dt>Model</dt><dd id="kModel">–</dd>
+      </dl>
+      <button class="btn" id="checkBtn" style="width:100%;justify-content:center">Test connection</button>
+    </section>
+
+    <section class="card" id="learnCard">
+      <div class="learnhead"><h2>Learning</h2><span class="fcount" id="learnCount"></span><span class="mini hidden" id="learnBadge"></span></div>
+      <p class="sub">Your corrections, here or in Gmail, teach the agent keywords, on its own. Rules are applied before the model, with no AI call.</p>
+      <button type="button" class="btn sm" id="learnBtn" title="Reads the labels of the mails already sorted and learns from the ones you moved in Gmail. The model then reads the corrected mails to learn keywords.">Learn from Gmail</button>
+      <div class="kwl" id="kwLearned"></div>
+      <div class="props" id="proposals"></div>
+      <details class="fold rulesfold" id="rulesFold">
+        <summary><span class="rt">Rules</span><span class="fcount" id="ruleCount"></span>
+          <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></summary>
+        <div class="rules" id="rules"></div>
+      </details>
+    </section>
+
+    <section class="card hidden" id="delCard">
+      <h2>To delete</h2>
+      <p class="sub">The model labels mails with no lasting value. Check them in Gmail, then send them to the Trash here. Never automatic.</p>
+      <div class="delcount"><b id="delCount">–</b><span>mails labelled <b id="delLabel"></b></span></div>
+      <div class="delacts">
+        <a class="btn sm" id="delOpen" target="_blank" rel="noopener">Check in Gmail ↗</a>
+        <button type="button" class="btn sm danger" id="trashBtn" disabled>Move to Trash</button>
+      </div>
+      <button type="button" class="btn sm hidden" id="restoreBtn" style="margin-top:10px"></button>
+      <div class="never"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/><path d="M4 4l16 16"/></svg>
+        <span><b>Never deletes on its own</b>Adds labels and moves mails out of the Inbox. Only you can send the "To delete" mails to the Trash.</span></div>
+    </section>
+
+    <section class="card">
+      <h2>Undo</h2>
+      <p class="sub" id="undoSub" style="margin-bottom:10px">Nothing applied yet.</p>
+      <button class="btn undo" id="undoBtn" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
+        Undo last batch</button>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2>Activity log</h2><button type="button" class="linkbtn" id="journalBtn2">Full journal</button></div>
+      <p class="sub">One line per run, newest first. The journal has every mail.</p>
+      <pre class="log" id="log">Nothing yet.</pre>
+    </section>
+  </aside>
+</main>
+</div>
+</div>
+
+<dialog id="settings"><form class="dlg" id="settingsForm" method="dialog">
+  <h2>Settings</h2>
+  <p class="sub" style="color:var(--muted);margin:0">Saved in config.yaml on this PC only. Never sent anywhere else.</p>
+  <div class="field"><label for="fEmail">Gmail address</label>
+    <input class="input" id="fEmail" type="email" placeholder="you@gmail.com" required autocomplete="username"></div>
+  <div class="field"><label for="fPass">App password</label>
+    <input class="input" id="fPass" type="password" placeholder="16 letters" autocomplete="current-password">
+    <small>Not your usual password. <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">Create one ↗</a> (2-step verification and IMAP must be on).</small></div>
+  <div class="field"><label>AI model</label>
+    <div class="seg" id="provSeg"><button type="button" data-p="anthropic" class="on">Claude (Anthropic)</button><button type="button" data-p="openrouter">OpenRouter</button><button type="button" data-p="ollama">Ollama (local)</button></div></div>
+  <div class="field hidden" id="ollamaField"><label>Which Ollama model</label>
+    <div class="seg" id="ollSeg"><button type="button" data-o="active" class="on">Active model</button><button type="button" data-o="name">By name</button><button type="button" data-o="auto">Automatic</button></div>
+    <small id="ollHint"></small></div>
+  <div class="field" id="modelField"><label for="fModel">Model name</label>
+    <input class="input" id="fModel" placeholder="claude-haiku-5-5" list="installedList">
+    <datalist id="installedList"></datalist>
+    <small id="modelHint">Leave as is unless you want another model.</small></div>
+  <div class="field hidden" id="urlField"><label for="fUrl">Ollama address</label>
+    <input class="input" id="fUrl" placeholder="http://localhost:11434">
+    <small>Leave empty unless Ollama runs on another address.</small></div>
+  <div class="field" id="keyField"><label for="fKey">API key</label>
+    <input class="input" id="fKey" type="password" placeholder="sk-…" autocomplete="off"></div>
+  <div class="foot">
+    <button type="button" class="btn" id="cancelBtn">Cancel</button>
+    <button type="submit" class="btn primary" id="saveBtn">Save and test</button>
+  </div>
+</form></dialog>
+
+<dialog id="fixDlg"><form class="dlg" id="fixForm" method="dialog">
+  <h2>Correct this mail</h2>
+  <div class="fixmail"><b id="fixFrom"></b><span id="fixSubj"></span></div>
+  <div class="field"><label>Theme</label><div class="chooser" id="fixThemes"></div></div>
+  <div class="field"><label>Status</label><div class="seg" id="fixStatus"></div></div>
+  <div class="field"><label>For the next mails</label>
+    <div class="radio">
+      <label><input type="radio" name="remember" value="sender" checked> <span>Always for <b id="fixAddr"></b></span></label>
+      <label id="fixDomainRow"><input type="radio" name="remember" value="domain"> <span>Always for every sender at <b id="fixDomain"></b></span></label>
+      <label id="fixNoneRow"><input type="radio" name="remember" value="none"> <span>Only this mail (the model learns from it as an example)</span></label>
+    </div></div>
+  <div class="foot">
+    <button type="button" class="btn" id="fixCancel">Cancel</button>
+    <button type="submit" class="btn primary">Save</button>
+  </div>
+</form></dialog>
+
+<dialog id="orderDlg"><form class="dlg" id="orderForm" method="dialog">
+  <h2>Colours and order of the labels</h2>
+  <p class="sub">Drag a label, or use the arrows. Gmail lists labels alphabetically, so a number in front keeps them in this order. Click a colour dot to change it.</p>
+  <label class="switch" style="margin-top:14px"><input type="checkbox" id="orderNum"><span class="knob"></span>
+    <span><b>Number the labels in Gmail</b><small>Statuses 01, 02, 03 · themes 11, 12... · To check 97, To delete 98, Other 99.</small></span></label>
+  <div class="olists">
+    <div><h3>Statuses</h3><ol class="olist" id="olStatuses"></ol></div>
+    <div><h3>Themes</h3><ol class="olist" id="olThemes"></ol></div>
+  </div>
+  <div class="opreview" id="orderPreview"></div>
+  <small class="onote" id="labelNote"></small>
+  <div class="palette hidden" id="palette" role="dialog" aria-label="Pick a colour"></div>
+  <div class="foot">
+    <button type="button" class="btn" id="orderCancel">Cancel</button>
+    <button type="submit" class="btn primary" id="orderApply">Apply</button>
+  </div>
+</form></dialog>
+
+<dialog id="kwDlg"><form class="dlg" id="kwForm" method="dialog">
+  <h2>Keywords by theme</h2>
+  <p class="sub">Typical words help the model choose the right theme. They are clues, not strict rules: the model still reads the whole mail. Any language works. Changes apply from the next batch.</p>
+  <input class="search kwfind" id="kwFind" placeholder="Find a theme or a word">
+  <div class="kwlist" id="kwList"></div>
+  <div class="foot">
+    <button type="button" class="btn" id="kwCancel">Cancel</button>
+    <button type="submit" class="btn primary" id="kwSave">Save</button>
+  </div>
+</form></dialog>
+
+<dialog id="whyDlg"><form class="dlg" method="dialog">
+  <h2>Why this sort?</h2>
+  <div class="fixmail"><b id="whyFrom"></b><span id="whySubj"></span></div>
+  <div class="whybox">
+    <div class="whyrow"><span>Sorted as</span><span id="whyTo"></span></div>
+    <div class="whyrow"><span>Decided by</span><span id="whyHow"></span></div>
+    <div class="whyrow" id="whyConfRow"><span>Confidence</span><span id="whyConf"></span></div>
+    <div class="reason" id="whyReason"></div>
+  </div>
+  <div class="foot">
+    <button type="button" class="btn" id="whyAsk">Ask the model why</button>
+    <button type="button" class="btn hidden" id="whyFix">Correct it</button>
+    <button type="button" class="btn primary" id="whyClose">Close</button>
+  </div>
+</form></dialog>
+
+<dialog id="readDlg" aria-labelledby="rSubj"><div class="dlg reader">
+  <div class="rtop">
+    <span class="av" id="rAv" aria-hidden="true"></span>
+    <div class="rwho"><b id="rFrom"></b><small id="rAddr"></small></div>
+    <div class="spacer"></div>
+    <button type="button" class="btn ghost icon-btn" id="rPrev" title="Previous mail (↑)" aria-label="Previous mail"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg></button>
+    <button type="button" class="btn ghost icon-btn" id="rNext" title="Next mail (↓)" aria-label="Next mail"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    <button type="button" class="btn ghost icon-btn" id="rClose" title="Close (Esc)" aria-label="Close"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </div>
+  <h2 id="rSubj"></h2>
+  <dl class="rmeta" id="rMeta"></dl>
+  <div class="ratt hidden" id="rAtt"></div>
+  <div class="rbar">
+    <div class="seg hidden" id="rMode"><button type="button" data-k="html" class="on">Formatted</button><button type="button" data-k="text">Text</button></div>
+    <label class="rsw hidden" id="rImagesSw" title="Pictures from the web can tell the sender that you opened the mail. Your choice is remembered."><input type="checkbox" id="rImages"><span class="knob"></span>Load pictures</label>
+    <label class="rsw hidden" id="rDarkSw" title="Shows the mail in the colours of Mail Adagio. Untick to see its original colours. Your choice is remembered."><input type="checkbox" id="rDark"><span class="knob"></span>Dark mail</label>
+    <small id="rNote">Read only. Opening a mail here does not mark it as read in Gmail.</small>
+  </div>
+  <div class="rbody" id="rBody"></div>
+  <div class="foot">
+    <a class="btn hidden" id="rGmail" href="#" target="_blank" rel="noopener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Open in Gmail</a>
+    <button type="button" class="btn primary" id="rDone">Close</button>
+  </div>
+</div></dialog>
+
+<dialog id="journalDlg"><form class="dlg" method="dialog">
+  <h2>Journal</h2>
+  <p class="sub">Everything Mail Adagio did, newest first: each mail it sorted, how (your rule or the model, and how sure it was), the labels it added and what it learned from you.</p>
+  <div class="jtools">
+    <div class="seg" id="jSeg"><button type="button" data-k="all" class="on">All</button><button type="button" data-k="mails">Mails</button><button type="button" data-k="check">To check</button><button type="button" data-k="learned">Learning</button></div>
+    <input class="search" id="jFind" placeholder="Search a sender, a subject, a theme…">
+  </div>
+  <div class="jlist" id="jList"></div>
+  <div class="jfoot"><span id="jCount"></span><span>Saved on this PC in <code id="jPath">adagio.log</code></span></div>
+  <div class="foot">
+    <button type="button" class="btn hidden" id="jMore">Show more</button>
+    <button type="button" class="btn primary" id="jClose">Close</button>
+  </div>
+</form></dialog>
+
+<dialog id="confirmDlg"><form class="dlg" method="dialog">
+  <h2 id="confirmTitle"></h2>
+  <p class="sub" id="confirmText"></p>
+  <div class="foot">
+    <button type="button" class="btn" id="confirmNo">Cancel</button>
+    <button type="button" class="btn primary danger-fill" id="confirmYes"></button>
+  </div>
+</form></dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const TOKEN = "__TOKEN__";
+const PALETTE = ["#4f7df3","#1f9d63","#e0a106","#d6457a","#8e6cef","#14a3b8","#f07a3c","#5b8db8","#9aa93a","#e05d5d","#7a869a","#2bb3a3","#c06bd6","#3f9b4f"];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let M = null, ollMode = "active";
+let S = null, themeFilter = "", statusFilter = "", delFilter = false, chkFilter = false, query = "", provider = "anthropic", polling = null, lastTotal = null;
+let waiting = false;  // a job was just started: report its end even if it was very quick
+let page = "sort", SD = null, senderFilter = "all", senderQuery = "";
+let scope = { kind: "count", value: 500 }, batchSize = 100, skip = new Set(), planId = null, inited = false, hintHidden = false;
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+const fmt = n => (n ?? 0).toLocaleString();
+const dur = s => s < 90 ? "about a minute" : s < 3600 ? `about ${Math.round(s / 60)} min` : `about ${(s / 3600).toFixed(s < 36000 ? 1 : 0)} h`;
+
+async function api(path, body) {
+  const opt = { headers: { "X-Adagio-Token": TOKEN, "Content-Type": "application/json" } };
+  if (body !== undefined) { opt.method = "POST"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  if (r.status === 404) {  // the page is newer than the program still running
+    $("#oldBanner").classList.remove("hidden");
+    return { ok: false, error: RESTART };
+  }
+  return r.json();
+}
+const RESTART = "Mail Adagio was updated while it was open. Close the black window, then double-click Mail Adagio.bat again.";
+function toast(msg, err) {
+  const t = $("#toast"); t.textContent = msg; t.className = "toast on" + (err ? " err" : "");
+  clearTimeout(t._h); t._h = setTimeout(() => t.className = "toast", err ? 6000 : 2800);
+}
+const color = name => S?.colors?.[name]?.hex || PALETTE[Math.max(0, (S?.themes || []).indexOf(name)) % PALETTE.length];
+
+/* theme toggle, remembered on this browser */
+(function () {
+  try { const t = localStorage.getItem("adagio-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  $("#themeBtn").onclick = () => {
+    const t = document.documentElement.dataset.theme, dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    const next = dark ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("adagio-theme", next); } catch (e) {}
+  };
+})();
+
+async function loadModel() {
+  M = await api("/api/model");
+  renderModel();
+}
+function renderModel(runningNote, loading) {
+  const chip = $("#modelChip"), note = runningNote || (M && M.note) || "";
+  const [name, how] = note.split(" · ");
+  const oll = M && M.provider === "ollama", idle = !runningNote && !loading;
+  const canLoad = idle && oll && M.ok && !M.loaded && !(S && S.job.running);
+  const pick = canLoad && M.mode === "active" && (M.installed || []).length > 1;
+  chip.classList.toggle("err", !!(M && !M.ok) && idle);
+  chip.classList.toggle("warn", canLoad);
+  chip.classList.toggle("running", !idle);
+  $("#loadBtn").classList.toggle("hidden", !canLoad);
+  $("#loadSel").classList.toggle("hidden", !pick);
+  if (pick && $("#loadSel").dataset.list !== M.installed.join("|")) {
+    $("#loadSel").dataset.list = M.installed.join("|");
+    $("#loadSel").innerHTML = M.installed.map(n => `<option ${n === M.model ? "selected" : ""}>${esc(n)}</option>`).join("");
+  }
+  $("#chipLbl").textContent = loading ? "Loading" : runningNote ? "Sorting with" : "Model";
+  if (loading) {
+    $("#chipName").textContent = loading; $("#chipHow").textContent = "· into Ollama…"; chip.title = "";
+  } else if (M && !M.ok && idle) {
+    $("#chipName").textContent = "No model available";
+    $("#chipHow").textContent = "";
+    chip.title = M.error;
+    $("#kModel").textContent = M.error; $("#kModel").className = "err";
+  } else {
+    $("#chipName").textContent = name || "…";
+    $("#chipHow").textContent = canLoad ? (pick ? "· not loaded, or load another:" : "· not loaded") : how ? "· " + how : "";
+    chip.title = note;
+    $("#kModel").textContent = note || "…"; $("#kModel").className = "";
+  }
+}
+$("#loadBtn").onclick = () => {
+  const name = $("#loadSel").classList.contains("hidden") ? M.model : $("#loadSel").value;
+  start("/api/load", { name });
+};
+
+async function refresh() {
+  S = await api("/api/state");
+  if (!inited && S.sort) initControls();
+  if (S.sort) drawMarkRead();
+  render();
+  if (S.job.running && !polling) polling = setInterval(refresh, 600);
+  if (!S.job.running && (polling || waiting)) { clearInterval(polling); polling = null; waiting = false; jobEnded(); }
+}
+/* label order: drag and drop, numbers, rename in Gmail */
+let ord = null, ordTimer = null, ordPreview = null;
+const GMAIL = { "Red": "#fb4c2f", "Orange": "#ffad47", "Yellow": "#fad165", "Green": "#16a765", "Mint": "#43d692",
+  "Teal": "#2da2bb", "Blue": "#4a86e8", "Purple": "#a479e2", "Pink": "#f691b2", "Brown": "#7a4706",
+  "Dark Red": "#822111", "Dark Orange": "#a46a21", "Dark Green": "#076239", "Dark Blue": "#1c4587",
+  "Dark Purple": "#41236d", "Dark Pink": "#83334c", "Gray": "#666666", "Light Gray": "#cccccc", "Dark Gray": "#434343", "Black": "#000000" };
+$("#orderBtn2").onclick = () => {
+  ord = { statuses: [...S.order.statuses], themes: [...S.order.themes], numbered: true,  // numbering proposed by default
+          colors: Object.fromEntries(Object.entries(S.colors || {}).map(([k, c]) => [k, c.gmail])) };
+  ord.was = { ...ord.colors };
+  $("#orderNum").checked = ord.numbered;
+  const odd = Object.entries(S.sort?.labels || {}).filter(([k, v]) => k !== v.replace(/^\d{2} - /, ""));
+  $("#labelNote").textContent = odd.length ? odd.map(([k, v]) => `${k} uses the label "${v.replace(/^\d{2} - /, "")}"`).join(", ") + " (Gmail reserves the name)." : "";
+  drawOrder(); $("#orderDlg").showModal();
+};
+$("#orderCancel").onclick = () => $("#orderDlg").close();
+const ordHex = n => GMAIL[ord.colors[n]] || color(n);
+function openPalette(btn, name) {
+  const pal = $("#palette"), r = btn.getBoundingClientRect();
+  pal.innerHTML = Object.entries(GMAIL).map(([g, hex]) => `<button type="button" data-g="${g}" title="${g}" style="background:${hex}" class="${ord.colors[name] === g ? "on" : ""}" aria-label="${g}"></button>`).join("");
+  pal.classList.remove("hidden");
+  const d = $("#orderDlg").getBoundingClientRect();  // the dialog is the frame of reference (it is blurred glass)
+  pal.style.left = Math.min(r.left - d.left, d.width - 210) + "px"; pal.style.top = (r.bottom - d.top + 6 + $("#orderDlg").scrollTop) + "px";
+  pal.querySelectorAll("button").forEach(b => b.onclick = e => { e.stopPropagation(); ord.colors[name] = b.dataset.g; pal.classList.add("hidden"); drawOrder(); });
+}
+$("#orderDlg").addEventListener("click", e => { if (!e.target.closest(".palette, .cdot")) $("#palette").classList.add("hidden"); });
+$("#orderDlg").addEventListener("close", () => $("#palette").classList.add("hidden"));
+$("#orderNum").onchange = e => { ord.numbered = e.target.checked; drawOrder(); };
+const isOther = n => n.toLowerCase() === "other";
+function drawOrder() {
+  const nums = {};
+  ord.statuses.forEach((n, i) => nums[n] = i + 1);
+  ord.themes.forEach((n, i) => nums[n] = isOther(n) ? 99 : i + 11);
+  const row = (list, n, i) => {
+    const fixed = isOther(n), last = list.length - 1 - (list.some(isOther) ? 1 : 0);
+    const label = ((S.sort?.labels || {})[n] || n).replace(/^\d{2} - /, "");
+    return `<li draggable="${!fixed}" data-n="${esc(n)}" class="${fixed ? "fixed" : ""}${ord.colors[n] !== ord.was[n] ? " recolored" : ""}">
+      <span class="grip">${fixed ? "" : "⠿"}</span>
+      <span class="onum">${ord.numbered ? String(nums[n]).padStart(2, "0") : i + 1}</span>
+      <button type="button" class="cdot" data-c="${esc(n)}" style="background:${ordHex(n)}" title="Colour: ${esc(ord.colors[n] || "")}. Click to change" aria-label="Change the colour of ${esc(label)}"></button><span class="nm">${esc(label)}</span>
+      <button type="button" class="mv" data-mv="-1" ${fixed || i === 0 ? "disabled" : ""} aria-label="Move up">▲</button>
+      <button type="button" class="mv" data-mv="1" ${fixed || i >= last ? "disabled" : ""} aria-label="Move down">▼</button></li>`;
+  };
+  $("#olStatuses").innerHTML = ord.statuses.map((n, i) => row(ord.statuses, n, i)).join("");
+  const fixedRow = (num, name) => `<li class="fixed${ord.colors[name] !== ord.was[name] ? " recolored" : ""}"><span class="grip"></span><span class="onum">${ord.numbered ? num : ""}</span>
+      <button type="button" class="cdot" data-c="${name}" style="background:${ordHex(name)}" title="Colour: ${esc(ord.colors[name] || "")}. Click to change" aria-label="Change the colour of ${name}"></button><span class="nm">${name}</span></li>`;
+  const del = fixedRow("97", "To check") + fixedRow("98", "To delete");
+  $("#olThemes").innerHTML = ord.themes.map((n, i) => (isOther(n) ? del : "") + row(ord.themes, n, i)).join("");
+  $("#orderDlg").querySelectorAll(".cdot").forEach(b => b.onclick = e => { e.stopPropagation(); openPalette(b, b.dataset.c); });
+  for (const [el, key] of [[$("#olStatuses"), "statuses"], [$("#olThemes"), "themes"]]) {
+    el.querySelectorAll("li[data-n]").forEach(li => {
+      const n = li.dataset.n;
+      li.querySelectorAll(".mv").forEach(b => b.onclick = () => move(key, n, ord[key].indexOf(n) + +b.dataset.mv));
+      li.ondragstart = e => { e.dataTransfer.setData("text/plain", key + "|" + n); li.classList.add("dragging"); };
+      li.ondragend = () => li.classList.remove("dragging");
+      li.ondragover = e => { e.preventDefault(); li.classList.add("over"); };
+      li.ondragleave = () => li.classList.remove("over");
+      li.ondrop = e => {
+        e.preventDefault(); li.classList.remove("over");
+        const [k, from] = e.dataTransfer.getData("text/plain").split("|");
+        if (k === key) move(key, from, ord[key].indexOf(n));
+      };
+    });
+  }
+  clearTimeout(ordTimer);
+  $("#orderApply").disabled = true;
+  ordTimer = setTimeout(previewOrder, 150);
+}
+function move(key, name, to) {
+  const list = ord[key].filter(x => x !== name);
+  const max = list.length - (list.some(isOther) ? 1 : 0);  // Other stays last
+  list.splice(Math.max(0, Math.min(to, max)), 0, name);
+  ord[key] = list; drawOrder();
+}
+async function previewOrder() {
+  const r = await api("/api/order", { order: [...ord.statuses, ...ord.themes], numbered: ord.numbered });
+  ordPreview = r;
+  if (!r.ok) { $("#orderPreview").textContent = r.error; return; }
+  const n = r.renames.length, recolored = Object.keys(ord.colors).filter(k => ord.colors[k] !== ord.was[k]);
+  $("#orderPreview").innerHTML = (n
+    ? `<b>${n} label${n > 1 ? "s" : ""} will be renamed in Gmail.</b> Mails and colours stay.` +
+      r.renames.map(x => `<div><span>${esc(x.old)}</span><span>→</span><b>${esc(x.new)}</b></div>`).join("")
+    : "Nothing to rename in Gmail. Apply creates any missing label.")
+    + (recolored.length ? `<div style="margin-top:8px"><b>${recolored.length} new colour${recolored.length > 1 ? "s" : ""}.</b></div>`
+      + `<div>Gmail does not let an app colour a label: after Apply, set it once in Gmail (hover the label, ⋮ &gt; Label colour).</div>`
+      + recolored.map(k => `<div><span class="dot" style="background:${GMAIL[ord.colors[k]]}"></span><b>${esc((r.labels || {})[k] || k)}</b><span>→ ${esc(ord.colors[k])}</span></div>`).join("") : "");
+  $("#orderApply").disabled = false;
+}
+$("#orderForm").onsubmit = async e => {
+  e.preventDefault();
+  $("#orderApply").disabled = true;
+  const recolored = Object.keys(ord.colors).filter(k => ord.colors[k] !== ord.was[k]).length;
+  const r = await api("/api/order", { order: [...ord.statuses, ...ord.themes], numbered: ord.numbered, apply: true, colors: ord.colors });
+  if (!r.ok) { $("#orderApply").disabled = false; return toast(r.error, true); }
+  $("#orderDlg").close();
+  toast(`${r.renamed} label${r.renamed === 1 ? "" : "s"} renamed in Gmail` + (r.created?.length ? `, ${r.created.length} created` : "")
+    + (recolored ? `, ${recolored} colour${recolored > 1 ? "s" : ""} changed here: set ${recolored > 1 ? "them" : "it"} in Gmail too.` : ". Mails and colours kept."));
+  refresh().then(loadDelete);
+};
+
+/* keywords: typical words of each theme, given to the model */
+let KW = null;
+$("#kwBtn").onclick = () => { KW = JSON.parse(JSON.stringify(S.keywords || {})); $("#kwFind").value = ""; drawKw(); $("#kwDlg").showModal(); };
+$("#kwCancel").onclick = () => $("#kwDlg").close();
+$("#kwFind").oninput = () => drawKw();
+function addWords(t, text) {
+  const words = text.split(/[,;\n]/).map(w => w.trim()).filter(Boolean);
+  for (const w of words) if (!KW[t].some(x => x.toLowerCase() === w.toLowerCase())) KW[t].push(w);
+  return words.length;
+}
+function drawKw(focus) {
+  const q = $("#kwFind").value.trim().toLowerCase();
+  const shown = S.themes.filter(t => !q || t.toLowerCase().includes(q) || (KW[t] || []).some(w => w.toLowerCase().includes(q)));
+  $("#kwList").innerHTML = shown.map(t => {
+    KW[t] = KW[t] || [];
+    const def = (S.default_keywords || {})[t] || [];
+    const same = def.length === KW[t].length && def.every((w, i) => w === KW[t][i]);
+    return `<div class="kwrow" data-t="${esc(t)}" style="--c:${color(t)}">
+      <div class="kwhead"><span class="dot" style="background:${color(t)}"></span><b>${esc(t)}</b><small>${KW[t].length} word${KW[t].length === 1 ? "" : "s"}</small>
+        ${def.length && !same ? `<button type="button" class="linkbtn" data-reset title="Put back the suggested words">Default words</button>` : ""}</div>
+      <div class="kwbox">${KW[t].map((w, i) => `<span class="kw">${esc(w)}<button type="button" data-i="${i}" aria-label="Remove ${esc(w)}">×</button></span>`).join("")}
+        <input type="text" placeholder="${KW[t].length ? "Add a word…" : "Add words, separated by commas"}" aria-label="Add a word to ${esc(t)}"></div>
+    </div>`; }).join("") || `<div class="empty">No theme matches.</div>`;
+  $("#kwList").querySelectorAll(".kwrow").forEach(row => {
+    const t = row.dataset.t, input = row.querySelector("input");
+    row.querySelector(".kwbox").onclick = e => { if (e.target === e.currentTarget) input.focus(); };
+    row.querySelectorAll(".kw button").forEach(b => b.onclick = () => { KW[t].splice(+b.dataset.i, 1); drawKw(t); });
+    const reset = row.querySelector("[data-reset]");
+    if (reset) reset.onclick = () => { KW[t] = [...S.default_keywords[t]]; drawKw(t); };
+    input.onkeydown = e => {
+      if ((e.key === "Enter" || e.key === ",") && input.value.trim()) { e.preventDefault(); addWords(t, input.value); drawKw(t); }
+      else if (e.key === "Enter") e.preventDefault();
+      else if (e.key === "Backspace" && !input.value && KW[t].length) { KW[t].pop(); drawKw(t); }
+    };
+    input.onpaste = e => { const text = e.clipboardData.getData("text"); if (/[,;\n]/.test(text)) { e.preventDefault(); addWords(t, text); drawKw(t); } };
+    input.onblur = () => { if (input.value.trim()) { addWords(t, input.value); input.value = ""; setTimeout(() => drawKw(), 0); } };
+    if (focus === t) input.focus();
+  });
+}
+$("#kwForm").onsubmit = async e => {
+  e.preventDefault();
+  $("#kwList").querySelectorAll(".kwrow").forEach(row => { const i = row.querySelector("input"); if (i.value.trim()) addWords(row.dataset.t, i.value); });
+  const r = await api("/api/keywords", { keywords: KW });
+  if (!r.ok) return toast(r.error, true);
+  $("#kwDlg").close(); toast("Keywords saved. The model uses them from the next batch."); refresh();
+};
+
+/* To delete: you check in Gmail, you send them to the Trash */
+let DEL = null;
+async function loadDelete() {
+  if (!S?.configured) return;
+  const r = await api("/api/todelete");
+  $("#delCard").classList.toggle("hidden", !r.ok);
+  if (!r.ok) return;
+  DEL = r;
+  $("#delCount").textContent = fmt(r.count);
+  $("#delLabel").textContent = r.label;
+  $("#delOpen").href = "https://mail.google.com/mail/u/0/#label/" + encodeURIComponent(r.label).replace(/%20/g, "+");
+  $("#trashBtn").disabled = !r.count;
+  $("#trashBtn").textContent = r.count ? `Move ${fmt(r.count)} to Trash` : "Move to Trash";
+  const last = r.last_trash;
+  $("#restoreBtn").classList.toggle("hidden", !last);
+  if (last) $("#restoreBtn").textContent = `Restore the ${fmt(last.n)} mails trashed at ${last.created.slice(11, 16)}`;
+}
+function confirmBox(title, text, yes) {
+  $("#confirmTitle").textContent = title; $("#confirmText").textContent = text; $("#confirmYes").textContent = yes;
+  $("#confirmDlg").showModal();
+  return new Promise(ok => {
+    $("#confirmYes").onclick = () => { $("#confirmDlg").close(); ok(true); };
+    $("#confirmNo").onclick = () => { $("#confirmDlg").close(); ok(false); };
+  });
+}
+$("#trashBtn").onclick = async () => {
+  const n = DEL.count;
+  if (!await confirmBox(`Move ${fmt(n)} mails to the Trash?`,
+    `Every mail with the label "${DEL.label}" goes to Gmail's Trash. Gmail keeps them 30 days: you can restore them until then, here or in Gmail.`,
+    `Move ${fmt(n)} to Trash`)) return;
+  const r = await api("/api/trash", { confirm: n });
+  if (!r.ok) { loadDelete(); return toast(r.error, true); }
+  toast(`${fmt(r.trashed)} mails moved to the Trash. Restorable for 30 days.`); loadDelete(); refresh();
+};
+$("#restoreBtn").onclick = async () => {
+  const r = await api("/api/restore", {});
+  if (!r.ok) return toast(r.error, true);
+  if (r.warning) toast(r.warning, true);
+  else toast(`${fmt(r.restored)} mails back from the Trash, with their "To delete" label.`);
+  loadDelete(); refresh();
+};
+
+function jobEnded() {
+  loadModel(); loadRules(); loadDelete();
+  if (S.error) return toast(S.error, true);
+  const n = S.notice;
+  if (n && n.kind === "apply") toast(`Done: ${fmt(n.applied)} mails labelled, ${fmt(n.moved)} moved out of the Inbox` + (n.read ? `, ${fmt(n.read)} marked as read.` : "."));
+  if (n && n.kind === "stopped") toast(n.analysed ? `Stopped. ${fmt(n.analysed)} mails analysed wait in the plan below; the others come next time.` : "Stopped. Nothing was analysed yet.");
+  if (n && n.kind === "load") toast(`${n.model} is loaded (${n.seconds} s). Ollama keeps it 30 min after the last mail.`);
+  if (n && n.kind === "undo") toast(`Undone: ${fmt(n.undone)} mails back as they were.`);
+  if (n && n.kind === "scan") toast(`${fmt(n.mails)} mails from ${fmt(n.senders)} senders · ${fmt(n.with_unsubscribe)} with an unsubscribe link.`);
+  if (n && n.kind === "suggest") toast(`Rules proposed for ${fmt(n.suggested)} senders.`);
+  const kw = n && n.kind === "learn" ? [n.kw_added && `${n.kw_added} keyword${n.kw_added === 1 ? "" : "s"} learned`,
+    n.kw_moved && `${n.kw_moved} moved`, n.kw_removed && `${n.kw_removed} removed`].filter(Boolean).join(", ") : "";
+  if (n && n.kind === "learn") toast(n.changed || n.checked_off
+    ? `Learned from Gmail: ${fmt(n.changed)} change${n.changed === 1 ? "" : "s"}` + (n.checked_off ? `, ${fmt(n.checked_off)} checked` : "") + (n.proposals ? ` · ${n.proposals} rule${n.proposals === 1 ? "" : "s"} proposed` : "") + (kw ? ` · ${kw}` : "") + "."
+    : kw ? `Keywords: ${kw}.` : `Nothing changed in Gmail (${fmt(n.checked)} sorted mails read again).`);
+  if (n && (n.kind === "scan" || n.kind === "suggest")) loadSenders();
+}
+
+function initControls() {
+  inited = true;
+  const saved = store.get("adagio-scope"), p = S.sort.progress;
+  scope = saved || (p ? { kind: p.kind, value: p.value } : scope);
+  batchSize = S.sort.batch_size;
+  $("#actAlone").checked = S.sort.act_alone;
+  $("#learnGmail").checked = S.sort.learn_gmail;
+  drawScope(); estimate();
+}
+function drawMarkRead() {
+  const on = S.sort.mark_read_themes || [];
+  $("#markRead").checked = S.sort.mark_read;
+  $("#markReadWhat").textContent = on.length ? on.join(", ") : "No theme chosen";
+  $("#markReadThemes").innerHTML = S.themes.map(t => `<button type="button" data-t="${esc(t)}" class="${on.includes(t) ? "on" : ""}"><span class="dot" style="background:${color(t)}"></span>${esc(t)}</button>`).join("");
+  $("#markReadThemes").querySelectorAll("button").forEach(b => b.onclick = async e => {
+    e.preventDefault(); e.stopPropagation();
+    const t = b.dataset.t, list = on.includes(t) ? on.filter(x => x !== t) : [...on, t];
+    await api("/api/behavior", { mark_read_themes: list }); refresh();
+  });
+}
+function drawSummary() {
+  const s = scope.kind === "all" ? "Whole inbox" : scope.kind === "days" ? `Last ${fmt(scope.value)} days` : `Newest ${fmt(scope.value)}`;
+  $("#optsSummary").textContent = `${s} · ${batchSize} per batch · ${$("#actAlone").checked ? "acts alone" : "asks before applying"}`
+    + ($("#markRead").checked ? " · marks low-interest as read" : "") + ($("#learnGmail").checked ? " · learns from Gmail" : "");
+}
+/* sort settings menu: opens under its button, closes on a click outside or Escape */
+const closeOpts = () => $("#sortOpts").classList.add("hidden");
+$("#optsBtn").onclick = () => $("#sortOpts").classList.toggle("hidden");
+document.addEventListener("click", e => { if (!e.composedPath().includes($("#optWrap"))) closeOpts(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeOpts(); });
+function drawScope() {
+  $("#scopeSeg").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.k === scope.kind));
+  $("#scopeVal").classList.toggle("hidden", scope.kind === "all");
+  $("#scopeVal").value = scope.value || (scope.kind === "days" ? 90 : 500);
+  $("#scopeUnit").textContent = scope.kind === "count" ? "mails" : scope.kind === "days" ? "days" : "every mail in the Inbox";
+  $("#batchRange").value = batchSize; $("#batchVal").textContent = batchSize + " mails";
+}
+let estTimer = null;
+function estimate() {
+  clearTimeout(estTimer);
+  $("#estimate").innerHTML = `<span>Counting mails…</span>`;
+  estTimer = setTimeout(async () => {
+    const r = await api("/api/estimate", { scope, batch_size: batchSize });
+    $("#estimate").innerHTML = !r.ok ? `<span>${esc(r.error)}</span>` :
+      `<span><b>${fmt(r.mails)}</b> mails</span><span><b>${fmt(r.batches)}</b> batch${r.batches === 1 ? "" : "es"} of ${fmt(r.batch_size)}</span>` +
+      `<span><b>${dur(r.duration_s)}</b> of sorting</span><span>Cost: <b>${esc(r.cost_note)}</b></span>`;
+  }, 400);
+}
+
+function render() {
+  $("#demoBanner").classList.toggle("hidden", !S.demo);
+  if (S.outdated) $("#oldBanner").classList.remove("hidden");
+  const ready = S.configured;
+  $("#welcome").classList.toggle("hidden", ready);
+  $("#mainCol").classList.toggle("hidden", !ready || page !== "sort");
+  $("#leftPane").classList.toggle("hidden", !ready || page !== "sort");
+  $("#sendersCol").classList.toggle("hidden", !ready || page !== "senders");
+  $("#sideCol").classList.toggle("hidden", !ready);
+  $("#panelBtn").classList.toggle("hidden", !ready);
+  $("#app").classList.toggle("senders", page === "senders");
+  $("#pageTitle").textContent = !ready ? "Welcome" : page === "sort" ? "Sort my inbox" : "Senders";
+  $("#pageSub").textContent = !ready ? "Set up your Gmail address and a model to start." : page === "sort"
+    ? "Each mail gets a theme and a status. Nothing changes in Gmail until you apply."
+    : "Who writes to you, their unsubscribe links, and ready-made rules.";
+  $("#pageSeg").classList.toggle("hidden", !ready);
+  $("#pageSeg").querySelectorAll("button[data-p]").forEach(b => b.classList.toggle("on", b.dataset.p === page));
+
+  const conn = $("#conn");
+  conn.className = "pill " + (ready ? "ok" : "warn");
+  conn.querySelector("span").textContent = ready ? S.email : "Not set up";
+  $("#kAccount").textContent = S.email || "–";
+  $("#kMailbox").textContent = S.mailbox;
+  $("#kTotal").textContent = lastTotal != null ? lastTotal.toLocaleString() : "–";
+
+  const sort = S.sort || {}, p = sort.progress, plan = sort.plan, job = S.job, busy = job.running;
+  const alone = $("#actAlone").checked;
+  drawSummary();
+  $("#runSub").textContent = alone ? "The agent sorts batch after batch on its own. You can stop it and undo the last batch."
+                                   : "A plan for each batch. Nothing changes in Gmail until you apply it.";
+  const finished = p && p.finished && !plan && sameScope(p);
+  const btn = $("#runBtn");
+  btn.disabled = busy || (!!plan && !alone) || finished;
+  btn.querySelector("span").textContent = busy ? ({ plan: "Analysing…", auto: "Sorting…", apply: "Applying…", undo: "Undoing…", load: "Loading the model…", learn: "Learning…" }[job.kind] || "Working…")
+    : plan && !alone ? "Plan ready" : finished ? "All done" : alone ? (p && !p.finished && sameScope(p) && p.done ? "Continue sorting" : "Start sorting")
+    : (p && p.done && sameScope(p) ? "Analyze next batch" : "Analyze first batch");
+  $("#stopBtn").classList.toggle("hidden", !(busy && (job.kind === "auto" || job.kind === "plan")));
+  $("#stopBtn").disabled = S.stopping; $("#stopBtn").textContent = S.stopping ? "Stopping…" : "Stop";
+  $("#restartBtn").classList.toggle("hidden", busy || !!plan || !p || !p.done);
+  $("#learnBtn").disabled = busy; $("#learnBtn").textContent = busy && job.kind === "learn" ? "Reading Gmail…" : "Learn from Gmail";
+  ["#scopeSeg button", "#scopeVal", "#batchRange", "#actAlone", "#markRead", "#learnGmail"].forEach(q => document.querySelectorAll(q).forEach(el => el.disabled = busy));
+
+  // progress
+  const showBar = busy || (p && p.done);
+  $("#progress").classList.toggle("on", !!showBar);
+  if (busy && (job.kind === "plan" || job.kind === "auto")) {
+    const pct = job.total ? Math.round(100 * job.done / job.total) : 3;
+    $("#barFill").style.width = Math.max(pct, 3) + "%";
+    const who = job.model ? ` with ${job.model.split(" · ")[0]}` : "";
+    const where = p && sameScope(p) ? `Batch ${p.batch_no} of ${p.batches} · ` : "";
+    $("#progressText").textContent = where + (job.done ? `${job.done} of ${job.total} mails analysed${who}` : job.model ? `Reading Gmail${who}…` : "Checking the model…");
+  } else if (busy) {
+    $("#barFill").style.width = "100%";
+    $("#progressText").textContent = { apply: "Adding labels in Gmail…", undo: "Putting the mails back as they were…",
+      learn: "Reading your changes in Gmail, then the AI learns keywords from your corrections…",
+      load: `Loading ${job.model} into Ollama. Can take up to a minute…` }[job.kind] || "Working…";
+  } else if (p) {
+    $("#barFill").style.width = Math.max(3, Math.round(100 * p.done / Math.max(p.total, 1))) + "%";
+    $("#progressText").textContent = `${fmt(p.done)} of ${fmt(p.total)} mails done (${describe(p)})` + (p.finished ? " · finished" : ` · batch ${p.batch_no} of ${p.batches} next`);
+  }
+  $("#progress").classList.toggle("running", busy);
+  renderModel(busy && (job.kind === "plan" || job.kind === "auto") ? job.model : "", busy && job.kind === "load" ? job.model : "");
+
+  // suggestion: switch to automatic after a few approved batches
+  const approved = p ? p.batch_no - 1 : 0;
+  const hint = !alone && !busy && !plan && approved >= 3 && !p.finished && !hintHidden;
+  $("#autoHint").classList.toggle("hidden", !hint);
+  if (hint) $("#autoHintText").textContent = `${approved} batches approved. Happy with the sort? The agent can do the rest on its own.`;
+
+  // undo
+  const last = sort.last;
+  $("#undoBtn").disabled = busy || !last;
+  $("#undoSub").textContent = last ? `Last batch: ${fmt(last.labelled)} mails labelled, ${fmt(last.moved)} moved out of the Inbox, at ${(last.applied || "").slice(11, 16)}. Undo removes those labels and puts the mails back.`
+                                   : "Nothing applied yet.";
+
+  const alert = S.error && !busy;
+  $("#sortAlert").classList.toggle("hidden", !alert);
+  if (alert) drawAlert(S.error, S.error_code);
+  drawProposals(sort.proposals || []);
+
+  $("#log").textContent = S.log.length ? S.log.join("\n") : "Nothing yet.";
+  renderResult();
+  renderScanJob();
+}
+/* errors: say what to do, with the right button */
+function drawAlert(error, code) {
+  const help = $("#sortAlertHelp");
+  if (code === "gmail_login") {
+    $("#sortAlertTitle").textContent = "Gmail refused the login.";
+    $("#sortAlertText").textContent = "Check these 3 things:";
+    help.innerHTML = `<ol><li>IMAP is on: in Gmail, gear › See all settings › Forwarding and POP/IMAP › Enable IMAP.</li>
+      <li>You use an app password (16 letters), not your Google password. It needs 2-Step Verification.</li>
+      <li>Paste it in Settings here.</li></ol>
+      <div class="acts"><a class="btn sm" href="https://mail.google.com/mail/u/0/#settings/fwdandpop" target="_blank" rel="noopener">IMAP settings ↗</a>
+      <a class="btn sm" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">Create an app password ↗</a>
+      <button type="button" class="btn sm primary" data-open="settings">Open Settings</button></div>`;
+  } else if (code === "ollama_down" || code === "ollama_missing") {
+    $("#sortAlertTitle").textContent = code === "ollama_down" ? "Ollama is not running." : "Ollama is not installed.";
+    $("#sortAlertText").textContent = error;
+    help.innerHTML = `<div class="acts">${code === "ollama_missing" ? `<a class="btn sm" href="https://ollama.com/download" target="_blank" rel="noopener">Download Ollama ↗</a>` : ""}
+      <button type="button" class="btn sm" data-open="retry">Check again</button></div>`;
+  } else {
+    $("#sortAlertTitle").textContent = code === "offline" ? "No connection to Gmail." : "The last action stopped.";
+    $("#sortAlertText").textContent = error; help.innerHTML = "";
+  }
+  help.querySelectorAll("[data-open]").forEach(b => b.onclick = () => b.dataset.open === "settings" ? openFresh() : loadModel().then(() => toast(M.ok ? "Ollama answers. You can sort again." : M.error, !M.ok)));
+}
+/* rules proposed after the same correction twice */
+function drawLearnHead(rules, props) {
+  if (rules !== undefined) drawLearnHead.rules = rules;
+  if (props !== undefined) drawLearnHead.props = props;
+  const nr = drawLearnHead.rules || 0, np = drawLearnHead.props || 0;
+  const nk = drawLearnHead.kw || 0;
+  $("#learnCount").textContent = (nk ? `${nk} keyword${nk === 1 ? "" : "s"} · ` : "") + `${nr} rule${nr === 1 ? "" : "s"}`;
+  $("#ruleCount").textContent = String(nr);
+  $("#learnBadge").classList.toggle("hidden", !np);
+  $("#learnBadge").textContent = `${np} to review`;
+}
+function drawProposals(list) {
+  drawLearnHead(undefined, list.length);
+  $("#proposals").innerHTML = list.map((x, i) => `<div class="prop">
+      <div class="who" title="${esc(x.sender)}">${esc(x.sender)}</div>
+      <div class="to">You corrected it ${x.count}× to <span class="dot" style="background:${color(x.theme)}"></span>${esc(x.theme)} · ${esc(x.status)}</div>
+      <div class="row2"><button type="button" class="btn sm primary" data-p="${i}" data-a="yes">Make it a rule</button>
+        <button type="button" class="btn sm" data-p="${i}" data-a="no">Ignore</button></div></div>`).join("");
+  $("#proposals").querySelectorAll("button").forEach(b => b.onclick = async () => {
+    const x = list[+b.dataset.p];
+    const r = b.dataset.a === "yes" ? await api("/api/rule", { kind: "sender", value: x.sender, theme: x.theme, status: x.status })
+                                    : await api("/api/proposal/ignore", x);
+    if (!r.ok) return toast(r.error, true);
+    toast(b.dataset.a === "yes" ? `Rule saved: ${x.sender} → ${x.theme} · ${x.status}` : "Ignored. It will not be proposed again.");
+    loadRules(); refresh();
+  });
+}
+const sameScope = p => p.kind === scope.kind && (p.kind === "all" || p.value === +scope.value);
+const describe = p => p.kind === "count" ? `newest ${fmt(p.value)}` : p.kind === "days" ? `last ${fmt(p.value)} days` : "whole inbox";
+
+function renderResult() {
+  const sort = S.sort || {}, plan = sort.plan, r = plan || sort.last, p = sort.progress;
+  const st = S.statuses;
+  if (plan && plan.batch_id !== planId) { planId = plan.batch_id; skip = new Set(); }
+  // left pane: all, statuses, to delete, themes (label order, like Gmail)
+  const counts = r ? r.by_theme : {}, scounts = r ? r.by_status : {};
+  const num = n => !S.numbered ? "" : n === "__del" ? (r?.delete_label || "").slice(0, 2) : n === "__chk" ? (r?.check_label || "").slice(0, 2) : ((sort.labels || {})[n] || "").slice(0, 2);
+  const frow = (kind, key, label, n, dot, on) => `<button type="button" class="frow ${on ? "on" : ""} ${r && !n ? "zero" : ""}" data-k="${kind}" data-v="${esc(key)}">
+      <span class="fnum">${esc(num(key))}</span>${dot ? `<span class="dot" style="background:${dot}"></span>` : ""}<span class="nm">${esc(label)}</span><span class="n">${r ? fmt(n) : ""}</span></button>`;
+  const sdot = i => ["var(--red)", "var(--amber)", "var(--slate)"][Math.min(i, 2)];
+  const delName = r && r.delete_label ? r.delete_label.replace(/^\d{2} - /, "") : "To delete";
+  const chkName = r && r.check_label ? r.check_label.replace(/^\d{2} - /, "") : "To check";
+  $("#folders").innerHTML =
+    frow("all", "", r ? (plan ? "All mails in this plan" : "All mails of the last batch") : "All mails", r ? r.processed : 0, "", !themeFilter && !statusFilter && !delFilter && !chkFilter)
+    + `<div class="fsep"></div>` + st.map((n, i) => frow("s", n, n, scounts[n] || 0, sdot(i), statusFilter === n)).join("")
+    + (r && r.to_check ? frow("c", "__chk", chkName, r.to_check, S.colors?.["To check"]?.hex || "#a46a21", chkFilter) : "")
+    + (r && r.to_delete ? frow("d", "__del", delName, r.to_delete, S.colors?.["To delete"]?.hex || "#822111", delFilter) : "")
+    + `<div class="fsep"></div>` + S.themes.map(t => frow("t", t, t, counts[t] || 0, color(t), themeFilter === t)).join("");
+  $("#folders").querySelectorAll(".frow").forEach(b => b.onclick = () => {
+    const k = b.dataset.k, v = b.dataset.v;
+    if (k === "all") { themeFilter = statusFilter = ""; delFilter = chkFilter = false; }
+    if (k === "c") chkFilter = !chkFilter;
+    if (k === "s") statusFilter = statusFilter === v ? "" : v;
+    if (k === "t") themeFilter = themeFilter === v ? "" : v;
+    if (k === "d") delFilter = !delFilter;
+    $("#mails").scrollTop = 0; renderResult();
+  });
+  const active = [themeFilter && ["t", themeFilter], statusFilter && ["s", statusFilter], chkFilter && ["c", chkName], delFilter && ["d", delName]].filter(Boolean);
+  $("#filters").innerHTML = active.map(([k, v]) => `<span class="chip">${k === "t" ? `<span class="dot" style="background:${color(v)}"></span>` : ""}${esc(v)}<button type="button" data-k="${k}" aria-label="Remove this filter">×</button></span>`).join("");
+  $("#filters").querySelectorAll("button").forEach(b => b.onclick = () => {
+    if (b.dataset.k === "t") themeFilter = ""; if (b.dataset.k === "s") statusFilter = ""; if (b.dataset.k === "d") delFilter = false; if (b.dataset.k === "c") chkFilter = false;
+    renderResult();
+  });
+  const order = S.themes;
+
+  // mails grouped by theme
+  const box = $("#mails");
+  $("#applyBar").classList.toggle("hidden", !plan);
+  if (!r) {
+    $("#mailsTitle").textContent = "Mails";
+    $("#mailsSub").textContent = "Analyze a batch to see your mails here.";
+    box.innerHTML = `<div class="empty"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></svg><div>No mails yet.</div></div>`;
+    return;
+  }
+  const q = query.toLowerCase();
+  const rows = r.mails.filter(m => (!themeFilter || m.theme === themeFilter) && (!statusFilter || m.status === statusFilter) && (!delFilter || m.to_delete) && (!chkFilter || m.to_check)
+    && (!q || (m.sender + " " + m.subject).toLowerCase().includes(q)));
+  const model = (r.model || "").split(" · ")[0], ruled = r.mails.filter(m => m.rule).length;
+  $("#mailsTitle").textContent = plan ? `Plan for batch ${p ? p.batch_no : ""}` : "Last batch applied";
+  $("#mailsSub").textContent = plan
+    ? `${rows.length} of ${r.processed} shown · sorted by ${model}${ruled ? ` · ${ruled} by your rules` : ""} · nothing changes in Gmail until you apply`
+    : `${rows.length} of ${r.processed} shown · applied at ${(r.applied || "").slice(11, 16)}`;
+  const groups = order.map(t => [t, rows.filter(m => m.theme === t)]).filter(([, l]) => l.length);
+  box.innerHTML = groups.length ? groups.map(([t, list]) => {
+    const on = list.filter(m => !skip.has(m.gm_msgid)).length;
+    return `<div class="group">
+      <div class="ghead">${plan ? `<input type="checkbox" data-g="${esc(t)}" ${on ? "checked" : ""} title="Select or unselect this theme">` : ""}<span class="dot" style="background:${color(t)}"></span>${esc(t)} <span>${list.length}</span></div>
+      ${list.map(m => mailRow(m, t, !!plan)).join("")}
+    </div>`; }).join("") : `<div class="empty">No mail matches.</div>`;
+  box.querySelectorAll(".ghead input").forEach(cb => {
+    const list = rows.filter(m => m.theme === cb.dataset.g), on = list.filter(m => !skip.has(m.gm_msgid)).length;
+    cb.indeterminate = on > 0 && on < list.length;
+    cb.onchange = () => { list.forEach(m => cb.checked ? skip.delete(m.gm_msgid) : skip.add(m.gm_msgid)); renderResult(); };
+  });
+  box.querySelectorAll(".mail input").forEach(cb => cb.onchange = () => { cb.checked ? skip.delete(cb.dataset.id) : skip.add(cb.dataset.id); renderResult(); });
+  box.querySelectorAll("button.fix").forEach(b => b.onclick = () => openFix(r.mails.find(m => m.gm_msgid === b.dataset.id)));
+  box.querySelectorAll("button.why").forEach(b => b.onclick = () => openWhy(r.mails.find(m => m.gm_msgid === b.dataset.id), !!plan));
+  box.querySelectorAll(".mail").forEach(row => {
+    const open = () => openRead(r.mails.find(m => m.gm_msgid === row.dataset.id), [...box.querySelectorAll(".mail")].map(x => x.dataset.id), r.mails);
+    row.onclick = e => { if (!e.target.closest("input, button, a, .mini")) open(); };
+    row.onkeydown = e => { if (e.key === "Enter" && e.target === row) open(); };
+  });
+  box.querySelectorAll("button.keep").forEach(b => b.onclick = async e => {
+    e.preventDefault(); e.stopPropagation();
+    const k = await api("/api/keep", { gm_msgid: b.dataset.keep });
+    if (!k.ok) return toast(k.error, true);
+    toast("Kept: this mail will not get the \"To delete\" label."); refresh();
+  });
+  if (plan) {
+    const n = r.processed - [...skip].filter(id => r.mails.some(m => m.gm_msgid === id)).length;
+    $("#applyCount").textContent = `${n} of ${r.processed} mails selected`;
+    $("#applyWhat").textContent = (sort.archive ? "Adds the theme and status labels, and moves them out of the Inbox into their theme." : "Adds the theme and status labels.") +
+      (sort.mark_read && r.low_interest ? ` ${r.low_interest} low-interest mails will be marked as read.` : "") +
+      (r.to_check ? ` ${r.to_check} get "${r.check_label}": the model was not sure, have a look.` : "") +
+      (r.to_delete ? ` ${r.to_delete} get the label "${r.delete_label}" (nothing goes to the Trash).` : "") + " Unticked mails stay as they are.";
+    $("#applyBtn").textContent = n === r.processed ? `Apply to all ${n}` : `Apply to ${n} mails`;
+    $("#applyBtn").disabled = S.job.running;
+    $("#discardBtn").disabled = S.job.running;
+  }
+}
+
+/* senders page */
+function setPage(p) { page = p; store.set("adagio-page", p); render(); if (p === "senders") loadSenders(); window.scrollTo(0, 0); }
+$("#pageSeg").querySelectorAll("button[data-p]").forEach(b => b.onclick = () => setPage(b.dataset.p));
+async function loadSenders() { const r = await api("/api/senders"); if (r.ok) { SD = r; renderSenders(); } }
+function renderScanJob() {
+  const job = S.job, busy = job.running, mine = busy && (job.kind === "scan" || job.kind === "suggest");
+  $("#scanBtn").disabled = busy; $("#suggestBtn").disabled = busy || !SD || !SD.scan;
+  $("#scanBtn span").textContent = busy && job.kind === "scan" ? "Scanning…" : SD && SD.scan ? "Scan again" : "Scan my mailbox";
+  $("#scanProgress").classList.toggle("on", mine); $("#scanProgress").classList.toggle("running", mine);
+  if (mine) {
+    $("#scanFill").style.width = Math.max(3, job.total ? Math.round(100 * job.done / job.total) : 3) + "%";
+    $("#scanText").textContent = job.kind === "scan" ? (job.total ? `${fmt(job.done)} of ${fmt(job.total)} mails read (headers only)` : "Listing your mails…")
+      : (job.total ? `${job.done} of ${job.total} senders checked with ${(job.model || "").split(" · ")[0]}` : "Choosing the senders…");
+  }
+}
+const safeLink = u => /^(https?:\/\/|mailto:)/i.test(u || "") ? u : "";
+const initials = r => ((r.name || r.address).replace(/[^\p{L}\p{N}]/gu, "")[0] || "?").toUpperCase();
+const hue = t => PALETTE[[...t].reduce((a, c) => a + c.charCodeAt(0), 0) % PALETTE.length];
+function renderSenders() {
+  if (!SD) return;
+  if (S) renderScanJob();
+  const all = SD.senders, scan = SD.scan;
+  $("#tSenders").textContent = scan ? fmt(all.length) : "–";
+  $("#tMails").textContent = scan ? fmt(scan.mails) : "–";
+  $("#tSubs").textContent = scan ? fmt(SD.with_unsubscribe) : "–";
+  $("#tRules").textContent = scan ? fmt(all.filter(r => r.rule).length) : "–";
+  $("#scanInfo").innerHTML = scan ? `<span>Last scan: <b>${esc(scan.created.slice(0, 16))}</b></span><span>Folder: <b>${esc(scan.mailbox)}</b></span>` : "";
+  const counts = { all: all.filter(r => r.state !== "hidden").length, subs: all.filter(r => safeLink(r.unsubscribe) && r.state !== "hidden").length,
+                   sugg: all.filter(r => r.theme && !r.rule).length, hidden: all.filter(r => r.state === "hidden").length };
+  $("#senderSeg").querySelectorAll("button").forEach(b => { b.classList.toggle("on", b.dataset.f === senderFilter);
+    b.textContent = { all: "All", subs: "Subscriptions", sugg: "Suggested rules", hidden: "Hidden" }[b.dataset.f] + (scan ? ` ${counts[b.dataset.f]}` : ""); });
+  const q = senderQuery.toLowerCase();
+  let rows = all.filter(r => senderFilter === "hidden" ? r.state === "hidden" : r.state !== "hidden");
+  if (senderFilter === "subs") rows = rows.filter(r => safeLink(r.unsubscribe));
+  if (senderFilter === "sugg") rows = rows.filter(r => r.theme && !r.rule);
+  if (q) rows = rows.filter(r => (r.name + " " + r.address).toLowerCase().includes(q));
+  $("#sendersSub").textContent = !scan ? "Scan your mailbox to see your senders." :
+    senderFilter === "subs" ? "Newsletters and mailing lists. Unsubscribe opens the sender's own page in a new tab: Mail Adagio never unsubscribes by itself."
+    : senderFilter === "sugg" ? "Rules proposed from 3 recent mails of each sender. Accept one and every mail from this sender is sorted that way, with no AI call."
+    : "Sorted by number of mails.";
+  const max = Math.max(1, ...all.map(r => r.mails)), shown = rows.slice(0, 300);
+  $("#senders").innerHTML = !scan ? `<div class="empty">No scan yet.</div>` : !rows.length ? `<div class="empty">No sender here.</div>` : shown.map((r, i) => {
+    const link = safeLink(r.unsubscribe);
+    const sugg = r.rule ? `<button type="button" class="chip rule" data-act="edit" data-i="${i}" title="Your rule (${esc(r.rule.kind)}: ${esc(r.rule.value)}). Click to change it."><span class="dot" style="background:${color(r.rule.theme)}"></span>${esc(r.rule.theme)} · ${esc(r.rule.status)}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>`
+      : r.theme ? `<span class="chip" title="Suggested from ${esc(r.votes)}"><span class="dot" style="background:${color(r.theme)}"></span>${esc(r.theme)} · ${esc(r.status)}</span>
+          <button class="btn sm primary" data-act="accept" data-i="${i}" title="Always sort ${esc(r.address)} this way">Accept</button><button class="btn sm" data-act="edit" data-i="${i}" title="Choose another theme or status">Change</button>`
+      : `<button class="btn sm ghost" data-act="edit" data-i="${i}" style="color:var(--muted)">Add a rule</button>`;
+    const unsub = link ? (r.state === "opened" ? `<span class="opened" title="Opened ${esc(r.state_at.slice(0, 16))}">Link opened</span>` : "")
+      + `<a class="btn sm" href="${esc(link)}" target="_blank" rel="noopener noreferrer" data-act="unsub" data-i="${i}" title="Opens ${esc(link.replace(/^(https?:\/\/|mailto:)/i, "").split(/[/?]/)[0])}">Unsubscribe ↗</a>` : "";
+    const hide = `<button class="iconb" data-act="${r.state === "hidden" ? "show" : "hide"}" data-i="${i}" title="${r.state === "hidden" ? "Show again" : "Hide from this list"}">${r.state === "hidden"
+      ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>`
+      : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`}</button>`;
+    return `<div class="srow">
+      <div class="avatar" style="background:${hue(r.address)}">${esc(initials(r))}</div>
+      <div class="who" title="${esc(r.address)}"><b>${esc(r.name)}</b><small>${esc(r.address)}</small></div>
+      <div class="cnt">${fmt(r.mails)} mail${r.mails === 1 ? "" : "s"} · ${esc((r.last_date || "").slice(5).replace("-", "/"))}<div class="track"><div style="width:${100 * r.mails / max}%"></div></div></div>
+      <div class="sugg">${sugg}</div>
+      <div class="acts">${unsub}${hide}</div>
+    </div>`; }).join("") + (rows.length > shown.length ? `<div class="more">Showing ${shown.length} of ${fmt(rows.length)}. Search to find the others.</div>` : "");
+  $("#senders").querySelectorAll("[data-act]").forEach(el => el.onclick = async e => {
+    const r = shown[+el.dataset.i], act = el.dataset.act;
+    if (act === "unsub") { api("/api/sender", { address: r.address, state: "opened" }).then(loadSenders); return; }
+    if (act === "edit") return openSenderFix(r);
+    if (act === "accept") {
+      const x = await api("/api/rule", { kind: "sender", value: r.address, theme: r.theme, status: r.status });
+      if (!x.ok) return toast(x.error, true);
+      toast(`Rule saved: ${r.name} → ${r.theme} · ${r.status}`); loadRules(); refresh();
+    } else {
+      await api("/api/sender", { address: r.address, state: act === "hide" ? "hidden" : "" });
+    }
+    loadSenders();
+  });
+}
+$("#senderSeg").querySelectorAll("button").forEach(b => b.onclick = () => { senderFilter = b.dataset.f; renderSenders(); });
+$("#senderSearch").oninput = e => { senderQuery = e.target.value; renderSenders(); };
+$("#scanBtn").onclick = () => start("/api/scan", {});
+$("#suggestBtn").onclick = () => { senderFilter = "sugg"; start("/api/suggest", { top: 20 }); };
+function openSenderFix(r) {
+  fix = { mode: "sender", sender: r, theme: (r.rule && r.rule.theme) || r.theme || "Other", status: (r.rule && r.rule.status) || r.status || S.statuses[S.statuses.length - 1] };
+  $("#fixDlg h2").textContent = r.rule ? "Change the rule for this sender" : "Rule for this sender";
+  $("#fixFrom").textContent = `${r.name} <${r.address}>`; $("#fixSubj").textContent = `${fmt(r.mails)} mails in your mailbox`;
+  $("#fixAddr").textContent = r.address; $("#fixDomain").textContent = r.domain;
+  $("#fixDomainRow").classList.toggle("hidden", !r.domain); $("#fixNoneRow").classList.add("hidden");
+  $("#fixForm").querySelector(`input[value="${r.rule && r.rule.kind === "domain" && r.domain ? "domain" : "sender"}"]`).checked = true;
+  drawFix(); $("#fixDlg").showModal();
+}
+
+/* corrections and rules */
+let fix = null;
+function openFix(m) {
+  fix = { mode: "mail", mail: m, theme: m.theme, status: m.status };
+  $("#fixDlg h2").textContent = "Correct this mail"; $("#fixNoneRow").classList.remove("hidden");
+  const addr = (m.sender.match(/<([^>]+)>/) || [, m.sender])[1].trim().toLowerCase();
+  const dom = addr.includes("@") ? addr.split("@")[1] : "";
+  $("#fixFrom").textContent = m.sender; $("#fixSubj").textContent = m.subject || "(no subject)";
+  $("#fixAddr").textContent = addr; $("#fixDomain").textContent = dom;
+  $("#fixDomainRow").classList.toggle("hidden", !dom);
+  $("#fixForm").querySelector('input[value="sender"]').checked = true;
+  drawFix();
+  $("#fixDlg").showModal();
+}
+function drawFix() {
+  $("#fixThemes").innerHTML = S.themes.map(t => `<button type="button" data-t="${esc(t)}" class="${t === fix.theme ? "on" : ""}"><span class="dot" style="background:${color(t)}"></span>${esc(t)}</button>`).join("");
+  $("#fixThemes").querySelectorAll("button").forEach(b => b.onclick = () => { fix.theme = b.dataset.t; drawFix(); });
+  $("#fixStatus").innerHTML = S.statuses.map(st => `<button type="button" data-s="${esc(st)}" class="${st === fix.status ? "on" : ""}">${esc(st)}</button>`).join("");
+  $("#fixStatus").querySelectorAll("button").forEach(b => b.onclick = () => { fix.status = b.dataset.s; drawFix(); });
+}
+$("#fixCancel").onclick = () => $("#fixDlg").close();
+$("#fixForm").onsubmit = async e => {
+  e.preventDefault();
+  const remember = $("#fixForm").querySelector('input[name="remember"]:checked').value;
+  if (fix.mode === "sender") {
+    const x = await api("/api/rule", { kind: remember, value: remember === "domain" ? fix.sender.domain : fix.sender.address, theme: fix.theme, status: fix.status });
+    if (!x.ok) return toast(x.error, true);
+    $("#fixDlg").close(); toast("Rule saved. Mails from this sender will be sorted this way, with no AI call.");
+    loadRules(); loadSenders(); return refresh();
+  }
+  const r = await api("/api/correct", { gm_msgid: fix.mail.gm_msgid, sender: fix.mail.sender, subject: fix.mail.subject,
+    theme: fix.theme, status: fix.status, remember });
+  if (!r.ok) return toast(r.error, true);
+  $("#fixDlg").close();
+  toast(remember === "none" ? "Corrected. The agent learns keywords from it before the next batch." : "Rule saved. Applied to this plan and to the next batches.");
+  drawRules(r.rules); refresh();
+};
+function drawRules(rules) {
+  drawLearnHead(rules.length);
+  $("#rules").innerHTML = rules.length ? rules.map(x => `
+    <div class="rule"><div style="min-width:0">
+      <div class="who" title="${esc(x.value)}">${x.kind === "domain" ? "Everyone at " : ""}${esc(x.value)}</div>
+      <div class="to"><span class="dot" style="background:${color(x.theme)}"></span>${esc(x.theme)} · ${esc(x.status)}</div></div>
+      <button data-id="${x.id}" title="Delete this rule"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>`).join("") : `<div style="color:var(--muted);font-size:13px">No rule yet. Click the pencil on a mail to correct it.</div>`;
+  $("#rules").querySelectorAll("button").forEach(b => b.onclick = async () => {
+    const r = await api("/api/rules/delete", { id: +b.dataset.id });
+    if (r.ok) { drawRules(r.rules); toast("Rule deleted."); }
+  });
+}
+async function loadRules() { const r = await api("/api/rules"); if (r.ok) { drawKwLearned(r); drawRules(r.rules); } }
+/* keywords the agent learned, moved or removed from your corrections; how many mails you corrected per batch */
+function drawKwLearned(r) {
+  const list = r.keyword_changes || [], waiting = r.keywords_waiting || 0, rates = r.corrections || [];
+  const moved = new Set(list.filter(x => x.kind === "removed" && x.detail.startsWith("moved to ")).map(x => x.word.toLowerCase()));
+  const shown = list.filter(x => !(x.kind === "learned" && x.detail.startsWith("moved from ")));
+  drawLearnHead.kw = list.filter(x => x.kind === "learned" && !x.detail.startsWith("moved from ")).length;
+  const row = x => {
+    const isMove = x.kind === "removed" && x.detail.startsWith("moved to ");
+    const kind = isMove ? "moved" : x.kind, to = isMove ? x.detail.slice(9).split(":")[0] : "";
+    const sign = { learned: "+", removed: "−", moved: "→" }[kind];
+    const where = kind === "learned" ? `→ <span class="dot" style="background:${color(x.theme)}"></span>${esc(x.theme)}`
+      : kind === "moved" ? `${esc(x.theme)} → <span class="dot" style="background:${color(to)}"></span>${esc(to)}`
+      : `out of ${esc(x.theme)}`;
+    return `<div class="kw" title="${esc(x.detail)} · ${esc(x.created)}"><span class="sign ${kind}">${sign}</span>
+      <span class="w">${esc(x.word)}</span><span class="t">${where}</span></div>`;
+  };
+  const pct = rates.map(b => b.mails ? b.corrected / b.mails : 0), top = Math.max(...pct, 0.0001);
+  $("#kwLearned").innerHTML = `<h3>Keywords learned<button type="button" class="linkbtn" id="kwEdit">Edit</button></h3>`
+    + (shown.length ? shown.slice(0, 6).map(row).join("") : `<div class="note">Nothing yet. Correct the theme of a mail: the agent adds the words that show the right theme, and moves or removes a keyword that misled it 3 times.</div>`)
+    + (waiting ? `<div class="note">${waiting} correction${waiting === 1 ? "" : "s"} to learn from before the next batch.</div>` : "")
+    + (rates.length ? `<div class="rate" title="Mails you corrected in the last batches (oldest on the left)">${pct.map((v, i) =>
+        `<span style="height:${Math.max(8, 100 * v / top)}%" title="${rates[i].corrected} of ${rates[i].mails} corrected"></span>`).join("")}</div>
+       <div class="note">Corrected in the last batches: ${rates.map(b => `${b.corrected}/${b.mails}`).join(" · ")}</div>` : "");
+  $("#kwEdit").onclick = () => $("#kwBtn").click();
+}
+
+function mailRow(m, t, selectable) {
+  const si = S.statuses.indexOf(m.status);
+  const status = m.classified ? `<span class="st st-${Math.min(si, 2)}"><i></i>${esc(m.status)}</span>` : `<span class="st st-x" title="${esc(m.error || "")}"><i></i>Not sorted</span>`;
+  const name = (m.sender.split("<")[0].replace(/"/g, "").trim()) || m.sender;
+  const letter = (name.replace(/[^\p{L}\p{N}]/gu, "")[0] || "?").toUpperCase();
+  const tags = (m.corrected ? `<span class="mini ok">corrected</span>` : m.rule ? `<span class="mini" title="${esc(m.rule)}">rule</span>` : "")
+    + (m.to_check ? `<span class="mini chk" title="${esc(m.reason || "The model was not sure: have a look")}">to check</span>` : "")
+    + (m.to_delete ? `<span class="mini del" title="Gets the label for mails to delete. Only you send them to the Trash.">to delete${selectable ? `<button class="keep" data-keep="${esc(m.gm_msgid)}" title="Keep this mail" aria-label="Keep this mail">×</button>` : ""}</span>` : "")
+    + (!selectable ? `<span class="state ${esc(m.state)}">${{ applied: m.archived ? "filed" : "labelled", skipped: "left as is", undone: "undone" }[m.state] || ""}</span>` : "");
+  const url = /^https:\/\/mail\.google\.com\//.test(m.gmail_url) ? m.gmail_url : "";
+  const off = selectable && skip.has(m.gm_msgid);
+  return `<div class="mail${selectable ? " sel" : ""}${off ? " off" : ""}" data-id="${esc(m.gm_msgid)}" tabindex="0" title="Open this mail">
+    ${selectable ? `<input type="checkbox" data-id="${esc(m.gm_msgid)}" ${off ? "" : "checked"} aria-label="Include this mail">` : ""}
+    <span class="av" style="background:${color(t)}">${esc(letter)}</span>
+    <div class="from" title="${esc(m.sender)}">${esc(name)}</div>
+    <div class="subj" title="${esc(m.subject)}">${esc(m.subject || "(no subject)")}${tags}</div>
+    ${status}
+    <div class="date">${esc((m.date || "").slice(5).replace("-", "/"))}</div>
+    <div class="acts2">
+    <button class="why" data-id="${esc(m.gm_msgid)}" title="Why this theme and status?"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6M12 17h.01"/></svg></button>
+    ${selectable ? `<button class="fix" data-id="${esc(m.gm_msgid)}" title="Correct theme or status"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>` : ""}
+    ${url ? `<a class="open" href="${esc(url)}" target="_blank" rel="noopener" title="Open in Gmail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>` : ""}
+    </div>
+  </div>`;
+}
+
+/* why: how one mail was sorted, and the model's reason on demand */
+let whyMail = null;
+function openWhy(m, inPlan) {
+  whyMail = m;
+  const name = (m.sender.split("<")[0].replace(/"/g, "").trim()) || m.sender;
+  $("#whyFrom").textContent = name; $("#whySubj").textContent = m.subject || "(no subject)";
+  $("#whyTo").innerHTML = `<span class="dot" style="background:${color(m.theme)}"></span> ${esc(m.theme)} · ${esc(m.status)}` + (m.to_check ? ` <span class="mini chk">to check</span>` : "");
+  $("#whyHow").textContent = m.corrected ? "You (a correction)" : m.rule ? `Your rule (${m.rule}), no AI call` : !m.classified ? "Nobody: the model gave no valid answer" : `The model (${(S.sort?.plan || S.sort?.last || {}).model || "AI"})`;
+  const c = m.confidence;
+  $("#whyConfRow").classList.toggle("hidden", !c || !!m.rule || !!m.corrected);
+  $("#whyConf").innerHTML = c ? `<span class="conf c-${esc(c)}"><i></i><i></i><i></i><em>${{ high: "sure", medium: "fairly sure", low: "not sure" }[c] || esc(c)}</em></span>` : "";
+  drawReason(m.reason);
+  $("#whyAsk").classList.toggle("hidden", !!m.rule || !!m.corrected);
+  $("#whyAsk").disabled = false; $("#whyAsk").textContent = m.reason ? "Ask again" : "Ask the model why";
+  $("#whyFix").classList.toggle("hidden", !inPlan);
+  $("#whyDlg").showModal();
+}
+function drawReason(text) {
+  $("#whyReason").className = "reason" + (text ? "" : " empty-r");
+  $("#whyReason").textContent = text || (whyMail.rule ? "Every mail from this sender is sorted this way, by your rule." : whyMail.corrected ? "You chose this theme and status." :
+    "No reason saved: the model only explains the mails it was not sure about. Ask it, it reads the mail again (a few seconds).");
+}
+$("#whyAsk").onclick = async () => {
+  $("#whyAsk").disabled = true; $("#whyAsk").textContent = "Asking the model…";
+  const r = await api("/api/why", { gm_msgid: whyMail.gm_msgid });
+  $("#whyAsk").disabled = false; $("#whyAsk").textContent = "Ask again";
+  if (!r.ok) return toast(r.error, true);
+  whyMail.reason = r.reason; drawReason(r.reason);
+};
+$("#whyClose").onclick = () => $("#whyDlg").close();
+$("#whyFix").onclick = () => { $("#whyDlg").close(); openFix(whyMail); };
+
+/* reader: opens one whole mail in a window, read-only (nothing changes in Gmail) */
+const reader = { list: [], mails: [], id: "", cache: new Map(), mode: "html" };
+const pref = (k, d) => { const v = store.get(k); return v === null || v === undefined ? d : v; };
+const darkTheme = () => { const t = document.documentElement.dataset.theme; return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; };
+const fmtSize = n => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+const who = a => a.name && a.email ? `<b>${esc(a.name)}</b> &lt;${esc(a.email)}&gt;` : `<b>${esc(a.name || a.email)}</b>`;
+function openRead(m, list, mails) {
+  if (!m) return;
+  reader.list = list || [m.gm_msgid]; reader.mails = mails || [m]; reader.id = m.gm_msgid;
+  reader.mode = "html";
+  drawRead(m, reader.cache.get(m.gm_msgid));
+  if (!$("#readDlg").open) $("#readDlg").showModal();
+  if (!reader.cache.has(m.gm_msgid)) fetchRead(m);
+}
+async function fetchRead(m) {
+  const r = await api("/api/read", { gm_msgid: m.gm_msgid });
+  if (r.ok) reader.cache.set(m.gm_msgid, r);
+  if (reader.id === m.gm_msgid && $("#readDlg").open) drawRead(m, r);
+}
+function drawRead(m, d) {
+  const name = (m.sender.split("<")[0].replace(/"/g, "").trim()) || m.sender;
+  const addr = (m.sender.match(/<([^>]+)>/) || [])[1] || "";
+  $("#rAv").textContent = (name.replace(/[^\p{L}\p{N}]/gu, "")[0] || "?").toUpperCase();
+  $("#rAv").style.background = color(m.theme);
+  $("#rFrom").textContent = d?.ok && d.from[0] ? (d.from[0].name || d.from[0].email) : name;
+  $("#rAddr").textContent = d?.ok && d.from[0] ? d.from[0].email : addr;
+  $("#rSubj").textContent = (d?.ok ? d.subject : m.subject) || "(no subject)";
+  const i = reader.list.indexOf(m.gm_msgid);
+  $("#rPrev").disabled = i <= 0; $("#rNext").disabled = i < 0 || i >= reader.list.length - 1;
+  const url = d?.ok && /^https:\/\/mail\.google\.com\//.test(d.gmail_url) ? d.gmail_url : /^https:\/\/mail\.google\.com\//.test(m.gmail_url || "") ? m.gmail_url : "";
+  $("#rGmail").classList.toggle("hidden", !url); $("#rGmail").href = url || "#";
+  const rows = [];
+  if (d?.ok) {
+    if (d.to.length) rows.push(["To", d.to.map(who).join(", ")]);
+    if (d.cc.length) rows.push(["Cc", d.cc.map(who).join(", ")]);
+    if (d.reply_to.length && d.reply_to.some(a => a.email !== d.from[0]?.email)) rows.push(["Reply to", d.reply_to.map(who).join(", ")]);
+    if (d.date) rows.push(["Date", esc(new Date(d.date).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }))]);
+  } else if (m.date) rows.push(["Date", esc(m.date)]);
+  rows.push(["Sorted as", `<span class="chip"><span class="dot" style="background:${color(m.theme)}"></span>${esc(m.theme)}</span><span class="st st-${Math.min(Math.max(S.statuses.indexOf(m.status), 0), 2)}"><i></i>${esc(m.status)}</span>`]);
+  const labels = d?.ok ? d.labels.filter(l => !l.startsWith("\\")) : [];
+  if (labels.length) rows.push(["In Gmail", labels.map(l => `<span class="chip">${esc(l)}</span>`).join("")]);
+  $("#rMeta").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  const att = d?.ok ? d.attachments : [];
+  $("#rAtt").classList.toggle("hidden", !att.length);
+  $("#rAtt").innerHTML = att.map(a => `<span title="${esc(a.type)}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg><b>${esc(a.name)}</b><small>${fmtSize(a.size)}</small></span>`).join("");
+  const body = $("#rBody");
+  if (!d) {
+    ["#rMode", "#rImagesSw", "#rDarkSw"].forEach(q => $(q).classList.add("hidden"));
+    body.innerHTML = `<div class="skel" aria-label="Loading the mail"><i></i><i></i><i></i><i></i></div>`;
+    return;
+  }
+  if (!d.ok) {
+    ["#rMode", "#rImagesSw", "#rDarkSw"].forEach(q => $(q).classList.add("hidden"));
+    body.innerHTML = `<div class="alert"><div><b>This mail could not be opened</b><span>${esc(d.error || "")}</span></div></div>`;
+    return;
+  }
+  const hasHtml = !!d.html, remote = hasHtml && /(src|background)\s*=\s*["']?\s*https?:|url\(\s*["']?\s*https?:/i.test(d.html);
+  $("#rMode").classList.toggle("hidden", !hasHtml || !d.text);
+  $("#rMode").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.k === reader.mode));
+  const html = hasHtml && reader.mode === "html";
+  const images = pref("adagio-pictures", true), dark = darkTheme() && pref("adagio-dark-mail", true);
+  $("#rImagesSw").classList.toggle("hidden", !html || !remote); $("#rImages").checked = images;
+  $("#rDarkSw").classList.toggle("hidden", !html || !darkTheme()); $("#rDark").checked = dark;
+  body.classList.toggle("dark", html && dark);
+  const warn = d.truncated ? `<p class="rwarn">This mail is large (${fmtSize(d.size)}): only its first 3 MB are shown. Open it in Gmail to see the rest.</p>` : "";
+  if (html) {
+    body.innerHTML = warn;
+    const f = document.createElement("iframe");
+    f.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
+    f.setAttribute("referrerpolicy", "no-referrer");
+    f.title = "Mail content";
+    f.srcdoc = mailDoc(d.html, d.inline || {}, images, dark);
+    if (warn) f.style.height = "calc(100% - 34px)";
+    body.appendChild(f);
+  } else {
+    body.innerHTML = warn + `<div class="rtext"></div>`;
+    linkify(body.querySelector(".rtext"), d.text || "(This mail has no text.)");
+  }
+}
+function mailDoc(html, inline, images, dark) {
+  html = html.replace(/cid:([^"'\s)>]+)/gi, (all, id) => inline[id] || inline[decodeURIComponent(id)] || all);
+  const web = images ? " https: http:" : "";
+  const csp = `default-src 'none'; style-src 'unsafe-inline'${web}; img-src data:${web}; font-src data:${web}`;
+  return `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank">`
+    + `<style>html,body{margin:0}body{padding:16px 18px;font:14px/1.5 "Segoe UI",system-ui,sans-serif;color:#1d1f24;background:#fff;overflow-wrap:anywhere}img{max-width:100%;height:auto}</style>`
+    // dark: the page is inverted (light becomes dark, hues kept), then pictures are turned back to normal
+    + (dark ? `<style>html{background:#11151f;color-scheme:dark}body{min-height:100vh;box-sizing:border-box;background-color:#e9edf5 !important;filter:invert(.93) hue-rotate(180deg)}`
+      + `img,picture,video,svg,canvas,[background],[style*="background-image"],[style*="background:url"],[style*="background: url"]{filter:invert(1) hue-rotate(180deg)}</style>` : "") + html;
+}
+function linkify(el, text) {
+  const re = /https?:\/\/[^\s<>"]+/g; let last = 0, m;
+  while ((m = re.exec(text))) {
+    el.append(text.slice(last, m.index));
+    const a = document.createElement("a"); a.href = m[0]; a.textContent = m[0]; a.target = "_blank"; a.rel = "noopener noreferrer";
+    el.append(a); last = m.index + m[0].length;
+  }
+  el.append(text.slice(last));
+}
+function stepRead(delta) {
+  const id = reader.list[reader.list.indexOf(reader.id) + delta];
+  const m = id && reader.mails.find(x => x.gm_msgid === id);
+  if (m) openRead(m, reader.list, reader.mails);
+}
+$("#rPrev").onclick = () => stepRead(-1);
+$("#rNext").onclick = () => stepRead(1);
+$("#rClose").onclick = $("#rDone").onclick = () => $("#readDlg").close();
+const redrawRead = () => drawRead(reader.mails.find(x => x.gm_msgid === reader.id), reader.cache.get(reader.id));
+$("#rImages").onchange = () => { store.set("adagio-pictures", $("#rImages").checked); redrawRead(); };
+$("#rDark").onchange = () => { store.set("adagio-dark-mail", $("#rDark").checked); redrawRead(); };
+$("#rMode").querySelectorAll("button").forEach(b => b.onclick = () => { reader.mode = b.dataset.k; const m = reader.mails.find(x => x.gm_msgid === reader.id); drawRead(m, reader.cache.get(reader.id)); });
+$("#readDlg").addEventListener("keydown", e => {
+  if (e.target.closest && e.target.closest("input, select, textarea")) return;
+  if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); stepRead(-1); }
+  if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); stepRead(1); }
+});
+$("#readDlg").addEventListener("click", e => { if (e.target === $("#readDlg")) $("#readDlg").close(); });
+
+/* journal: every run and every mail, in a window of its own (not in the main view) */
+let jKind = "all", jN = 300, jTimer = null;
+async function loadJournal() {
+  const r = await api(`/api/journal?kind=${jKind}&n=${jN}&q=${encodeURIComponent($("#jFind").value.trim())}`);
+  if (!r.ok) return toast(r.error, true);
+  $("#jPath").textContent = r.path || "adagio.log";
+  $("#jCount").textContent = r.total ? `${fmt(Math.min(r.lines.length, r.total))} of ${fmt(r.total)} lines` : "";
+  $("#jMore").classList.toggle("hidden", r.lines.length >= r.total);
+  $("#jList").innerHTML = r.lines.length ? r.lines.map(jLine).join("") : `<div class="empty">Nothing yet. The journal fills in as you sort.</div>`;
+}
+function jLine(x) {
+  const when = x.slice(0, 16).replace(/^\d{4}-/, ""), text = x.slice(21);
+  const mail = text.startsWith("mail · ");
+  let body = esc(mail ? text.slice(7) : text);
+  if (mail) {
+    const parts = body.split(" · ");
+    body = parts.map((p, i) => i === 1 || i === 2 ? `<b>${p}</b>` : /^to check:/.test(p) ? `<span class="jc">${p}</span>` : p === "learned from Gmail" ? `<span class="jl">${p}</span>` : p).join(" · ");
+  }
+  return `<div class="jline${mail ? "" : " run"}"><time>${esc(when)}</time><div class="jt">${body}</div></div>`;
+}
+const openJournal = () => { jN = 300; $("#jFind").value = ""; loadJournal(); $("#journalDlg").showModal(); };
+$("#journalBtn").onclick = openJournal; $("#journalBtn2").onclick = openJournal;
+$("#jClose").onclick = () => $("#journalDlg").close();
+$("#jMore").onclick = () => { jN += 500; loadJournal(); };
+$("#jFind").oninput = () => { clearTimeout(jTimer); jTimer = setTimeout(loadJournal, 250); };
+$("#jSeg").querySelectorAll("button").forEach(b => b.onclick = () => {
+  jKind = b.dataset.k; $("#jSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); loadJournal();
+});
+
+/* learn from the changes you made in Gmail */
+$("#learnBtn").onclick = () => start("/api/learn", {});
+$("#learnGmail").onchange = async e => {
+  const r = await api("/api/behavior", { learn_gmail: e.target.checked });
+  if (!r.ok) return toast(r.error, true);
+  toast(e.target.checked ? "Before each batch, Mail Adagio learns from the mails you moved in Gmail." : "Learning from Gmail only when you click the button.");
+  refresh();
+};
+
+/* events */
+function scopeChanged() { store.set("adagio-scope", scope); drawScope(); estimate(); render(); }
+$("#scopeSeg").querySelectorAll("button").forEach(b => b.onclick = () => {
+  scope = { kind: b.dataset.k, value: b.dataset.k === "days" ? 90 : b.dataset.k === "count" ? 500 : 0 }; scopeChanged();
+});
+$("#scopeVal").onchange = e => { scope.value = Math.max(1, Math.round(+e.target.value || 1)); scopeChanged(); };
+$("#batchRange").oninput = e => { batchSize = +e.target.value; $("#batchVal").textContent = batchSize + " mails"; };
+$("#batchRange").onchange = async () => { await api("/api/behavior", { batch_size: batchSize }); estimate(); refresh(); };
+async function setAlone(on) {
+  $("#actAlone").checked = on;
+  const r = await api("/api/behavior", { act_alone: on });
+  if (!r.ok) return toast(r.error, true);
+  toast(on ? "The agent will apply each batch on its own." : "The agent will ask before each batch.");
+  refresh();
+}
+$("#actAlone").onchange = e => setAlone(e.target.checked);
+$("#markRead").onchange = async e => {
+  const r = await api("/api/behavior", { mark_read: e.target.checked });
+  if (!r.ok) return toast(r.error, true);
+  toast(e.target.checked ? "Low-interest mails will be marked as read when a batch is applied." : "Mails keep their read or unread state.");
+  refresh();
+};
+$("#markReadEdit").onclick = e => { e.preventDefault(); e.stopPropagation(); $("#markReadThemes").classList.toggle("hidden"); };
+$("#autoHintBtn").onclick = () => { hintHidden = true; setAlone(true); };
+async function start(path, body) {
+  const r = await api(path, body);
+  if (!r.ok) return toast(r.error, true);
+  waiting = path !== "/api/stop";
+  refresh();
+}
+$("#runBtn").onclick = () => start("/api/plan", { scope, batch_size: batchSize });
+$("#restartBtn").onclick = () => { if (confirm("Start a new sort from the newest mail? Mails already filed stay filed.")) start("/api/plan", { scope, batch_size: batchSize, restart: true }); };
+$("#stopBtn").onclick = () => start("/api/stop", {});
+$("#applyBtn").onclick = () => start("/api/apply", { batch_id: S.sort.plan.batch_id, skip: [...skip] });
+$("#discardBtn").onclick = async () => {
+  if (!confirm("Discard this plan? Nothing changes in Gmail; these mails will be analysed again in the next batch.")) return;
+  const r = await api("/api/discard", {});
+  if (!r.ok) return toast(r.error, true);
+  toast("Plan discarded."); refresh();
+};
+$("#undoBtn").onclick = async () => {
+  const last = S.sort?.last;
+  if (!last) return;
+  const ok = await confirmBox("Undo the last batch?",
+    `The ${fmt(last.labelled)} mails sorted at ${(last.applied || "").slice(11, 16)} lose the labels Mail Adagio added, and ${fmt(last.moved)} go back to the Inbox. Your own labels and mails are not touched.`,
+    `Undo ${fmt(last.labelled)} mails`);
+  if (ok) start("/api/undo", {});
+};
+$("#checkBtn").onclick = async () => {
+  $("#checkBtn").disabled = true; $("#checkBtn").textContent = "Testing…";
+  const r = await api("/api/check", {});
+  $("#checkBtn").disabled = false; $("#checkBtn").textContent = "Test connection";
+  if (r.ok) { lastTotal = r.total_in_mailbox; toast(`Connected · ${r.total_in_mailbox.toLocaleString()} mails in ${r.mailbox}`); }
+  else toast(r.error, true);
+  refresh();
+};
+$("#search").oninput = e => { query = e.target.value; renderResult(); };
+
+function setProvider(p) {
+  provider = p;
+  const oll = p === "ollama";
+  $("#provSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x.dataset.p === p));
+  $("#keyField").classList.toggle("hidden", oll);
+  $("#ollamaField").classList.toggle("hidden", !oll);
+  $("#urlField").classList.toggle("hidden", !oll);
+  $("#fModel").placeholder = S.default_models[p] || "";
+  $("#modelHint").textContent = "Leave as is unless you want another model.";
+  setOll(oll ? ollMode : null);
+}
+function setOll(mode) {
+  if (mode) ollMode = mode;
+  $("#ollSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x.dataset.o === ollMode));
+  const oll = provider === "ollama";
+  $("#modelField").classList.toggle("hidden", oll && ollMode !== "name");
+  const run = (M && M.running || []), inst = (M && M.installed || []);
+  $("#installedList").innerHTML = inst.map(n => `<option value="${esc(n)}">`).join("");
+  if (oll && ollMode === "name") { $("#fModel").placeholder = inst[0] || "qwen3.5:9b"; $("#modelHint").textContent = inst.length ? "Installed: " + inst.join(", ") : "Type the name shown by: ollama list"; }
+  $("#ollHint").textContent = !oll ? "" : ollMode === "active"
+    ? (run.length ? `Uses the model already loaded in Ollama: ${run[0]}.` : "Uses the model loaded in Ollama when you run the sort (none loaded right now).")
+    : ollMode === "auto" ? "Picks the best installed model for your graphics card, from the table in config.yaml." : "";
+}
+$("#ollSeg").querySelectorAll("button").forEach(b => b.onclick = () => setOll(b.dataset.o));
+$("#provSeg").querySelectorAll("button").forEach(b => b.onclick = async () => {
+  if (provider !== b.dataset.p) $("#fModel").value = "";
+  setProvider(b.dataset.p);
+});
+function openSettings() {
+  $("#fEmail").value = S.email || "";
+  $("#fPass").value = ""; $("#fPass").placeholder = S.has_password ? "Saved · type to replace" : "16 letters";
+  $("#fKey").value = ""; $("#fKey").placeholder = S.has_api_key ? "Saved · type to replace" : "sk-…";
+  const mn = (S.model_name || "").replace(/^['"]+|['"]+$/g, "");
+  ollMode = S.provider !== "ollama" ? "active" : (mn === "active" ? "active" : (!mn || mn === "auto") ? "auto" : "name");
+  setProvider(S.provider || "anthropic");
+  $("#fModel").value = (S.provider === "ollama" && ollMode !== "name") ? "" : mn;
+  $("#fUrl").value = S.base_url || "";
+  $("#settings").showModal();
+}
+const openFresh = async () => { openSettings(); await loadModel(); setOll(); };
+$("#settingsBtn").onclick = openFresh;
+$("#welcomeBtn").onclick = openFresh;
+$("#cancelBtn").onclick = () => $("#settings").close();
+$("#settingsForm").onsubmit = async e => {
+  e.preventDefault();
+  const model_name = provider === "ollama" && ollMode !== "name" ? ollMode : $("#fModel").value;
+  const r = await api("/api/settings", { email: $("#fEmail").value, app_password: $("#fPass").value,
+    provider, model_name, api_key: $("#fKey").value, base_url: provider === "ollama" ? $("#fUrl").value : undefined });
+  if (!r.ok) return toast(r.error, true);
+  $("#settings").close(); toast("Saved. Testing the connection…");
+  await refresh(); await loadModel(); $("#checkBtn").click();
+};
+
+/* side panel: a column on wide screens, a drawer on smaller ones */
+const narrow = () => matchMedia("(max-width: 1440px)").matches;
+let panelOn = store.get("adagio-panel") ?? true, drawerOn = false;
+function drawPanel() {
+  $("#app").classList.toggle("nopanel", !panelOn);
+  $("#app").classList.toggle("panelopen", drawerOn);
+  $("#panelBtn").classList.toggle("on", narrow() ? drawerOn : panelOn);
+}
+$("#panelBtn").onclick = () => { if (narrow()) drawerOn = !drawerOn; else { panelOn = !panelOn; store.set("adagio-panel", panelOn); } drawPanel(); };
+["#mainCol", "#leftPane", "#sendersCol"].forEach(q => $(q).addEventListener("click", () => { if (drawerOn) { drawerOn = false; drawPanel(); } }));
+matchMedia("(max-width: 1440px)").addEventListener("change", () => { drawerOn = false; drawPanel(); });
+drawPanel();
+
+document.body.classList.add("ready");
+page = store.get("adagio-page") || "sort";
+refresh().then(() => { loadModel(); loadRules(); loadSenders(); loadDelete(); });
+</script>
+</body>
+</html>

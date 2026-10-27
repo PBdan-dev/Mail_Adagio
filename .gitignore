@@ -3,3 +3,4 @@ config.yaml
 *.log
 __pycache__/
 .venv/
+.adagio-ui*.json
