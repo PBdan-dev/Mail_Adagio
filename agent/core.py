@@ -10,7 +10,7 @@ from datetime import datetime
 
 from . import ask as agent_ask
 from . import batches, classify, config, hardware, keywords, memory, models, senders, skills
-from .mail import Gmail, MailError, chunks
+from .mail import TABS, Gmail, MailError, chunks
 
 AGENT = "mail-adagio"
 VERSION = "0.8.0"
@@ -218,7 +218,7 @@ def learn(cfg, request):
         if request["action"] == "rules":  # the Learning card
             out.update(keyword_changes=[{k: r[k] for k in ("word", "theme", "kind", "detail", "created")}
                                         for r in mem.keyword_history(8)],
-                       keywords_waiting=len(mem.keyword_queue()), corrections=correction_rates())
+                       keywords_waiting=len(mem.keyword_queue()), corrections=correction_rates(), gmail_tabs=tab_themes())
         return out
     finally:
         mem.close()
@@ -234,6 +234,27 @@ def correction_rates(n=5):
         return rows[::-1]
     finally:
         store.close()
+
+
+def tab_themes(top=3):
+    """For each Gmail tab, the themes Mail Adagio gave its mails (after your corrections), most used first:
+    [{tab, mails, themes: [{theme, share}]}]. A check of the sort against Gmail's own."""
+    store = batches.Store(MEMORY_PATH)
+    try:
+        rows = store.all("SELECT tab, theme, COUNT(*) AS n FROM mails WHERE state = 'applied' AND tab != '' "
+                         "GROUP BY tab, theme ORDER BY n DESC")
+    finally:
+        store.close()
+    out = {}
+    for r in rows:
+        out.setdefault(r["tab"], []).append(r)
+    order = {t: i for i, t in enumerate(TABS)}
+    result = []
+    for tab, items in sorted(out.items(), key=lambda kv: order.get(kv[0], 9)):
+        total = sum(x["n"] for x in items)
+        result.append({"tab": tab, "mails": total,
+                       "themes": [{"theme": x["theme"], "share": round(100 * x["n"] / total)} for x in items[:top]]})
+    return result
 
 
 def queue_theme_change(mem, gm_msgid, theme):
@@ -377,7 +398,7 @@ def sort_mails(cfg, mails, ask, model_note, progress=None):
                 "uid": mail.uid, "gm_msgid": mail.gm_msgid, "date": mail.date,
                 "sender": mail.sender, "subject": mail.subject,
                 "gmail_url": gmail_url(mail.gm_msgid),
-                "existing_labels": [x for x in mail.labels if not x.startswith("\\")],
+                "existing_labels": [x for x in mail.labels if not x.startswith("\\")], "tab": mail.tab,
                 "theme": r.theme, "status": r.status, "classified": r.ok, "to_delete": r.to_delete,
                 "rule": f"{rule['kind']}: {rule['value']}" if rule else "",
                 "confidence": "" if rule else (r.confidence if r.ok else "low"), "to_check": check,
@@ -942,7 +963,7 @@ def relabel(cfg, request, gmail_factory, ask=None, progress=None):
                     gmail.create_label(label)
             gmail.open(gmail.all_mail(folders), readonly=False)
             found = gmail.find(p["gm_msgids"])
-            heads = {m.uid: m for m in gmail.fetch(list(found.values()), 0)} if found else {}
+            heads = {m.uid: m for m in gmail.fetch(list(found.values()), 0, tabs=False)} if found else {}
             groups = {}
             for gm, uid in found.items():
                 m = heads.get(uid)

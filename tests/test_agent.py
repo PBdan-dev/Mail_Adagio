@@ -1341,5 +1341,56 @@ class TestAgentMode(unittest.TestCase):
         self.assertEqual(r["steps"][0]["action"], "status")
 
 
+class TestGmailTabs(unittest.TestCase):
+    """v0.8: Gmail's own tab (Primary, Social, Promotions...) read with its search, given to the model as a clue."""
+
+    def setUp(self):
+        from agent import demo
+        self.demo = demo
+        demo.DELAY = 0
+        demo.FakeIMAP.reset(copies=1, extra=True)
+        self.tmp = Path(tempfile.mkdtemp())
+        core.MEMORY_PATH = self.tmp / "adagio.db"
+        core.LOG_PATH = None
+        self.cfg = cfg_with()
+
+    def tearDown(self):
+        core.MEMORY_PATH = ":memory:"
+        shutil.rmtree(self.tmp)
+
+    def test_fetch_reads_the_tab(self):
+        with self.demo.gmail_factory("me@gmail.com", "x", "imap.gmail.com") as gmail:
+            gmail.open("INBOX")
+            mails = {m.subject: m for m in gmail.fetch(gmail.recent_uids(limit=50))}
+        self.assertEqual(mails["Shoply Prime Days: up to 40% off"].tab, "Updates")  # Gmail files the shop's mails there
+        self.assertIn("Promotions", {m.tab for m in mails.values()})
+        self.assertIn("Primary", {m.tab for m in mails.values()})
+        self.assertIn("Gmail tab: Updates", classify.user_prompt(mails["Shoply Prime Days: up to 40% off"]))
+        searches = [c for c in self.demo.FakeIMAP.commands if c[0] == "SEARCH" and "X-GM-RAW" in c]
+        self.assertEqual(len(searches), 4)  # one per tab, limited to the mails fetched (UID ...)
+        self.assertTrue(all("UID" in c for c in searches))
+
+    def test_no_tab_when_the_server_cannot_search(self):
+        class Plain(FakeIMAP):
+            def uid(self, command, *args):
+                if "X-GM-RAW" in args:
+                    raise mail.imaplib.IMAP4.error("BAD")
+                return super().uid(command, *args)
+        with mail.Gmail("me@gmail.com", "good", "imap.example.com", imap_class=Plain) as gmail:
+            gmail.open("INBOX")
+            self.assertEqual({m.tab for m in gmail.fetch([101, 102])}, {""})
+            self.assertIn("Gmail tab: unknown", classify.user_prompt(gmail.fetch([101])[0]))
+
+    def test_the_learning_card_compares_tabs_and_themes(self):
+        plan = core.handle({"action": "plan", "scope": {"kind": "all"}, "batch_size": 50}, cfg=self.cfg,
+                           gmail_factory=self.demo.gmail_factory, ask=self.demo.ask)
+        core.handle({"action": "apply", "batch_id": plan["plan"]["batch_id"], "skip": []}, cfg=self.cfg,
+                    gmail_factory=self.demo.gmail_factory, ask=self.demo.ask)
+        tabs = {t["tab"]: t for t in core.handle({"action": "rules"}, cfg=self.cfg)["gmail_tabs"]}
+        self.assertEqual(tabs["Promotions"]["themes"], [{"theme": "Promotions", "share": 100}])
+        self.assertEqual(sum(t["mails"] for t in tabs.values()), plan["plan"]["processed"])
+        self.assertEqual(list(tabs)[0], "Primary")  # in Gmail's order
+
+
 if __name__ == "__main__":
     unittest.main()

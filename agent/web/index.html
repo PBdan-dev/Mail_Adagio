@@ -330,6 +330,14 @@ details.colors small { display: block; margin: 6px 0; }
 .kwl h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .04em;
   text-transform: uppercase; color: var(--faint); }
 .kwl h3 .linkbtn { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.kwl .gtabs { display: grid; gap: 9px; margin-top: 4px; }
+.kwl .tabrow { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; align-items: start; min-width: 0; }
+.kwl .tabrow > div { min-width: 0; padding-top: 5px; }
+.kwl .tabrow b { font-weight: 600; font-size: 12.5px; }
+.kwl .tabrow b small { display: block; font-weight: 400; color: var(--faint); font-size: 11px; }
+.kwl .tabbar { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--surface-2); }
+.kwl .tabbar i { display: block; height: 100%; }
+.kwl .tabrow .tt { margin-top: 4px; font-size: 11.5px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
 .kwl .kw { display: flex; align-items: center; gap: 8px; padding: 5px 0; min-width: 0; }
 .kwl .kw + .kw { border-top: 1px solid var(--border); }
 .kwl .sign { flex: none; width: 20px; height: 20px; border-radius: 7px; display: grid; place-items: center; font-weight: 700; font-size: 12px; }
@@ -1903,8 +1911,20 @@ function drawKwLearned(r) {
     + (waiting ? `<div class="note">${waiting} correction${waiting === 1 ? "" : "s"} to learn from before the next batch.</div>` : "")
     + (rates.length ? `<div class="rate" title="Mails you corrected in the last batches (oldest on the left)">${pct.map((v, i) =>
         `<span style="height:${Math.max(8, 100 * v / top)}%" title="${rates[i].corrected} of ${rates[i].mails} corrected"></span>`).join("")}</div>
-       <div class="note">Corrected in the last batches: ${rates.map(b => `${b.corrected}/${b.mails}`).join(" · ")}</div>` : "");
+       <div class="note">Corrected in the last batches: ${rates.map(b => `${b.corrected}/${b.mails}`).join(" · ")}</div>` : "")
+    + drawTabs(r.gmail_tabs || []);
   $("#kwEdit").onclick = () => $("#kwBtn").click();
+}
+
+/* Gmail's own tabs: which themes Mail Adagio gave their mails. A check, Gmail's tab is a clue for the model */
+const TAB_FR = { Primary: "Principale", Social: "Réseaux sociaux", Promotions: "Promotions", Updates: "Notifications", Forums: "Forums" };
+function drawTabs(tabs) {
+  if (!tabs.length) return "";
+  return `<h3 style="margin-top:14px" title="Gmail's tab is given to the model as a clue, never as a rule">Gmail tabs → themes</h3><div class="gtabs">`
+    + tabs.map(t => `<div class="tabrow" title="${t.mails} sorted mails in Gmail's ${esc(t.tab)} tab">
+      <b>${esc(t.tab)}<small>${esc(TAB_FR[t.tab] || "")} · ${fmt(t.mails)}</small></b>
+      <div><div class="tabbar">${t.themes.map(x => `<i style="width:${x.share}%;background:${color(x.theme)}"></i>`).join("")}</div>
+      <div class="tt">${t.themes.map(x => `${esc(x.theme)} ${x.share}%`).join(" · ")}</div></div></div>`).join("") + `</div>`;
 }
 
 function mailRow(m, t, selectable) {

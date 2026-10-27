@@ -150,6 +150,16 @@ Gmail), the agent learns keywords on its own, before the next batch or with **Le
   corrected in the last batches (fewer corrections = better sort). Keywords stay clues for the model,
   never strict rules; see or change them in **Views > Keywords** (at most 40 per theme).
 
+## Gmail's own tabs, as a clue
+
+Gmail already sorts each mail into a tab: Primary, Social, Promotions, Updates, Forums (in French
+Gmail: Principale, Réseaux sociaux, Promotions, Notifications, Forums). IMAP does not give the tab as a
+label, so Mail Adagio asks Gmail's search (`category:promotions`...), 4 searches per batch, nothing changed.
+
+The tab goes to the model with each mail, as a clue and never as a rule: Promotions and Social are
+usually right, Updates mixes bills, deliveries and alerts. The **Learning** card shows, for each tab,
+the themes Mail Adagio gave its mails: a quick check of the sort against Gmail's.
+
 ## Agent mode: ask in your own words
 
 Type a request in the **Ask Adagio** bar, in any language: "put the Prime Days mails in Promotions",

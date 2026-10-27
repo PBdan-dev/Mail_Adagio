@@ -124,6 +124,7 @@ class FakeIMAP:
                 n += 1
                 when = start - timedelta(days=24 - day + 7 * week)
                 cls.mails[5000 + 10_000 - n] = {"gm": str(1879950646965534236 + n), "labels": {"\\Inbox"},
+                                                "tab": TAB_OF.get(theme, "Primary"),
                                                 "raw": _raw(sender, subject, text, when, theme), "date": when,
                                                 "seen": n % 3 == 0}
 
@@ -186,8 +187,10 @@ class FakeIMAP:
         box = self.visible()
         if command == "SEARCH":
             if "X-GM-RAW" in args:  # a few of Gmail's search words, enough for the demo and the tests
-                raw, self.literal = (self.literal or b"").decode("utf-8"), None
-                return "OK", [" ".join(map(str, sorted(u for u, m in box.items() if gmail_match(m, raw)))).encode()]
+                raw = self.literal.decode("utf-8") if self.literal else args[-1].strip('"')
+                self.literal = None
+                among = {int(x) for x in args[args.index("UID") + 1].split(",")} if "UID" in args else box
+                return "OK", [" ".join(map(str, sorted(u for u, m in box.items() if u in among and gmail_match(m, raw)))).encode()]
             if "X-GM-MSGID" in args:
                 hits = [u for u, m in box.items() if m["gm"] == args[-1]]
             elif "SINCE" in args:
@@ -234,6 +237,10 @@ class FakeIMAP:
         return "OK", out
 
 
+TAB_OF = {"Promotions": "Promotions", "Social & Notifications": "Social", "Newsletters": "Updates",
+          "Shopping & Deliveries": "Updates", "Finance": "Updates", "Travel": "Updates", "Job Search": "Updates"}
+
+
 def gmail_match(m, raw):
     """Does this made-up mail match a Gmail search? from:, subject:, label:, newer_than:Nd, in:inbox, words."""
     from email import message_from_bytes
@@ -246,6 +253,8 @@ def gmail_match(m, raw):
         if key == "subject" and value not in str(head["Subject"]).lower():
             return False
         if key == "label" and value not in {x.lower() for x in m["labels"]}:
+            return False
+        if key == "category" and value != m.get("tab", "Primary").lower():
             return False
         if key == "in" and value == "inbox" and "\\Inbox" not in m["labels"]:
             return False

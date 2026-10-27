@@ -56,7 +56,8 @@
     "search": "{query, found, shown, mails: [{gm_msgid, date, sender, subject, theme, status, in_inbox, url}], changes_made: 0}",
     "relabel": "{relabelled, not_found, moved, changes_made}",
     "keywords": "{keywords: {theme: [words]}}",
-    "request": "{answer, refused, steps: [{action, params, ok, log | error}], changes_made, model}"
+    "request": "{answer, refused, steps: [{action, params, ok, log | error}], changes_made, model}",
+    "rules": "{rules, keyword_changes, keywords_waiting, corrections, gmail_tabs: [{tab, mails, themes: [{theme, share}]}]}"
   },
   "never": [
     "delete mail on its own (Trash only when you click and confirm; never permanent: no EXPUNGE)",

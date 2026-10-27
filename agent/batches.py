@@ -52,7 +52,8 @@ CREATE TABLE IF NOT EXISTS mails (
     to_check   INTEGER NOT NULL DEFAULT 0, -- 1 = the model was not sure: label "To check"
     reason     TEXT NOT NULL DEFAULT '',  -- one sentence from the model, only for the mails to check
     all_uid    INTEGER NOT NULL DEFAULT 0, -- id in All Mail, to read its labels again later (0 = unknown)
-    removed    TEXT NOT NULL DEFAULT '[]' -- labels the agent removed (relabel), put back by undo
+    removed    TEXT NOT NULL DEFAULT '[]', -- labels the agent removed (relabel), put back by undo
+    tab        TEXT NOT NULL DEFAULT '' -- Gmail's own tab when the mail was sorted (Primary, Promotions...)
 );
 CREATE TABLE IF NOT EXISTS trash (
     gm_msgid TEXT NOT NULL,
@@ -66,7 +67,7 @@ CREATE TABLE IF NOT EXISTS trash (
 NEW_COLUMNS = [("marked_read", "INTEGER NOT NULL DEFAULT 0"), ("to_delete", "INTEGER NOT NULL DEFAULT 0"),
                ("confidence", "TEXT NOT NULL DEFAULT ''"), ("to_check", "INTEGER NOT NULL DEFAULT 0"),
                ("reason", "TEXT NOT NULL DEFAULT ''"), ("all_uid", "INTEGER NOT NULL DEFAULT 0"),
-               ("removed", "TEXT NOT NULL DEFAULT '[]'")]
+               ("removed", "TEXT NOT NULL DEFAULT '[]'"), ("tab", "TEXT NOT NULL DEFAULT ''")]
 
 
 def now():
@@ -139,12 +140,12 @@ class Store:
             for r in rows:
                 self.db.execute(
                     "INSERT OR REPLACE INTO mails (gm_msgid, batch_id, uid, date, sender, subject, "
-                    "theme, status, classified, rule, error, state, to_delete, confidence, to_check, reason) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?)",
+                    "theme, status, classified, rule, error, state, to_delete, confidence, to_check, reason, tab) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?, ?)",
                     (r["gm_msgid"], cur.lastrowid, r["uid"], r["date"], r["sender"], r["subject"][:300],
                      r["theme"], r["status"], int(r["classified"]), r.get("rule", ""), r.get("error", ""),
                      int(bool(r.get("to_delete"))), r.get("confidence", ""), int(bool(r.get("to_check"))),
-                     r.get("reason", "")[:300]))
+                     r.get("reason", "")[:300], r.get("tab", "")))
         return cur.lastrowid
 
     def add_relabel(self, rows):
