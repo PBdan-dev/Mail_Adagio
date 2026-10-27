@@ -2,6 +2,7 @@
 import json
 import shutil
 import tempfile
+import time
 import unittest
 from email.message import EmailMessage
 from pathlib import Path
@@ -1468,6 +1469,59 @@ class TestRenameTheme(unittest.TestCase):
         r = self.run_(door="json", action="rename_theme", theme="Travel", new_name="Trips")
         self.assertFalse(r["ok"])                    # another program cannot rename labels
         self.assertIn("only available in the Mail Adagio window", r["error"])
+
+class TestCloseWithTab(unittest.TestCase):
+    """v0.8.1: closing the Mail Adagio tab stops Mail Adagio (a reload does not)."""
+
+    def test_pages_alive_and_gone(self):
+        from agent import web
+        app = web.App(Path(tempfile.mkdtemp()) / "config.yaml", demo_mode=True)
+        t0 = app.empty_since
+        self.assertFalse(app.no_page_left(t0 + 10))                 # the browser is still opening the page
+        self.assertTrue(app.no_page_left(t0 + app.FIRST + 1))      # it never came
+        app.alive("a")
+        self.assertFalse(app.no_page_left())
+        app.bye("a")                                               # closed or reloaded
+        t1 = app.empty_since
+        self.assertFalse(app.no_page_left(t1 + 2))                 # a reload says alive again within the grace time
+        app.alive("b")
+        self.assertFalse(app.no_page_left(t1 + app.GRACE + 1))
+        app.tabs["b"] -= app.STALE + 1                             # a page silent too long (browser killed)
+        self.assertFalse(app.no_page_left())                       # gone now, the grace time starts
+        self.assertTrue(app.no_page_left(time.time() + app.GRACE + 1))
+
+    def test_the_server_stops_when_the_tab_closes(self):
+        import threading
+        import urllib.request
+        from agent import web
+        tmp = Path(tempfile.mkdtemp())
+        cfg = tmp / "config.yaml"
+        old = web.App.GRACE
+        web.App.GRACE = 0.5
+        try:
+            server = threading.Thread(target=web.serve, args=(cfg, 8941, True, False, True), daemon=True)
+            server.start()
+            running = web.running_file(cfg, True)
+            for _ in range(100):
+                if running.exists():
+                    break
+                time.sleep(0.05)
+            info = json.loads(running.read_text())
+
+            def post(path):
+                req = urllib.request.Request(f"http://127.0.0.1:{info['port']}{path}", data=b'{"tab": "t1"}',
+                                             headers={"X-Adagio-Token": info["token"], "Content-Type": "application/json"})
+                with urllib.request.urlopen(req) as r:
+                    return json.loads(r.read())
+            self.assertTrue(post("/api/alive")["ok"])
+            time.sleep(3)
+            self.assertTrue(server.is_alive())          # the tab is open: it keeps running
+            self.assertTrue(post("/api/bye")["ok"])     # the tab is closed
+            server.join(timeout=10)
+            self.assertFalse(server.is_alive())
+        finally:
+            web.App.GRACE = old
+            shutil.rmtree(tmp)
 
 if __name__ == "__main__":
     unittest.main()

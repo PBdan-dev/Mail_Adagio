@@ -27,7 +27,10 @@ python adagio.py setup
 
 **On Windows, the simplest way**: double-click `Mail Adagio.bat`. The first time, it prepares a private
 Python environment and installs the libraries. Then it opens Mail Adagio in your browser, where you
-enter your details and run the sort. Keep the black window open while you use it.
+enter your details and run the sort. No window stays open: Mail Adagio runs in the background and
+**stops when you close its tab** (a reload does not stop it; a sort in progress ends after the mail
+in progress, like with Stop). What the window would have shown, startup errors included, goes to
+`adagio-window.log`; an error that stops the start also shows in a small message box.
 `Mail Adagio - demo.bat` opens the same interface with made-up mails, no Gmail account needed.
 Python must be installed (<https://www.python.org/downloads/>).
 

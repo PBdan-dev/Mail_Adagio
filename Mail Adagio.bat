@@ -31,9 +31,12 @@ if not exist ".venv\installed.txt" (
   echo ok> ".venv\installed.txt"
 )
 
-rem --- 3. Open the interface in your browser -------------------------------
-"%APP%" adagio.py ui %*
-if errorlevel 1 pause
+rem --- 3. Open the interface in your browser, without a console window ----
+rem pythonw runs with no window; messages go to adagio-window.log.
+rem Mail Adagio stops when you close its tab.
+set "APPW=.venv\Scripts\pythonw.exe"
+if not exist "%APPW%" set "APPW=%APP%"
+start "" "%APPW%" adagio.py ui %*
 exit /b 0
 
 :failed

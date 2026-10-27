@@ -3,14 +3,15 @@ import os
 import shutil
 import sys
 
-if os.name == "nt":
-    os.system("")  # turns on colour codes in the Windows terminal
+CONSOLE = sys.stdout is not None  # None when started without a console (pythonw)
+if os.name == "nt" and CONSOLE:
+    os.system("")  # turns on colour codes in the Windows terminal (without a console it would open one)
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
     pass
 
-COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+COLOR = CONSOLE and sys.stdout.isatty() and not os.environ.get("NO_COLOR")
 PALETTE = [75, 114, 179, 168, 141, 80, 215, 110, 186, 204, 145, 109]
 STATUS_COLOR = {0: 203, 1: 221, 2: 246}  # first status red, second amber, others grey
 
