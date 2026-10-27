@@ -1,6 +1,6 @@
 {
   "name": "mail-adagio",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Sorts Gmail: gives each mail one theme and one status, using an AI model you choose. Never deletes mail.",
   "status": "Step 3: sorts the inbox by batches (labels + out of the Inbox), with approval, undo and resume. 'To check' label for unsure mails, a journal of every mail, learning from the changes you make in Gmail. Senders page: subscriptions and suggested rules.",
   "how_to_call": "python adagio.py call   (one JSON request on stdin, one JSON result on stdout)",

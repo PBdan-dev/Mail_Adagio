@@ -326,6 +326,21 @@ details.colors small { display: block; margin: 6px 0; }
 /* learning card: proposed rules */
 .card-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .card-h h2 { margin: 0; }
+.kwl { margin: 12px 0 4px; font-size: 13px; }
+.kwl h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--faint); }
+.kwl h3 .linkbtn { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.kwl .kw { display: flex; align-items: center; gap: 8px; padding: 5px 0; min-width: 0; }
+.kwl .kw + .kw { border-top: 1px solid var(--border); }
+.kwl .sign { flex: none; width: 20px; height: 20px; border-radius: 7px; display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+.kwl .sign.learned { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+.kwl .sign.removed { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
+.kwl .sign.moved { background: var(--accent-soft); color: var(--accent); }
+.kwl .w { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kwl .t { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12.5px; white-space: nowrap; margin-left: auto; }
+.kwl .note { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+.kwl .rate { display: flex; gap: 4px; align-items: flex-end; height: 26px; margin-top: 8px; }
+.kwl .rate span { flex: 1; border-radius: 4px 4px 0 0; background: var(--accent); opacity: .75; min-height: 2px; }
 .props { display: grid; gap: 8px; margin: 12px 0; }
 .prop { padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); font-size: 13px; }
 .prop .who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -921,8 +936,9 @@ details.fold #learnBtn { margin-bottom: 4px; }
     <details class="card fold" id="learnCard">
       <summary><h2>Learning</h2><span class="fcount" id="learnCount"></span><span class="mini hidden" id="learnBadge"></span>
         <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></summary>
-      <p class="sub">Your corrections, here or in Gmail, become examples for the model. Rules are applied before the model, with no AI call.</p>
-      <button type="button" class="btn sm" id="learnBtn" title="Reads the labels of the mails already sorted (no content, no AI) and learns from the ones you moved in Gmail">Learn from Gmail</button>
+      <p class="sub">Your corrections, here or in Gmail, teach the agent keywords, on its own. Rules are applied before the model, with no AI call.</p>
+      <button type="button" class="btn sm" id="learnBtn" title="Reads the labels of the mails already sorted and learns from the ones you moved in Gmail. The model then reads the corrected mails to learn keywords.">Learn from Gmail</button>
+      <div class="kwl" id="kwLearned"></div>
       <div class="props" id="proposals"></div>
       <div class="rules" id="rules"></div>
     </details>
@@ -1388,9 +1404,11 @@ function jobEnded() {
   if (n && n.kind === "undo") toast(`Undone: ${fmt(n.undone)} mails back as they were.`);
   if (n && n.kind === "scan") toast(`${fmt(n.mails)} mails from ${fmt(n.senders)} senders · ${fmt(n.with_unsubscribe)} with an unsubscribe link.`);
   if (n && n.kind === "suggest") toast(`Rules proposed for ${fmt(n.suggested)} senders.`);
+  const kw = n && n.kind === "learn" ? [n.kw_added && `${n.kw_added} keyword${n.kw_added === 1 ? "" : "s"} learned`,
+    n.kw_moved && `${n.kw_moved} moved`, n.kw_removed && `${n.kw_removed} removed`].filter(Boolean).join(", ") : "";
   if (n && n.kind === "learn") toast(n.changed || n.checked_off
-    ? `Learned from Gmail: ${fmt(n.changed)} change${n.changed === 1 ? "" : "s"}` + (n.checked_off ? `, ${fmt(n.checked_off)} checked` : "") + (n.proposals ? ` · ${n.proposals} rule${n.proposals === 1 ? "" : "s"} proposed` : "") + "."
-    : `Nothing changed in Gmail (${fmt(n.checked)} sorted mails read again).`);
+    ? `Learned from Gmail: ${fmt(n.changed)} change${n.changed === 1 ? "" : "s"}` + (n.checked_off ? `, ${fmt(n.checked_off)} checked` : "") + (n.proposals ? ` · ${n.proposals} rule${n.proposals === 1 ? "" : "s"} proposed` : "") + (kw ? ` · ${kw}` : "") + "."
+    : kw ? `Keywords: ${kw}.` : `Nothing changed in Gmail (${fmt(n.checked)} sorted mails read again).`);
   if (n && (n.kind === "scan" || n.kind === "suggest")) loadSenders();
 }
 
@@ -1555,7 +1573,8 @@ function drawLearnHead(rules, props) {
   if (rules !== undefined) drawLearnHead.rules = rules;
   if (props !== undefined) drawLearnHead.props = props;
   const nr = drawLearnHead.rules || 0, np = drawLearnHead.props || 0;
-  $("#learnCount").textContent = `${nr} rule${nr === 1 ? "" : "s"}`;
+  const nk = drawLearnHead.kw || 0;
+  $("#learnCount").textContent = (nk ? `${nk} keyword${nk === 1 ? "" : "s"} · ` : "") + `${nr} rule${nr === 1 ? "" : "s"}`;
   $("#learnBadge").classList.toggle("hidden", !np);
   $("#learnBadge").textContent = `${np} to review`;
 }
@@ -1790,7 +1809,7 @@ $("#fixForm").onsubmit = async e => {
     theme: fix.theme, status: fix.status, remember });
   if (!r.ok) return toast(r.error, true);
   $("#fixDlg").close();
-  toast(remember === "none" ? "Corrected. The model will use it as an example." : "Rule saved. Applied to this plan and to the next batches.");
+  toast(remember === "none" ? "Corrected. The agent learns keywords from it before the next batch." : "Rule saved. Applied to this plan and to the next batches.");
   drawRules(r.rules); refresh();
 };
 function drawRules(rules) {
@@ -1806,7 +1825,32 @@ function drawRules(rules) {
     if (r.ok) { drawRules(r.rules); toast("Rule deleted."); }
   });
 }
-async function loadRules() { const r = await api("/api/rules"); if (r.ok) drawRules(r.rules); }
+async function loadRules() { const r = await api("/api/rules"); if (r.ok) { drawKwLearned(r); drawRules(r.rules); } }
+/* keywords the agent learned, moved or removed from your corrections; how many mails you corrected per batch */
+function drawKwLearned(r) {
+  const list = r.keyword_changes || [], waiting = r.keywords_waiting || 0, rates = r.corrections || [];
+  const moved = new Set(list.filter(x => x.kind === "removed" && x.detail.startsWith("moved to ")).map(x => x.word.toLowerCase()));
+  const shown = list.filter(x => !(x.kind === "learned" && x.detail.startsWith("moved from ")));
+  drawLearnHead.kw = list.filter(x => x.kind === "learned" && !x.detail.startsWith("moved from ")).length;
+  const row = x => {
+    const isMove = x.kind === "removed" && x.detail.startsWith("moved to ");
+    const kind = isMove ? "moved" : x.kind, to = isMove ? x.detail.slice(9).split(":")[0] : "";
+    const sign = { learned: "+", removed: "−", moved: "→" }[kind];
+    const where = kind === "learned" ? `→ <span class="dot" style="background:${color(x.theme)}"></span>${esc(x.theme)}`
+      : kind === "moved" ? `${esc(x.theme)} → <span class="dot" style="background:${color(to)}"></span>${esc(to)}`
+      : `out of ${esc(x.theme)}`;
+    return `<div class="kw" title="${esc(x.detail)} · ${esc(x.created)}"><span class="sign ${kind}">${sign}</span>
+      <span class="w">${esc(x.word)}</span><span class="t">${where}</span></div>`;
+  };
+  const pct = rates.map(b => b.mails ? b.corrected / b.mails : 0), top = Math.max(...pct, 0.0001);
+  $("#kwLearned").innerHTML = `<h3>Keywords learned<button type="button" class="linkbtn" id="kwEdit">Edit</button></h3>`
+    + (shown.length ? shown.slice(0, 6).map(row).join("") : `<div class="note">Nothing yet. Correct the theme of a mail: the agent adds the words that show the right theme, and moves or removes a keyword that misled it 3 times.</div>`)
+    + (waiting ? `<div class="note">${waiting} correction${waiting === 1 ? "" : "s"} to learn from before the next batch.</div>` : "")
+    + (rates.length ? `<div class="rate" title="Mails you corrected in the last batches (oldest on the left)">${pct.map((v, i) =>
+        `<span style="height:${Math.max(8, 100 * v / top)}%" title="${rates[i].corrected} of ${rates[i].mails} corrected"></span>`).join("")}</div>
+       <div class="note">Corrected in the last batches: ${rates.map(b => `${b.corrected}/${b.mails}`).join(" · ")}</div>` : "");
+  $("#kwEdit").onclick = () => $("#kwBtn").click();
+}
 
 function mailRow(m, t, selectable) {
   const si = S.statuses.indexOf(m.status);

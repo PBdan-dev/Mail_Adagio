@@ -245,6 +245,9 @@ DEFAULT_KEYWORDS = {
 }
 
 
+MAX_KEYWORDS = 40  # per theme: more would drown the prompt of a small model
+
+
 def clean_words(words):
     """A tidy keyword list: trimmed, no duplicates (case ignored), at most 40 words of 40 characters."""
     out, seen = [], set()
@@ -253,7 +256,7 @@ def clean_words(words):
         if w and w.lower() not in seen:
             seen.add(w.lower())
             out.append(w)
-    return out[:40]
+    return out[:MAX_KEYWORDS]
 
 
 def keywords(cfg):

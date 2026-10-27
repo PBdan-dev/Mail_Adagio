@@ -133,6 +133,23 @@ After the same correction twice for one sender, a rule is proposed in the **Lear
 a rule** or **Ignore**. Gmail is not changed. Removing the label "To check" in Gmail marks the mail as
 checked.
 
+## Keywords learned from your corrections
+
+Each time you correct the **theme** of a mail the agent sorted (pencil in the app, or label changed in
+Gmail), the agent learns keywords on its own, before the next batch or with **Learn from Gmail**:
+
+- **Added.** The model reads the corrected mail and names 1 to 3 words that show the right theme
+  (a mail "Amazon Prime Day" moved from Shopping to Promotions gives "Prime Day"). The code keeps at most
+  2 of them, only if each one is written in the mail, is not generic nor the sender's name ("Amazon"
+  sends mails of several themes), is not already a keyword, was not removed before, and is not common
+  in the mails sorted in other themes. One short model call per correction, not per mail.
+- **Moved or removed.** A keyword of the wrong theme found in 3 corrected mails, and in fewer mails it
+  sorted well, is removed; moved to the right theme when all these corrections went to the same theme.
+  A single mistake removes nothing. A keyword you put back by hand is never removed again.
+- Every change is in the activity log and in the **Learning** card, with the share of mails you
+  corrected in the last batches (fewer corrections = better sort). Keywords stay clues for the model,
+  never strict rules; see or change them in **Views > Keywords** (at most 40 per theme).
+
 ## Clear errors
 
 - Ollama not running: the agent starts it once if it is installed, else says how to start it (or where

@@ -607,6 +607,114 @@ class TestKeywords(unittest.TestCase):
             shutil.rmtree(tmp)
 
 
+class TestKeywordLearning(unittest.TestCase):
+    """Keywords learned from theme corrections: added, moved or removed by the agent, saved in config.yaml."""
+
+    def setUp(self):
+        from agent import demo
+        self.demo = demo
+        demo.DELAY = 0
+        demo.FakeIMAP.reset(copies=1, extra=True)  # 15 mails, one "Shoply Prime Days" sorted in Shopping
+        self.tmp = Path(tempfile.mkdtemp())
+        core.MEMORY_PATH = self.tmp / "adagio.db"
+        core.LOG_PATH = self.tmp / "adagio.log"
+        self.path = self.tmp / "config.yaml"
+        self.path.write_text(config.EXAMPLE.read_text(encoding="utf-8").replace('email: ""', 'email: "me@gmail.com"'),
+                             encoding="utf-8")
+        self.cfg = cfg_with()
+
+    def tearDown(self):
+        core.MEMORY_PATH, core.LOG_PATH = ":memory:", None
+        shutil.rmtree(self.tmp)
+
+    def run_(self, **request):
+        return core.handle({"config": str(self.path), **request}, cfg=self.cfg,
+                           gmail_factory=self.demo.gmail_factory, ask=self.demo.ask)
+
+    def test_checks_on_the_words(self):
+        from agent import keywords
+        brands = keywords.brand_words("Amazon.fr <promo@amazon.fr>")
+        self.assertEqual(brands, {"amazon"})
+        self.assertEqual(keywords.tidy("Amazon Prime Day", brands), "Prime Day")
+        self.assertEqual(keywords.tidy("Amazon", brands), "")            # the brand alone says nothing
+        self.assertEqual(keywords.tidy("your account", brands), "")      # generic
+        self.assertEqual(keywords.tidy("24/10/2026", brands), "")        # a date
+        mail = {"sender": "Amazon <promo@amazon.fr>", "subject": "Amazon Prime Day: les promos du moment",
+                "body": "Jusqu'à -40% sur la high-tech."}
+        words = {"Promotions": ["promo code"], "Shopping & Deliveries": ["order"]}
+        history = [("Prime Day starts", "Shopping & Deliveries", False)] * 3
+        kept, refused = keywords.pick(["Amazon Prime Day", "Black Friday", "order", "high-tech"], mail, "Promotions",
+                                      words, set(), [])
+        self.assertEqual(kept, ["Prime Day", "high-tech"])
+        self.assertEqual(dict(refused), {"Black Friday": "not written in the mail", "order": "already a keyword"})
+        kept, refused = keywords.pick(["Prime Day"], mail, "Promotions", words, set(), history)
+        self.assertEqual((kept, refused), ([], [("Prime Day", "common in other themes")]))
+
+    def test_a_pencil_correction_teaches_keywords(self):
+        plan = self.run_(action="plan", scope={"kind": "all"}, batch_size=50)
+        mail = next(m for m in plan["plan"]["mails"] if "Prime Days" in m["subject"])
+        self.assertEqual(mail["theme"], "Shopping & Deliveries")  # the made-up model got it wrong
+        self.run_(action="correct", gm_msgid=mail["gm_msgid"], sender=mail["sender"], subject=mail["subject"],
+                  theme="Promotions", status="Info", remember="none")
+        self.assertEqual(self.run_(action="rules")["keywords_waiting"], 1)
+        r = self.run_(action="learn_gmail")
+        self.assertTrue(r["ok"], r.get("error"))
+        learned = r["keywords_learned"]
+        self.assertEqual(learned["added"], [{"word": "Prime Days", "theme": "Promotions"},
+                                            {"word": "up to 40% off", "theme": "Promotions"}])
+        self.assertIn("Prime Days", config.keywords(self.cfg)["Promotions"])           # used from this run on
+        saved = config.keywords(config.load(self.path))["Promotions"]
+        self.assertEqual(saved[-2:], ["Prime Days", "up to 40% off"])                  # and kept in config.yaml
+        self.assertIn("keyword learned", r["log"] + "\n".join(core.read_log(50)))
+        card = self.run_(action="rules")
+        self.assertEqual((card["keywords_waiting"], card["keyword_changes"][0]["kind"]), (0, "learned"))
+        self.assertIn("Promotions", classify.system_prompt(self.cfg).split("Prime Days")[0].splitlines()[-1])
+        # you remove "Prime Days" in Keywords: the agent never adds it again
+        kw = config.keywords(self.cfg)
+        self.cfg["keywords"] = {**kw, "Promotions": [w for w in kw["Promotions"] if w != "Prime Days"]}
+        self.run_(action="correct", gm_msgid=mail["gm_msgid"], sender=mail["sender"], subject=mail["subject"],
+                  theme="Shopping & Deliveries", status="Info", remember="none")
+        self.assertEqual(self.run_(action="rules")["keywords_waiting"], 0)  # back to the first theme: nothing to learn
+        from agent import memory
+        mem = memory.Memory(core.MEMORY_PATH)
+        mem.queue_keyword(mail["gm_msgid"], mail["sender"], mail["subject"], "Shopping & Deliveries", "Promotions")
+        mem.close()
+        again = self.run_(action="learn_gmail")["keywords_learned"]
+        self.assertEqual(again["added"], [{"word": "electronics", "theme": "Promotions"}])  # not "Prime Days"
+
+    def test_a_misleading_keyword_is_moved_then_protected(self):
+        from agent import keywords, memory
+        mem = memory.Memory(core.MEMORY_PATH)
+        cfg = cfg_with()
+        cfg["keywords"] = {"Shopping & Deliveries": ["credit card", "order"], "Finance": ["bank"]}
+        none = lambda *a: '{"keywords": []}'
+        for i in range(2):
+            mem.queue_keyword(f"10{i}", "Bank <info@bank.example>", f"Your credit card statement {i}",
+                              "Shopping & Deliveries", "Finance")
+        out = keywords.learn(cfg, mem, none, history=[])
+        self.assertIsNone(out["keywords"])  # 2 errors: kept
+        mem.queue_keyword("102", "Bank <info@bank.example>", "New credit card limit", "Shopping & Deliveries", "Finance")
+        out = keywords.learn(cfg, mem, none, history=[("Credit card receipt", "Shopping & Deliveries", False)])
+        self.assertEqual(out["moved"], [{"word": "credit card", "from": "Shopping & Deliveries", "to": "Finance"}])
+        self.assertEqual(out["keywords"]["Shopping & Deliveries"], ["order"])
+        self.assertEqual(out["keywords"]["Finance"], ["bank", "credit card"])
+        # you put it back in Shopping: the agent never removes it from there again
+        cfg["keywords"] = {**out["keywords"], "Shopping & Deliveries": ["order", "credit card"]}
+        for i in range(3, 7):
+            mem.queue_keyword(f"10{i}", "Bank <info@bank.example>", f"credit card news {i}",
+                              "Shopping & Deliveries", "Finance")
+        out = keywords.learn(cfg, mem, none, history=[])
+        self.assertEqual((out["moved"], out["removed"]), ([], []))
+        # a keyword that also sorted many mails well stays
+        cfg["keywords"] = {"Promotions": ["sale"], "Shopping & Deliveries": ["order"]}
+        good = [("Summer sale", "Promotions", False)] * 5
+        for i in range(3):
+            mem.queue_keyword(f"20{i}", "Shop <a@shop.example>", f"Order {i}: sale price kept", "Promotions",
+                              "Shopping & Deliveries")
+        self.assertIsNone(keywords.learn(cfg, mem, none, history=good)["keywords"])
+        mem.close()
+
+
 class TestLabelOrder(unittest.TestCase):
     """Numbered labels (01 - Priority, 11 - Health...), reordered and renamed in Gmail."""
 

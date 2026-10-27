@@ -64,8 +64,14 @@ class App:
         return demo.gmail_factory if self.demo else Gmail
 
     def call(self, request, progress=None, cfg=None):
-        return core.handle(request, cfg=cfg or self.cfg(), gmail_factory=self.gmail(),
-                           ask=demo.ask if self.demo else None, progress=progress)
+        # keywords learned from your corrections go to config.yaml (in the demo: kept in memory)
+        request = {**request, "config": str(self.config_path), "save_keywords": not self.demo}
+        result = core.handle(request, cfg=cfg or self.cfg(), gmail_factory=self.gmail(),
+                             ask=demo.ask if self.demo else None, progress=progress)
+        learned = result.get("keywords_learned") or {}
+        if self.demo and learned.get("keywords") is not None:
+            self.demo_keywords = learned["keywords"]
+        return result
 
     def state(self):
         try:
@@ -231,7 +237,7 @@ class App:
             r = self.call({"action": "learn_gmail"}, cfg=cfg)
             if r["ok"]:
                 self.notice = {"kind": "learn", **{k: r[k] for k in ("checked", "changed", "checked_off")},
-                               "proposals": len(r["proposals"])}
+                               "proposals": len(r["proposals"]), **words_notice(r.get("keywords_learned"))}
             else:
                 self.fail(r)
         return self.start("learn", work)
@@ -261,10 +267,11 @@ class App:
                 if not r["ok"]:
                     self.fail(r)
                     return
-                learned = r.get("learned") or {}
-                if learned.get("changed") or learned.get("checked_off"):
-                    self.notice = {"kind": "learn", **{k: learned[k] for k in ("checked", "changed", "checked_off")},
-                                   "proposals": len(learned.get("proposals") or [])}
+                learned, words = r.get("learned") or {}, words_notice(r.get("keywords_learned"))
+                if learned.get("changed") or learned.get("checked_off") or any(words.values()):
+                    self.notice = {"kind": "learn", "checked": learned.get("checked", 0),
+                                   "changed": learned.get("changed", 0), "checked_off": learned.get("checked_off", 0),
+                                   "proposals": len(learned.get("proposals") or []), **words}
                 if r.get("stopped"):
                     plan = r.get("plan") or {}
                     self.notice = {"kind": "stopped", "analysed": plan.get("processed", 0)}
@@ -431,6 +438,13 @@ def make_handler(app, port):
     return Handler
 
 
+def words_notice(out):
+    """How many keywords were learned, moved and removed (for the message at the end of a job)."""
+    out = out or {}
+    return {"kw_added": len(out.get("added") or []), "kw_moved": len(out.get("moved") or []),
+            "kw_removed": len(out.get("removed") or [])}
+
+
 def running_file(config_path, demo_mode):
     return Path(config_path).resolve().parent / (".adagio-ui-demo.json" if demo_mode else ".adagio-ui.json")
 
@@ -455,6 +469,7 @@ def stop_previous(path):
 
 def serve(config_path=config.DEFAULT_PATH, port=8765, demo_mode=False, open_browser=True):
     app = App(config_path, demo_mode)
+    demo.FakeIMAP.extra = demo_mode  # the demo window also gets the mail that shows keyword learning
     running = running_file(config_path, demo_mode)
     stop_previous(running)
     for p in range(port, port + 20):  # first free port

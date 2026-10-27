@@ -35,6 +35,28 @@ CREATE TABLE IF NOT EXISTS ignored (     -- rule proposals you said no to
     status  TEXT NOT NULL,
     UNIQUE (sender, theme, status)
 );
+CREATE TABLE IF NOT EXISTS keyword_queue ( -- theme corrections waiting to teach keywords
+    gm_msgid TEXT PRIMARY KEY,
+    sender   TEXT NOT NULL,
+    subject  TEXT NOT NULL,
+    wrong    TEXT NOT NULL,              -- the theme the agent had chosen
+    "right"  TEXT NOT NULL,              -- the theme you chose
+    created  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE TABLE IF NOT EXISTS keyword_errors ( -- a keyword of the wrong theme was in a mail you corrected
+    word     TEXT NOT NULL,              -- lower case
+    theme    TEXT NOT NULL,              -- the theme it is a keyword of
+    to_theme TEXT NOT NULL,              -- the theme you chose instead
+    gm_msgid TEXT NOT NULL,
+    UNIQUE (word, theme, gm_msgid)
+);
+CREATE TABLE IF NOT EXISTS keyword_log (  -- what the agent did to the keywords
+    word    TEXT NOT NULL,               -- as written
+    theme   TEXT NOT NULL,
+    kind    TEXT NOT NULL,               -- learned | removed (by the agent)
+    detail  TEXT NOT NULL DEFAULT '',
+    created TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
 """
 
 PROPOSE_AFTER = 2  # corrections of the same sender to the same theme and status: propose a rule
@@ -125,6 +147,49 @@ class Memory:
         with self.db:
             self.db.execute("INSERT OR IGNORE INTO ignored (sender, theme, status) VALUES (?, ?, ?)",
                             (address(sender) or sender, theme, status))
+
+    # keywords learned from theme corrections (see keywords.py) ------------------
+    def queue_keyword(self, gm_msgid, sender, subject, wrong, right):
+        """A theme correction to learn from. Corrected again: the first wrong theme is kept."""
+        with self.db:
+            self.db.execute(
+                'INSERT INTO keyword_queue (gm_msgid, sender, subject, wrong, "right") VALUES (?, ?, ?, ?, ?) '
+                'ON CONFLICT (gm_msgid) DO UPDATE SET "right" = excluded."right"',
+                (str(gm_msgid), sender or "", (subject or "")[:300], wrong, right))
+            self.db.execute('DELETE FROM keyword_queue WHERE gm_msgid = ? AND wrong = "right"', (str(gm_msgid),))
+
+    def queued(self, gm_msgid):
+        return self.db.execute("SELECT 1 FROM keyword_queue WHERE gm_msgid = ?", (str(gm_msgid),)).fetchone() is not None
+
+    def keyword_queue(self, n=50):
+        return [dict(r) for r in self.db.execute("SELECT * FROM keyword_queue ORDER BY created, rowid LIMIT ?", (n,))]
+
+    def unqueue_keyword(self, gm_msgid):
+        with self.db:
+            self.db.execute("DELETE FROM keyword_queue WHERE gm_msgid = ?", (str(gm_msgid),))
+
+    def keyword_error(self, word, theme, to_theme, gm_msgid):
+        with self.db:
+            self.db.execute("INSERT OR IGNORE INTO keyword_errors (word, theme, to_theme, gm_msgid) "
+                            "VALUES (?, ?, ?, ?)", (word.lower(), theme, to_theme, str(gm_msgid)))
+
+    def keyword_errors(self, word, theme):
+        """[to_theme] of each correction where this keyword of `theme` was in the mail."""
+        return [r["to_theme"] for r in self.db.execute(
+            "SELECT to_theme FROM keyword_errors WHERE word = ? AND theme = ?", (word.lower(), theme))]
+
+    def forget_keyword_errors(self, word, theme):
+        with self.db:
+            self.db.execute("DELETE FROM keyword_errors WHERE word = ? AND theme = ?", (word.lower(), theme))
+
+    def log_keyword(self, word, theme, kind, detail=""):
+        with self.db:
+            self.db.execute("INSERT INTO keyword_log (word, theme, kind, detail) VALUES (?, ?, ?, ?)",
+                            (word, theme, kind, detail[:200]))
+
+    def keyword_history(self, n=None):
+        sql = "SELECT * FROM keyword_log ORDER BY created DESC, rowid DESC" + (" LIMIT ?" if n else "")
+        return [dict(r) for r in self.db.execute(sql, (n,) if n else ())]
 
     def examples(self, n=8):
         rows = self.db.execute("SELECT * FROM examples ORDER BY id DESC LIMIT ?", (n,))

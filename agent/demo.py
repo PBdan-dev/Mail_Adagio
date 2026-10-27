@@ -40,6 +40,11 @@ SAMPLES = [
      "Keep going!", "Social & Notifications", "Info", 19),
 ]
 
+# shown in the window's demo only (the tests count the mails above): the made-up model sorts it in
+# Shopping, correct it to Promotions to see keywords learned
+EXTRA = [("Shoply <deals@shoply.example>", "Shoply Prime Days: up to 40% off",
+          "Prime Days start today: electronics, home and garden.", "Shopping & Deliveries", "Info", 24)]
+
 
 BULK = {"Newsletters", "Promotions", "Job Search", "Social & Notifications", "Shopping & Deliveries"}
 
@@ -107,14 +112,15 @@ class FakeIMAP:
     """
     COPIES = 10  # SAMPLES repeated, one week apart: 140 mails, enough to see batches
     mails = None  # all-mail uid -> {"gm", "labels", "raw", "date"}
+    extra = False  # True: the EXTRA mails too, when the window's demo starts
 
     @classmethod
-    def reset(cls, copies=None):
+    def reset(cls, copies=None, extra=False):
         cls.created, cls.commands = set(), []
         cls.mails, start = {}, datetime(2026, 10, 24, 9, 0, tzinfo=timezone.utc)
         n = 0
         for week in range(copies or cls.COPIES):
-            for sender, subject, text, theme, _s, day in SAMPLES:
+            for sender, subject, text, theme, _s, day in SAMPLES + (EXTRA if extra and not week else []):
                 n += 1
                 when = start - timedelta(days=24 - day + 7 * week)
                 cls.mails[5000 + 10_000 - n] = {"gm": str(1879950646965534236 + n), "labels": {"\\Inbox"},
@@ -123,7 +129,7 @@ class FakeIMAP:
 
     def __init__(self, host):
         if FakeIMAP.mails is None:
-            FakeIMAP.reset()
+            FakeIMAP.reset(extra=FakeIMAP.extra)
         self.folder = "INBOX"
 
     def login(self, *a):
@@ -238,10 +244,16 @@ UNSURE = {  # subject: (reason, confidence) for the mails the made-up model is n
 }
 
 
+# what the made-up model answers when it learns keywords from a correction (subject: words)
+WORDS = {"Shoply Prime Days: up to 40% off": ["Shoply Prime Days", "up to 40% off", "electronics"]}
+
+
 def ask(system, user, schema):
     time.sleep(DELAY)  # feel of a real model
-    for sender, subject, _text, theme, status, _day in SAMPLES:
+    for sender, subject, _text, theme, status, _day in SAMPLES + EXTRA:
         if subject in user:
+            if "keywords" in schema.get("properties", {}):
+                return json.dumps({"keywords": WORDS.get(subject, [])})
             reason, confidence = UNSURE.get(subject, (f"The sender and the subject point to {theme}.", "high"))
             if "reason" in schema.get("properties", {}):
                 return json.dumps({"reason": reason})

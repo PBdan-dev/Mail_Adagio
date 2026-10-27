@@ -8,11 +8,11 @@ import time
 from collections import Counter
 from datetime import datetime
 
-from . import batches, classify, config, hardware, memory, models, senders
+from . import batches, classify, config, hardware, keywords, memory, models, senders
 from .mail import Gmail, MailError, chunks
 
 AGENT = "mail-adagio"
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 ACTIONS = ("capabilities", "check", "hardware", "preview", "correct", "rules", "delete_rule",
            "estimate", "plan", "apply", "discard", "undo", "status",
            "scan", "senders", "sender_state", "suggest", "add_rule", "label_order",
@@ -184,6 +184,7 @@ def learn(cfg, request):
             if theme not in config.names(cfg["themes"]) or status not in config.names(cfg["statuses"]):
                 raise ValueError("Unknown theme or status")
             mem.add_example(sender, request.get("subject", ""), theme, status)
+            queue_theme_change(mem, request.get("gm_msgid"), theme)
             remember = request.get("remember", "none")
             if remember in ("sender", "domain"):
                 value = memory.address(sender) if remember == "sender" else memory.domain(sender)
@@ -209,9 +210,86 @@ def learn(cfg, request):
             log(f"rule proposal ignored: {request.get('sender')} -> {request.get('theme')} / {request.get('status')}")
         if request["action"] in ("proposals", "ignore_proposal"):
             return {"proposals": mem.proposals(themes, statuses)}
-        return {"rules": mem.rules(), "proposals": mem.proposals(themes, statuses)}
+        out = {"rules": mem.rules(), "proposals": mem.proposals(themes, statuses)}
+        if request["action"] == "rules":  # the Learning card
+            out.update(keyword_changes=[{k: r[k] for k in ("word", "theme", "kind", "detail", "created")}
+                                        for r in mem.keyword_history(8)],
+                       keywords_waiting=len(mem.keyword_queue()), corrections=correction_rates())
+        return out
     finally:
         mem.close()
+
+
+def correction_rates(n=5):
+    """[{batch, mails, corrected}] of the last applied batches, oldest first: fewer corrections = better sort."""
+    store = batches.Store(MEMORY_PATH)
+    try:
+        rows = store.all("SELECT b.id AS batch, COUNT(m.gm_msgid) AS mails, COALESCE(SUM(m.corrected), 0) AS corrected "
+                         "FROM batches b JOIN mails m ON m.batch_id = b.id AND m.state = 'applied' "
+                         "WHERE b.state = 'applied' GROUP BY b.id ORDER BY b.id DESC LIMIT ?", n)
+        return rows[::-1]
+    finally:
+        store.close()
+
+
+def queue_theme_change(mem, gm_msgid, theme):
+    """A theme corrected with the pencil: the mail waits to teach keywords (see keywords.py).
+    Only the agent's mistakes teach: changing your own correction again does not."""
+    if not gm_msgid:
+        return
+    store = batches.Store(MEMORY_PATH)
+    try:
+        row = store.mail(gm_msgid)
+    finally:
+        store.close()
+    if row and row["theme"] != theme and (not row["corrected"] or mem.queued(gm_msgid)):
+        mem.queue_keyword(gm_msgid, row["sender"], row["subject"], row["theme"], theme)
+
+
+def learn_keywords(cfg, request, gmail, ask):
+    """Keywords learned from the theme corrections waiting in the queue. Saved in config.yaml
+    (unless request["save_keywords"] is False: the demo keeps them in memory). Never raises."""
+    mem, store = memory.Memory(MEMORY_PATH), batches.Store(MEMORY_PATH)
+    try:
+        if not mem.keyword_queue(1):
+            return None
+        history = [(r["subject"], r["theme"], bool(r["corrected"])) for r in store.all(
+            "SELECT subject, theme, corrected FROM mails WHERE state IN ('applied', 'planned')")]
+        opened = []
+
+        def body(gm_msgid):
+            try:
+                if not opened:
+                    gmail.open(gmail.all_mail(), readonly=True)
+                    opened.append(True)
+                row = store.mail(gm_msgid)
+                uid = row["all_uid"] if row and row["all_uid"] > 0 else gmail.find([gm_msgid]).get(gm_msgid)
+                mails = gmail.fetch([uid], cfg["behavior"]["body_chars"]) if uid else []
+                return mails[0].body if mails and mails[0].gm_msgid == str(gm_msgid) else ""
+            except Exception:  # the mail is gone or Gmail failed: the subject is enough
+                return ""
+        out = keywords.learn(cfg, mem, ask, history, body)
+        if out["keywords"] is not None:
+            cfg["keywords"] = out["keywords"]
+            if request.get("save_keywords", True):
+                config.save_keywords(request.get("config") or config.DEFAULT_PATH, out["keywords"])
+        for line in out["lines"]:  # "nothing to learn" lines are about one mail: Journal only
+            log((MAIL_LINE if line.startswith("keywords: nothing") else "") + line)
+        return out
+    except Exception as e:  # never block the sorting for it
+        log(f"keywords: not learned this time ({type(e).__name__}: {e})")
+        return None
+    finally:
+        mem.close()
+        store.close()
+
+
+def keywords_line(out):
+    if not out or not (out["added"] or out["moved"] or out["removed"]):
+        return ""
+    parts = [f"{len(out[k])} {name}" for k, name in (("added", "learned"), ("moved", "moved"),
+                                                      ("removed", "removed")) if out[k]]
+    return "keywords: " + ", ".join(parts)
 
 
 def update_plan(cfg, mem, gm_msgid, theme, status):
@@ -454,6 +532,7 @@ def plan(cfg, request, gmail_factory, ask=None, progress=None):
                     log(learned_line(learned))
                 except MailError:
                     learned = None  # never block the sorting for it
+            learned_words = learn_keywords(cfg, request, gmail, ask)
             gmail.open(mailbox)
             same = job and (job["kind"], job["value"]) == (kind, value) and not request.get("restart")
             if not same:  # a new sort (a finished one starts again only when asked: restart)
@@ -473,7 +552,7 @@ def plan(cfg, request, gmail_factory, ask=None, progress=None):
         batch_id = store.add_batch(job["id"], model_note.split(" · ")[0], time.time() - started, calls, rows)
         batch = store.one("SELECT * FROM batches WHERE id = ?", batch_id)
         result = {"plan": plan_result(cfg, store, batch), "progress": progress_of(store, job, size),
-                  "learned": learned}
+                  "learned": learned, "keywords_learned": learned_words}
         result["log"] = (f"plan: batch {result['progress']['batch_no']} of {result['progress']['batches']}, "
                          f"{len(rows)} mails analysed ({model_note}), waiting for approval"
                          + (" (stopped: the other mails come next time)" if stopped else ""))
@@ -970,6 +1049,8 @@ def gmail_changes(cfg, gmail):
             if (theme, status) != (r["theme"], r["status"]):
                 store.changed_in_gmail(r["gm_msgid"], theme, status, True)
                 mem.add_example(r["sender"], r["subject"], theme, status)
+                if theme != r["theme"] and (not r["corrected"] or mem.queued(r["gm_msgid"])):  # the agent's mistake
+                    mem.queue_keyword(r["gm_msgid"], r["sender"], r["subject"], r["theme"], theme)
                 out["changed"] += 1
                 out["changes"].append({"gm_msgid": r["gm_msgid"], "sender": r["sender"], "subject": r["subject"],
                                        "old": [r["theme"], r["status"]], "new": [theme, status]})
@@ -998,9 +1079,25 @@ def learn_gmail(cfg, request, gmail_factory, ask=None, progress=None):
     """The "Learn from my Gmail changes" button (also done before each new batch)."""
     with connect(cfg, gmail_factory) as gmail:
         out = gmail_changes(cfg, gmail)
-    out["log"] = learned_line(out, always=True)
+        words = None
+        if memory_queue_size():
+            try:
+                model_ask, _note = get_model(cfg, request, ask)
+                words = learn_keywords(cfg, request, gmail, model_ask)
+            except models.ModelError as e:  # the corrections wait for the next time
+                log(f"keywords: not learned this time, the model is not available ({e})")
+    out["keywords_learned"] = words
+    out["log"] = "\n".join(x for x in (learned_line(out, always=True), keywords_line(words)) if x)
     out["changes_made"] = 0
     return out
+
+
+def memory_queue_size():
+    mem = memory.Memory(MEMORY_PATH)
+    try:
+        return len(mem.keyword_queue())
+    finally:
+        mem.close()
 
 
 def learned_line(out, always=False):
