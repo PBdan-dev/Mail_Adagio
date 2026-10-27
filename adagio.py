@@ -19,6 +19,43 @@ EXAMPLES = """examples:
 """
 
 
+CONSOLE_LOG = config.ROOT / "adagio-window.log"  # what the window would have shown, when started without one
+
+
+def no_console():
+    """Started without a console (pythonw, from Mail Adagio.bat): messages and errors go to
+    adagio-window.log instead. True in that case."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return False
+    try:
+        if CONSOLE_LOG.exists() and CONSOLE_LOG.stat().st_size > 1_000_000:  # keep it small
+            CONSOLE_LOG.unlink()
+        out = open(CONSOLE_LOG, "a", encoding="utf-8", buffering=1)
+    except OSError:
+        import os
+        out = open(os.devnull, "w")
+    sys.stdout = sys.stderr = out
+    from datetime import datetime
+    print(f"--- {datetime.now():%Y-%m-%d %H:%M:%S} Mail Adagio started without a console")
+    return True
+
+
+def fatal(error, hidden):
+    """Mail Adagio cannot start: write why, and show it in a window when there is no console."""
+    import traceback
+    traceback.print_exc()
+    text = f"Mail Adagio could not start:\n\n{type(error).__name__}: {error}\n\nDetails: {CONSOLE_LOG}"
+    if hidden and sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, text, "Mail Adagio", 0x10)
+        except Exception:
+            pass
+    else:
+        print(text, file=sys.stderr)
+    return 1
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="adagio", description="Mail Adagio, Gmail sorting agent.",
                                      epilog=EXAMPLES, formatter_class=argparse.RawTextHelpFormatter)
@@ -47,13 +84,20 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.command == "ui":
-        from agent import web
+        hidden = no_console()
+        try:
+            from agent import web
+        except Exception as e:  # a missing library: say it even without a console
+            return fatal(e, hidden)
         if args.demo:
             core.LOG_PATH = config.ROOT / "adagio-demo.log"
             core.MEMORY_PATH = config.ROOT / "adagio-demo.db"
             for f in (core.LOG_PATH, core.MEMORY_PATH):  # the made-up mailbox starts fresh each time
                 f.unlink(missing_ok=True)
-        web.serve(args.config, port=args.port, demo_mode=args.demo, open_browser=not args.no_browser)
+        try:
+            web.serve(args.config, port=args.port, demo_mode=args.demo, open_browser=not args.no_browser)
+        except Exception as e:
+            return fatal(e, hidden)
         return 0
 
     if args.command == "call":

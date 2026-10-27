@@ -2,6 +2,7 @@
 import json
 import shutil
 import tempfile
+import time
 import unittest
 from email.message import EmailMessage
 from pathlib import Path
@@ -915,7 +916,7 @@ class TestReliability(unittest.TestCase):
         self.assertTrue(self.run_(action="label_order")["ok"])  # the window can
         cap = self.run_(door="json", action="capabilities")
         self.assertTrue(cap["ok"])
-        self.assertEqual(cap["ui_only"], ["trash", "restore", "label_order", "read"])
+        self.assertEqual(cap["ui_only"], ["trash", "restore", "label_order", "read", "rename_theme"])
         self.assertNotIn("trash", cap["actions"])
         self.assertIn("plan", cap["actions"])
         self.assertEqual(cap["contract"]["name"], "mail-adagio")
@@ -1233,8 +1234,9 @@ class TestAgentMode(unittest.TestCase):
         from agent import skills
         self.assertEqual(set(skills.BY_NAME), set(core.ACTIONS))
         self.assertEqual(set(skills.WINDOW_ONLY), set(core.UI_ONLY))
-        for name in core.UI_ONLY + ("request", "capabilities"):
+        for name in ("trash", "restore", "read", "label_order", "request", "capabilities"):
             self.assertNotIn(name, skills.AGENT_ACTIONS)  # the model cannot even propose them
+        self.assertIn("rename_theme", skills.AGENT_ACTIONS)  # a request typed in the window
         self.assertIn("relabel", skills.prompt_lines(self.cfg))
         self.assertNotIn("trash(", skills.prompt_lines(self.cfg))
         cap = self.run_(door="json", action="capabilities")
@@ -1391,6 +1393,135 @@ class TestGmailTabs(unittest.TestCase):
         self.assertEqual(sum(t["mails"] for t in tabs.values()), plan["plan"]["processed"])
         self.assertEqual(list(tabs)[0], "Primary")  # in Gmail's order
 
+
+class TestRenameTheme(unittest.TestCase):
+    """v0.8.1: a theme renamed (by a request or the window): config.yaml, the Gmail label, rules and keywords follow."""
+
+    def setUp(self):
+        from agent import demo
+        self.demo = demo
+        demo.DELAY = 0
+        demo.FakeIMAP.reset(copies=1)
+        self.tmp = Path(tempfile.mkdtemp())
+        core.MEMORY_PATH = self.tmp / "adagio.db"
+        core.LOG_PATH = None
+        self.path = self.tmp / "config.yaml"
+        self.path.write_text(config.EXAMPLE.read_text(encoding="utf-8").replace('email: ""', 'email: "me@gmail.com"'),
+                             encoding="utf-8")
+        self.cfg = cfg_with()
+
+    def tearDown(self):
+        core.MEMORY_PATH = ":memory:"
+        shutil.rmtree(self.tmp)
+
+    def run_(self, door="app", **request):
+        return core.handle({"config": str(self.path), **request}, cfg=self.cfg, gmail_factory=self.demo.gmail_factory,
+                           ask=self.demo.ask, door=door)
+
+    def all_labels(self):
+        return set().union(*(m["labels"] for m in self.demo.FakeIMAP.mails.values()))
+
+    def sort_all(self):
+        plan = self.run_(action="plan", scope={"kind": "all"}, batch_size=50)
+        self.assertTrue(self.run_(action="apply", batch_id=plan["plan"]["batch_id"], skip=[])["ok"])
+
+    def test_rename_by_request(self):
+        self.sort_all()
+        self.run_(action="add_rule", kind="sender", value="trips@wander.example", theme="Travel", status="Info")
+        self.assertIn("Travel", self.all_labels())
+        r = self.run_(action="request", text="Change le theme Travel par Travel & Hobbies")
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertEqual([s["action"] for s in r["steps"]], ["rename_theme"])
+        self.assertTrue(r["steps"][0]["ok"], r["steps"][0].get("error"))
+        self.assertEqual(r["renamed_themes"][0]["new"], "Travel & Hobbies")
+        labels = self.all_labels()
+        self.assertIn("Travel & Hobbies", labels)            # Gmail label renamed, mails kept
+        self.assertNotIn("Travel", labels)
+        saved = config.load(self.path)
+        self.assertIn("Travel & Hobbies", config.names(saved["themes"]))
+        self.assertNotIn("Travel", config.names(saved["themes"]))
+        self.assertIn("hobbies", next(e["hint"] for e in saved["themes"] if e["name"] == "Travel & Hobbies"))
+        self.assertIn("flight", config.keywords(saved)["Travel & Hobbies"])  # its keywords followed
+        rules = self.run_(action="rules")["rules"]
+        self.assertEqual({x["theme"] for x in rules if x["value"] == "trips@wander.example"}, {"Travel & Hobbies"})
+
+    def test_numbered_label_and_undo_follow(self):
+        self.cfg["label_order"] = config.order(self.cfg)[0] + config.order(self.cfg)[1]
+        old_label = config.labels(self.cfg)["Travel"]
+        self.assertTrue(old_label.endswith(" - Travel"))
+        self.sort_all()
+        self.assertIn(old_label, self.all_labels())
+        r = self.run_(action="rename_theme", theme="Travel", new_name="Trips")
+        self.assertTrue(r["ok"], r.get("error"))
+        self.assertEqual(r["label"], old_label.replace("Travel", "Trips"))   # same number
+        self.assertIn(r["label"], self.all_labels())
+        self.cfg = config.renamed(self.cfg, "Travel", "Trips")
+        u = self.run_(action="undo")                                        # undo takes off the renamed label
+        self.assertTrue(u["ok"], u.get("error"))
+        self.assertNotIn(r["label"], self.all_labels())
+
+    def test_refusals(self):
+        for theme, new in (("Other", "Misc"), ("Travel", "Finance"), ("Travel", "To check"), ("Travel", "a/b"),
+                           ("Holidays", "Trips")):
+            r = self.run_(action="rename_theme", theme=theme, new_name=new)
+            self.assertFalse(r["ok"], (theme, new))
+        self.assertEqual(config.names(config.load(self.path)["themes"]), config.names(self.cfg["themes"]))
+        r = self.run_(door="json", action="rename_theme", theme="Travel", new_name="Trips")
+        self.assertFalse(r["ok"])                    # another program cannot rename labels
+        self.assertIn("only available in the Mail Adagio window", r["error"])
+
+class TestCloseWithTab(unittest.TestCase):
+    """v0.8.1: closing the Mail Adagio tab stops Mail Adagio (a reload does not)."""
+
+    def test_pages_alive_and_gone(self):
+        from agent import web
+        app = web.App(Path(tempfile.mkdtemp()) / "config.yaml", demo_mode=True)
+        t0 = app.empty_since
+        self.assertFalse(app.no_page_left(t0 + 10))                 # the browser is still opening the page
+        self.assertTrue(app.no_page_left(t0 + app.FIRST + 1))      # it never came
+        app.alive("a")
+        self.assertFalse(app.no_page_left())
+        app.bye("a")                                               # closed or reloaded
+        t1 = app.empty_since
+        self.assertFalse(app.no_page_left(t1 + 2))                 # a reload says alive again within the grace time
+        app.alive("b")
+        self.assertFalse(app.no_page_left(t1 + app.GRACE + 1))
+        app.tabs["b"] -= app.STALE + 1                             # a page silent too long (browser killed)
+        self.assertFalse(app.no_page_left())                       # gone now, the grace time starts
+        self.assertTrue(app.no_page_left(time.time() + app.GRACE + 1))
+
+    def test_the_server_stops_when_the_tab_closes(self):
+        import threading
+        import urllib.request
+        from agent import web
+        tmp = Path(tempfile.mkdtemp())
+        cfg = tmp / "config.yaml"
+        old = web.App.GRACE
+        web.App.GRACE = 0.5
+        try:
+            server = threading.Thread(target=web.serve, args=(cfg, 8941, True, False, True), daemon=True)
+            server.start()
+            running = web.running_file(cfg, True)
+            for _ in range(100):
+                if running.exists():
+                    break
+                time.sleep(0.05)
+            info = json.loads(running.read_text())
+
+            def post(path):
+                req = urllib.request.Request(f"http://127.0.0.1:{info['port']}{path}", data=b'{"tab": "t1"}',
+                                             headers={"X-Adagio-Token": info["token"], "Content-Type": "application/json"})
+                with urllib.request.urlopen(req) as r:
+                    return json.loads(r.read())
+            self.assertTrue(post("/api/alive")["ok"])
+            time.sleep(3)
+            self.assertTrue(server.is_alive())          # the tab is open: it keeps running
+            self.assertTrue(post("/api/bye")["ok"])     # the tab is closed
+            server.join(timeout=10)
+            self.assertFalse(server.is_alive())
+        finally:
+            web.App.GRACE = old
+            shutil.rmtree(tmp)
 
 if __name__ == "__main__":
     unittest.main()

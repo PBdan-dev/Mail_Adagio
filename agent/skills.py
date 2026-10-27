@@ -6,8 +6,8 @@ The same list is used three times, so it can never drift from the code:
 - the checks: every step the model proposes is validated here before it runs.
 
 kind: "read" reads Gmail without changing it, "local" only touches adagio.db / config.yaml / the journal,
-"write" changes Gmail. window: a person must click it in the window (refused to other programs and to
-the agent). agent: the agent may pick it from a free-text request.
+"write" changes Gmail. window: done from the window only (refused to other programs; refused to the agent
+too, unless agent is True). agent: the agent may pick it from a free-text request.
 """
 from . import config
 
@@ -136,6 +136,12 @@ SKILLS = [
      "params": [("confirm", "int", "the number of mails seen", {"required": True, "min": 1, "max": 10 ** 6})]},
     {"name": "restore", "kind": "write", "window": True, "agent": False,
      "summary": "Bring back from the Trash the mails of the last \"Move to Trash\".", "params": []},
+    {"name": "rename_theme", "kind": "write", "window": True,
+     "summary": "Give a theme another name, and if asked a new description of what goes in it. Its Gmail label is "
+                "renamed too (Gmail keeps the mails and the colour); its keywords and rules follow.",
+     "params": [("theme", "theme", "the theme to rename", {"required": True}),
+                ("new_name", "text", "its new name, 1 to 40 characters", {"required": True}),
+                ("hint", "text", "new description of the mails that go in it (optional)", {})]},
     {"name": "label_order", "kind": "write", "window": True, "agent": False,
      "summary": "Order, number and colour the labels; with apply, rename them in Gmail.", "params": []},
     # agent mode

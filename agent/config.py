@@ -1,4 +1,5 @@
 """Read, check and fill in config.yaml."""
+import copy
 import json
 import os
 import re
@@ -277,6 +278,86 @@ def save_keywords(path, words_by_theme):
              "keywords: " + json.dumps(data, ensure_ascii=False) + "\n")
     path.write_text(text, encoding="utf-8")
     return load(path)
+
+
+RESERVED = ("to check", "to delete", "priority")
+
+
+def renamed(cfg, old, new, hint=None):
+    """The configuration with the theme `old` named `new` (and its new hint, if given): keywords, label
+    order, colours and "mark as read" themes follow. Raises ConfigError for a name that cannot be used."""
+    new = " ".join(str(new or "").split())
+    themes = names(cfg["themes"])
+    if old not in themes:
+        raise ConfigError(f"Unknown theme '{old}'. Themes: {', '.join(themes)}")
+    if old == cfg["fallback"]["theme"]:
+        raise ConfigError(f"'{old}' is the theme used when nothing fits: it keeps its name")
+    if not new or len(new) > 40 or any(c in new for c in '/\\"'):
+        raise ConfigError("The new name must have 1 to 40 characters, without / \\ or quotes")
+    taken = {n.lower() for n in themes + names(cfg["statuses"]) if n != old} | set(RESERVED)
+    if new.lower() in taken:
+        raise ConfigError(f"'{new}' is already the name of a theme, a status or a Mail Adagio label")
+    out = copy.deepcopy(cfg)
+    for e in out["themes"]:
+        if e["name"] == old:
+            e["name"] = new
+            if e.get("label"):
+                e["label"] = new
+            if hint:
+                e["hint"] = " ".join(str(hint).split())[:200]
+    swap = lambda items: [new if x == old else x for x in items]
+    if out.get("keywords") and old in out["keywords"]:
+        out["keywords"] = {(new if k == old else k): v for k, v in out["keywords"].items()}
+    elif old in DEFAULT_KEYWORDS:  # the default words of the theme go with it
+        out["keywords"] = {**(out.get("keywords") or {}), new: DEFAULT_KEYWORDS[old]}
+    if out.get("label_order"):
+        out["label_order"] = swap(out["label_order"])
+    if out.get("colors") and old in out["colors"]:
+        out["colors"] = {(new if k == old else k): v for k, v in out["colors"].items()}
+    elif not next(e for e in cfg["themes"] if e["name"] == old).get("color"):  # keep the colour it had
+        out["colors"] = {**(out.get("colors") or {}), new: colors(cfg)[old]["gmail"]}
+    behavior = out.get("behavior") or {}
+    if behavior.get("mark_read_themes"):
+        behavior["mark_read_themes"] = swap(behavior["mark_read_themes"])
+    check(out)
+    return out
+
+
+def save_rename(path, old, new, hint=None):
+    """Rename a theme in config.yaml, keeping the comments; the lines that name it follow."""
+    ensure_file(path)
+    path = Path(path)
+    before = load(path)
+    after = renamed(before, old, new, hint)
+    new = next(e["name"] for e in after["themes"] if e["name"] not in names(before["themes"]))
+    text = path.read_text(encoding="utf-8")
+    start = re.search(r"(?m)^themes:\s*$", text)
+    entry = re.compile(rf"(?m)^(\s*-\s*name:\s*)(\"{re.escape(old)}\"|'{re.escape(old)}'|{re.escape(old)})(\s*(#.*)?)$")
+    m = entry.search(text, start.end() if start else 0)
+    if not m:
+        raise ConfigError(f"Theme '{old}' not found in {path.name}")
+    text = text[:m.start()] + m.group(1) + json.dumps(new, ensure_ascii=False) + (m.group(3) or "") + text[m.end():]
+    nxt = re.compile(r"(?m)^\s*-\s*name:|^\S").search(text, m.start() + 1)
+    end = nxt.start() if nxt else len(text)
+    block = text[m.start():end]
+    if hint:
+        block = re.sub(r"(?m)^(\s*hint:\s*).*$", lambda h: h.group(1) + json.dumps(after_hint(after, new), ensure_ascii=False), block, count=1)
+    block = re.sub(r"(?m)^(\s*label:\s*).*$", lambda h: h.group(1) + json.dumps(new, ensure_ascii=False), block, count=1)
+    path.write_text(text[:m.start()] + block + text[end:], encoding="utf-8")
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if raw.get("keywords") is not None or after.get("keywords") != before.get("keywords"):
+        save_keywords(path, after.get("keywords") or {})
+    if raw.get("label_order"):
+        save_order(path, after["label_order"])
+    if after.get("colors"):
+        save_colors(path, after["colors"])
+    if (raw.get("behavior") or {}).get("mark_read_themes"):
+        save_values(path, {"mark_read_themes": after["behavior"]["mark_read_themes"]})
+    return load(path)
+
+
+def after_hint(cfg, name):
+    return next(e.get("hint", "") for e in cfg["themes"] if e["name"] == name)
 
 
 BEHAVIOR_KEYS = ("act_alone", "batch_size", "archive", "mark_read", "mark_read_themes", "to_delete")

@@ -838,7 +838,11 @@ details.rulesfold[open] > summary { margin-bottom: 8px; }
   </div>
   <div class="banner warn hidden" id="oldBanner">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
-    <span>Mail Adagio was updated while it was open. Close the black window, then double-click <b>Mail Adagio.bat</b> again.</span>
+    <span>Mail Adagio was updated while it was open. Close this tab, then double-click <b>Mail Adagio.bat</b> again.</span>
+  </div>
+  <div class="banner warn hidden" id="closedBanner">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>Mail Adagio is closed. Double-click <b>Mail Adagio.bat</b> to open it again.</span>
   </div>
 </div>
 
@@ -1179,14 +1183,21 @@ const dur = s => s < 90 ? "about a minute" : s < 3600 ? `about ${Math.round(s / 
 async function api(path, body) {
   const opt = { headers: { "X-Adagio-Token": TOKEN, "Content-Type": "application/json" } };
   if (body !== undefined) { opt.method = "POST"; opt.body = JSON.stringify(body); }
-  const r = await fetch(path, opt);
+  let r;
+  try { r = await fetch(path, opt); }
+  catch (e) {  // the program is no longer running
+    $("#closedBanner").classList.remove("hidden");
+    clearInterval(polling); polling = null;
+    return { ok: false, error: "Mail Adagio is closed. Double-click Mail Adagio.bat to open it again." };
+  }
+  $("#closedBanner").classList.add("hidden");
   if (r.status === 404) {  // the page is newer than the program still running
     $("#oldBanner").classList.remove("hidden");
     return { ok: false, error: RESTART };
   }
   return r.json();
 }
-const RESTART = "Mail Adagio was updated while it was open. Close the black window, then double-click Mail Adagio.bat again.";
+const RESTART = "Mail Adagio was updated while it was open. Close this tab, then double-click Mail Adagio.bat again.";
 function toast(msg, err) {
   const t = $("#toast"); t.textContent = msg; t.className = "toast on" + (err ? " err" : "");
   clearTimeout(t._h); t._h = setTimeout(() => t.className = "toast", err ? 6000 : 2800);
@@ -1244,7 +1255,9 @@ $("#loadBtn").onclick = () => {
 };
 
 async function refresh() {
-  S = await api("/api/state");
+  const st = await api("/api/state");
+  if (st.ok === false && S) return;  // Mail Adagio is closed: keep the page as it was, with the banner
+  S = st;
   if (!inited && S.sort) initControls();
   if (S.sort) drawMarkRead();
   render();
@@ -1447,7 +1460,8 @@ function drawAsk(n) {
   box.innerHTML = `<button type="button" class="x" title="Close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`
     + `<p class="q">“${esc(n.text)}”</p><p class="a">${esc(n.answer || (n.ok ? "Done." : "Failed."))}</p>`
     + (steps ? `<ol>${steps}</ol>` : "")
-    + (n.changes ? `<p class="foot">${fmt(n.changes)} change${n.changes === 1 ? "" : "s"} in Gmail · Undo puts them back.</p>` : n.refused ? `<p class="foot">Nothing was changed.</p>` : "");
+    + ((n.steps || []).some(st => st.ok && st.action === "rename_theme") ? `<p class="foot">To go back, ask to rename the theme again.</p>`
+      : n.changes ? `<p class="foot">${fmt(n.changes)} change${n.changes === 1 ? "" : "s"} in Gmail · Undo puts them back.</p>` : n.refused ? `<p class="foot">Nothing was changed.</p>` : "");
   box.classList.remove("hidden");
   box.querySelector(".x").onclick = () => box.classList.add("hidden");
 }
@@ -2274,6 +2288,19 @@ drawPanel();
 document.body.classList.add("ready");
 page = store.get("adagio-page") || "sort";
 refresh().then(() => { loadModel(); loadRules(); loadSenders(); loadDelete(); });
+
+/* closing this tab closes Mail Adagio: the page says it is alive, and says bye when it goes */
+const TAB = Math.random().toString(36).slice(2) + Date.now().toString(36);
+const alive = () => fetch("/api/alive", { method: "POST", headers: { "X-Adagio-Token": TOKEN, "Content-Type": "application/json" },
+  body: JSON.stringify({ tab: TAB }) }).then(() => $("#closedBanner").classList.add("hidden"))
+  .catch(() => $("#closedBanner").classList.remove("hidden"));
+alive(); setInterval(alive, 15000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) alive(); });
+window.addEventListener("pageshow", e => { if (e.persisted) alive(); });
+window.addEventListener("pagehide", () => {
+  try { fetch("/api/bye", { method: "POST", keepalive: true, headers: { "X-Adagio-Token": TOKEN, "Content-Type": "application/json" },
+    body: JSON.stringify({ tab: TAB }) }); } catch (e) {}
+});
 </script>
 </body>
 </html>

@@ -13,13 +13,14 @@ from . import batches, classify, config, hardware, keywords, memory, models, sen
 from .mail import TABS, Gmail, MailError, chunks
 
 AGENT = "mail-adagio"
-VERSION = "0.8.0"
+VERSION = "0.8.1"
 ACTIONS = ("capabilities", "check", "hardware", "preview", "correct", "rules", "delete_rule",
            "estimate", "plan", "apply", "discard", "undo", "status",
            "scan", "senders", "sender_state", "suggest", "add_rule", "label_order",
            "keep", "to_delete", "trash", "restore", "learn_gmail", "why", "journal",
-           "proposals", "ignore_proposal", "read", "search", "relabel", "keywords", "request")
-UI_ONLY = ("trash", "restore", "label_order", "read")  # a person must click them in the window: refused from the JSON door
+           "proposals", "ignore_proposal", "read", "search", "relabel", "keywords", "rename_theme", "request")
+UI_ONLY = ("trash", "restore", "label_order", "read", "rename_theme")  # refused from the JSON door: done from the window
+# (rename_theme also from agent mode: a request you typed in the window)
 MAIL_LINE = "mail · "  # journal lines about one mail: kept out of the activity list, shown in the Journal
 LOG_PATH = config.ROOT / "adagio.log"  # readable journal of every run; None turns it off
 MEMORY_PATH = config.ROOT / "adagio.db"  # rules and examples learned from your corrections
@@ -34,7 +35,7 @@ def handle(request, cfg=None, gmail_factory=Gmail, ask=None, progress=None, door
     try:
         if action not in ACTIONS:
             raise ValueError(f"Unknown action '{action}'. Expected one of: {', '.join(ACTIONS)}")
-        if door in ("json", "agent") and action in UI_ONLY:
+        if (door == "json" or door == "agent" and action not in skills.AGENT_ACTIONS) and action in UI_ONLY:
             raise ValueError(f"'{action}' is only available in the Mail Adagio window: a person must click it "
                              f"there. Mail Adagio never does it on a program's request.")
         if door == "agent" and action not in skills.AGENT_ACTIONS:
@@ -1119,6 +1120,43 @@ def restore(cfg, request, gmail_factory, ask=None, progress=None):
         store.close()
 
 
+def rename_theme(cfg, request, gmail_factory, ask=None, progress=None):
+    """Give a theme another name (and hint): its Gmail label is renamed too (Gmail keeps the mails and the
+    colour), and its keywords, rules, examples and colour follow. Undone by renaming it back."""
+    p = skills.check("rename_theme", request, cfg)
+    old = p["theme"]
+    try:
+        new_cfg = config.renamed(cfg, old, p["new_name"], p.get("hint"))
+    except config.ConfigError as e:
+        raise ValueError(str(e))
+    new = next(n for n in config.names(new_cfg["themes"]) if n not in config.names(cfg["themes"]))
+    old_label, new_label = config.labels(cfg)[old], config.labels(new_cfg)[new]
+    in_gmail = False
+    with connect(cfg, gmail_factory) as gmail:
+        existing = {f.lower() for f in gmail.folders()}
+        if new_label.lower() in existing and new_label.lower() != old_label.lower():
+            raise ValueError(f"A label named '{new_label}' already exists in Gmail. Rename or delete it first")
+        if old_label.lower() in existing:  # a label never used yet is created later with the new name
+            gmail.rename_label(old_label, new_label)
+            in_gmail = True
+    if request.get("save_keywords", True):  # the demo keeps its configuration in memory
+        config.save_rename(request.get("config") or config.DEFAULT_PATH, old, new, p.get("hint"))
+    store, mem = batches.Store(MEMORY_PATH), memory.Memory(MEMORY_PATH)
+    try:
+        store.rename_theme(old, new, old_label, new_label)
+        mem.rename_theme(old, new)
+    finally:
+        store.close()
+        mem.close()
+    lines = [f"theme renamed: {old} -> {new}" + (f" (Gmail label {old_label} -> {new_label})" if in_gmail
+                                                     else " (its Gmail label will have the new name)")]
+    if p.get("hint"):
+        lines.append(f"  new description: {p['hint']}")
+    return {"theme": old, "new_name": new, "hint": p.get("hint", ""), "old_label": old_label, "label": new_label,
+            "renamed_in_gmail": in_gmail, "renamed_theme": {"old": old, "new": new, "hint": p.get("hint", "")},
+            "changes_made": int(in_gmail), "log": "\n".join(lines)}
+
+
 def label_order(cfg, request, gmail_factory, ask=None, progress=None):
     """Order and number the labels ("01 - Priority"); with apply, rename them in Gmail.
 
@@ -1341,6 +1379,6 @@ def read(cfg, request, gmail_factory, ask=None, progress=None):
     return msg
 
 
-STEP3.update(request=agent_ask.request, search=search, relabel=relabel, keywords=keywords_action, read=read, keep=keep, to_delete=to_delete, trash=trash, restore=restore, label_order=label_order, scan=scan,
+STEP3.update(request=agent_ask.request, rename_theme=rename_theme, search=search, relabel=relabel, keywords=keywords_action, read=read, keep=keep, to_delete=to_delete, trash=trash, restore=restore, label_order=label_order, scan=scan,
              senders=list_senders, sender_state=sender_state, suggest=suggest, learn_gmail=learn_gmail, why=why,
              journal=journal)

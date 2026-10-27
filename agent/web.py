@@ -42,10 +42,14 @@ class App:
         self.demo_order = None
         self.demo_keywords = None
         self.demo_colors = None
+        self.demo_renames = []  # themes renamed by a request, in the demo
         self.demo_running = []
         self.page = PAGE.read_text(encoding="utf-8")  # read once: the page always matches this code
         self.stamp = code_stamp()
         self.server = None
+        self.tabs = {}               # open pages: tab id -> last sign of life (time.time())
+        self.had_tab = False
+        self.empty_since = time.time()
 
     def cfg(self):
         if self.demo:
@@ -56,6 +60,8 @@ class App:
             cfg["label_order"] = self.demo_order
             cfg["keywords"] = self.demo_keywords
             cfg["colors"] = self.demo_colors
+            for r in self.demo_renames:
+                cfg = config.renamed(cfg, r["old"], r["new"], r.get("hint"))
             config.check(cfg)
             return cfg
         return config.load(self.config_path)
@@ -73,6 +79,8 @@ class App:
             self.demo_keywords = learned["keywords"]
         if self.demo and result.get("new_keywords") is not None:  # keywords changed by a request
             self.demo_keywords = result["new_keywords"]
+        if self.demo:  # a theme renamed (in the demo, only in memory)
+            self.demo_renames += result.get("renamed_themes") or ([result["renamed_theme"]] if result.get("renamed_theme") else [])
         return result
 
     def state(self):
@@ -259,6 +267,52 @@ class App:
                            "changes": r.get("changes_made", 0)}
         return self.start("ask", work)
 
+    # --- Closing the tab closes Mail Adagio -------------------------------------------------
+    # Each open page says it is alive every 15 s, and says bye when it is closed or reloaded. When no
+    # page is left for GRACE seconds (a reload comes back in 1 or 2), Mail Adagio stops: a sort in
+    # progress first ends after the mail in progress, like with Stop, and an apply ends normally.
+    GRACE = 8         # seconds without any page before closing
+    STALE = 150       # a page silent this long is gone (a hidden tab can be slowed to 1 sign a minute)
+    FIRST = 180       # no page at all this long after the start: the browser never opened it
+
+    def alive(self, tab):
+        with self.lock:
+            self.tabs[tab] = time.time()
+            self.had_tab = True
+
+    def bye(self, tab):
+        with self.lock:
+            self.tabs.pop(tab, None)
+            if not self.tabs:
+                self.empty_since = time.time()
+
+    def no_page_left(self, now=None):
+        """True when every page is closed (for long enough)."""
+        now = now or time.time()
+        with self.lock:
+            for tab, seen in list(self.tabs.items()):
+                if now - seen > self.STALE:
+                    del self.tabs[tab]
+                    if not self.tabs:
+                        self.empty_since = now
+            if self.tabs:
+                return False
+            return now - self.empty_since > (self.GRACE if self.had_tab else self.FIRST)
+
+    def watch_pages(self, server, every=2):
+        """Stop the server once no page is left. Runs in a background thread."""
+        while True:
+            time.sleep(every)
+            if not self.no_page_left():
+                continue
+            if self.job["running"]:  # end the job cleanly first (a page coming back cancels the close)
+                self.job["stop"] = True
+                continue
+            core.log("Mail Adagio closed: its tab was closed")
+            print("\n  The Mail Adagio tab was closed: Mail Adagio stops.\n")
+            server.shutdown()
+            return
+
     def progress(self, i, n, row):
         if i == 0:
             self.job["model"] = row["model"]
@@ -437,6 +491,12 @@ def make_handler(app, port):
             if self.path == "/api/stop":
                 app.job["stop"] = True
                 return self.send(200, {"ok": True})
+            if self.path == "/api/alive":  # the page is open (every 15 s)
+                app.alive(str(body.get("tab") or ""))
+                return self.send(200, {"ok": True})
+            if self.path == "/api/bye":  # the page is closed or reloaded
+                app.bye(str(body.get("tab") or ""))
+                return self.send(200, {"ok": True})
             if self.path == "/api/shutdown":  # Mail Adagio was opened again: this older copy stops
                 self.send(200, {"ok": True})
                 print("\n  Mail Adagio was opened again in a new window. This one stops.\n")
@@ -485,7 +545,7 @@ def stop_previous(path):
             return
 
 
-def serve(config_path=config.DEFAULT_PATH, port=8765, demo_mode=False, open_browser=True):
+def serve(config_path=config.DEFAULT_PATH, port=8765, demo_mode=False, open_browser=True, close_with_tab=None):
     app = App(config_path, demo_mode)
     demo.FakeIMAP.extra = demo_mode  # the demo window also gets the mail that shows keyword learning
     running = running_file(config_path, demo_mode)
@@ -504,9 +564,11 @@ def serve(config_path=config.DEFAULT_PATH, port=8765, demo_mode=False, open_brow
     except OSError:
         running = None
     url = f"http://127.0.0.1:{p}/"
-    print(f"\n  Mail Adagio is open at {url}\n  Keep this window open. Close it to stop.\n")
+    print(f"\n  Mail Adagio is open at {url}\n  It stops when you close its tab.\n")
     if open_browser:
         threading.Timer(0.5, webbrowser.open, [url]).start()
+    if open_browser if close_with_tab is None else close_with_tab:
+        threading.Thread(target=app.watch_pages, args=(server,), daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
