@@ -42,6 +42,7 @@ class App:
         self.demo_order = None
         self.demo_keywords = None
         self.demo_colors = None
+        self.demo_renames = []  # themes renamed by a request, in the demo
         self.demo_running = []
         self.page = PAGE.read_text(encoding="utf-8")  # read once: the page always matches this code
         self.stamp = code_stamp()
@@ -56,6 +57,8 @@ class App:
             cfg["label_order"] = self.demo_order
             cfg["keywords"] = self.demo_keywords
             cfg["colors"] = self.demo_colors
+            for r in self.demo_renames:
+                cfg = config.renamed(cfg, r["old"], r["new"], r.get("hint"))
             config.check(cfg)
             return cfg
         return config.load(self.config_path)
@@ -73,6 +76,8 @@ class App:
             self.demo_keywords = learned["keywords"]
         if self.demo and result.get("new_keywords") is not None:  # keywords changed by a request
             self.demo_keywords = result["new_keywords"]
+        if self.demo:  # a theme renamed (in the demo, only in memory)
+            self.demo_renames += result.get("renamed_themes") or ([result["renamed_theme"]] if result.get("renamed_theme") else [])
         return result
 
     def state(self):

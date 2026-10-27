@@ -272,14 +272,22 @@ class Store:
         with self.db:
             self.db.execute("UPDATE trash SET restored = 1 WHERE trash_id = ?", (trash_id,))
 
+    def rename_theme(self, old, new, old_label, new_label):
+        """A theme renamed: its mails, and the labels undo would put back or take off."""
+        with self.db:
+            self.db.execute("UPDATE mails SET theme = ? WHERE theme = ?", (new, old))
+        self.rename_labels({old_label: new_label})
+
     def rename_labels(self, renamed):
         """Labels renamed in Gmail: keep the undo list right."""
         with self.db:
-            for row in self.db.execute("SELECT gm_msgid, added FROM mails WHERE added != '[]'").fetchall():
-                added = json.loads(row["added"])
-                new = [renamed.get(x, x) for x in added]
-                if new != added:
-                    self.db.execute("UPDATE mails SET added = ? WHERE gm_msgid = ?", (json.dumps(new), row["gm_msgid"]))
+            for column in ("added", "removed"):
+                for row in self.db.execute(f"SELECT gm_msgid, {column} FROM mails WHERE {column} != '[]'").fetchall():
+                    before = json.loads(row[column])
+                    after = [renamed.get(x, x) for x in before]
+                    if after != before:
+                        self.db.execute(f"UPDATE mails SET {column} = ? WHERE gm_msgid = ?",
+                                        (json.dumps(after), row["gm_msgid"]))
 
     def seconds_per_call(self, model):
         """Average time of one model call for this model, from past batches (None if unknown)."""

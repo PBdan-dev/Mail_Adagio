@@ -174,7 +174,10 @@ Type a request in the **Ask Adagio** bar, in any language: "put the Prime Days m
 4. The model sums up what was done in one to three sentences, under the bar, with the list of steps.
 
 Never on the card, and refused by the code if the model asks anyway: the Trash, restoring, reading a
-whole mail, renaming labels. Unsubscribing, sending mail and settings do not exist as actions. Words
+whole mail, renaming or reordering labels. One exception: **renaming a theme** ("change the theme Travel
+to Travel & Hobbies"). The Gmail label is renamed too (Gmail keeps the mails and the colour, a numbered
+label keeps its number); the theme's keywords, rules, examples and colour follow; the model can give it a
+new description when the new name changes what goes in it. Undo it by asking the reverse rename. Unsubscribing, sending mail and settings do not exist as actions. Words
 found inside mails are data for the model, never instructions.
 
 New actions, also open to other programs: `search` (Gmail's search, changes nothing), `relabel`
@@ -225,7 +228,8 @@ model of the last batch (or the best one for your PC) and Ollama loads it at the
 
 ## Your own themes
 
-Edit `themes` in `config.yaml`: add, rename or remove entries. The `hint` tells the model what belongs
+Edit `themes` in `config.yaml`: add, rename or remove entries. To rename one, ask Adagio instead
+("rename the theme Travel to Trips"): the Gmail label, keywords and rules follow. The `hint` tells the model what belongs
 in the theme. Each theme also has typical words (bank, invoice, receipt...) given to the model as
 clues: change them in the app, **Views > Keywords** (saved as `keywords:` at the end of `config.yaml`). Keep one theme named `Other` (used when nothing fits). Same for `statuses`.
 

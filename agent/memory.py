@@ -79,6 +79,14 @@ class Memory:
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
 
+    def rename_theme(self, old, new):
+        """A theme renamed: your rules, examples and the keyword learning follow it."""
+        with self.db:
+            for table, column in (("rules", "theme"), ("examples", "theme"), ("ignored", "theme"),
+                                  ("keyword_queue", "wrong"), ("keyword_queue", '"right"'),
+                                  ("keyword_errors", "theme"), ("keyword_errors", "to_theme"), ("keyword_log", "theme")):
+                self.db.execute(f"UPDATE OR IGNORE {table} SET {column} = ? WHERE {column} = ?", (new, old))
+
     def close(self):
         self.db.close()
 

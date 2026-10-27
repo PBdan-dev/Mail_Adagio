@@ -1447,7 +1447,8 @@ function drawAsk(n) {
   box.innerHTML = `<button type="button" class="x" title="Close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`
     + `<p class="q">“${esc(n.text)}”</p><p class="a">${esc(n.answer || (n.ok ? "Done." : "Failed."))}</p>`
     + (steps ? `<ol>${steps}</ol>` : "")
-    + (n.changes ? `<p class="foot">${fmt(n.changes)} change${n.changes === 1 ? "" : "s"} in Gmail · Undo puts them back.</p>` : n.refused ? `<p class="foot">Nothing was changed.</p>` : "");
+    + ((n.steps || []).some(st => st.ok && st.action === "rename_theme") ? `<p class="foot">To go back, ask to rename the theme again.</p>`
+      : n.changes ? `<p class="foot">${fmt(n.changes)} change${n.changes === 1 ? "" : "s"} in Gmail · Undo puts them back.</p>` : n.refused ? `<p class="foot">Nothing was changed.</p>` : "");
   box.classList.remove("hidden");
   box.querySelector(".x").onclick = () => box.classList.add("hidden");
 }

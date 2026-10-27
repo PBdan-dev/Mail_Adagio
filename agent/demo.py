@@ -290,6 +290,14 @@ def agent_steps(user):
     if any(w in text for w in ("trash", "corbeille", "supprime", "delete", "efface")):
         return {"steps": [], "refuse": "Mail Adagio never deletes mail: only you can move mails to the Trash, "
                                        "from the window."}
+    named = re.search(r"(?:renomme|change|rename)\s+(?:le\s+|the\s+)?th[eè]me\s+(.+?)\s+(?:par|en|to|as|into)\s+(.+?)\s*$",
+                      user.split("Request:", 1)[-1].strip(), re.I)
+    if named:
+        old, new = named.group(1).strip(' "«»'), named.group(2).strip(' "«».')
+        hint = {"travel & hobbies": "flights, trains, hotels, bookings, itineraries, and hobbies: sport, clubs, "
+                                    "concerts, leisure activities"}.get(new.lower())
+        return {"steps": [{"action": "rename_theme", "params": {"theme": old, "new_name": new,
+                                                                **({"hint": hint} if hint else {})}}], "refuse": ""}
     if "prime day" in text:
         return {"steps": [{"action": "search", "params": {"subject": "Prime Days"}},
                           {"action": "relabel", "params": {"gm_msgids": "$prev", "theme": "Promotions"}}],
@@ -321,6 +329,10 @@ def agent_answer(steps):
         n = r.get("found", 0)
         subjects = ", ".join(m["subject"] for m in r.get("mails", [])[:2])
         return f"{n} mail{'s' if n > 1 else ''} à vérifier, dont : {subjects}." if n else "Aucun mail à vérifier."
+    if last["action"] == "rename_theme":
+        return (f"C'est fait : le thème {r.get('theme')} s'appelle maintenant {r.get('new_name')}, et son libellé Gmail "
+                f"aussi. Ses mots-clés et ses règles suivent." + (" Sa description inclut maintenant les loisirs."
+                                                                 if "hobbies" in str(r.get("hint", "")) else ""))
     if last["action"] == "keywords":
         return "Mot-clé URSSAF ajouté au thème Admin. Il servira dès le prochain lot."
     return "C'est fait."
