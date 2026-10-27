@@ -127,7 +127,7 @@ Gmail reserves the name *Important*, so that status uses the label **Priority** 
 
 You moved a sorted mail to another theme (or status) directly in Gmail? Before each batch (option
 *Learn from my changes in Gmail*, `learn_gmail: true`) or with **Learn from Gmail**, the agent reads
-the labels of the mails it sorted: labels only, no content, no AI, a few seconds. Each change becomes a
+the labels of the mails it sorted (a few seconds, no AI for this step). Each change becomes a
 correction: the mail keeps its new theme, and its sender and subject become an example for the model.
 After the same correction twice for one sender, a rule is proposed in the **Learning** card: **Make it
 a rule** or **Ignore**. Gmail is not changed. Removing the label "To check" in Gmail marks the mail as

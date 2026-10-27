@@ -724,7 +724,12 @@ details.fold .chev { margin-left: auto; color: var(--muted); transition: transfo
 details.fold[open] .chev { transform: rotate(180deg); }
 details.fold[open] > summary { margin-bottom: 6px; }
 details.fold > summary .mini { margin-left: 0; }
-details.fold #learnBtn { margin-bottom: 4px; }
+#learnCard .learnhead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+#learnCard .learnhead h2 { margin: 0; }
+details.rulesfold { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+details.rulesfold > summary { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
+details.rulesfold > summary .fcount { text-transform: none; letter-spacing: 0; font-weight: 500; }
+details.rulesfold[open] > summary { margin-bottom: 8px; }
 .never { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
   font-size: 12.5px; color: var(--muted); }
 .never svg { flex: none; margin-top: 2px; color: var(--green); }
@@ -846,7 +851,7 @@ details.fold #learnBtn { margin-bottom: 4px; }
               <a href="#" id="markReadEdit">Change themes</a></small>
               <span class="chooser hidden" id="markReadThemes"></span></span></label>
           <label class="switch"><input type="checkbox" id="learnGmail"><span class="knob"></span>
-            <span><b>Learn from my changes in Gmail</b><small>Before each batch, reads the labels of the mails already sorted (no content, no AI). A mail you moved to another theme becomes a correction.</small></span></label>
+            <span><b>Learn from my changes in Gmail</b><small>Before each batch, reads the labels of the mails already sorted. A mail you moved to another theme becomes a correction, and the AI learns keywords from it.</small></span></label>
         </div>
           <div class="estimate" id="estimate"></div>
         </div>
@@ -933,15 +938,18 @@ details.fold #learnBtn { margin-bottom: 4px; }
       <button class="btn" id="checkBtn" style="width:100%;justify-content:center">Test connection</button>
     </section>
 
-    <details class="card fold" id="learnCard">
-      <summary><h2>Learning</h2><span class="fcount" id="learnCount"></span><span class="mini hidden" id="learnBadge"></span>
-        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></summary>
+    <section class="card" id="learnCard">
+      <div class="learnhead"><h2>Learning</h2><span class="fcount" id="learnCount"></span><span class="mini hidden" id="learnBadge"></span></div>
       <p class="sub">Your corrections, here or in Gmail, teach the agent keywords, on its own. Rules are applied before the model, with no AI call.</p>
       <button type="button" class="btn sm" id="learnBtn" title="Reads the labels of the mails already sorted and learns from the ones you moved in Gmail. The model then reads the corrected mails to learn keywords.">Learn from Gmail</button>
       <div class="kwl" id="kwLearned"></div>
       <div class="props" id="proposals"></div>
-      <div class="rules" id="rules"></div>
-    </details>
+      <details class="fold rulesfold" id="rulesFold">
+        <summary><span class="rt">Rules</span><span class="fcount" id="ruleCount"></span>
+          <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></summary>
+        <div class="rules" id="rules"></div>
+      </details>
+    </section>
 
     <section class="card hidden" id="delCard">
       <h2>To delete</h2>
@@ -1515,7 +1523,7 @@ function render() {
   } else if (busy) {
     $("#barFill").style.width = "100%";
     $("#progressText").textContent = { apply: "Adding labels in Gmail…", undo: "Putting the mails back as they were…",
-      learn: "Reading the labels of your sorted mails in Gmail (no content, no AI)…",
+      learn: "Reading your changes in Gmail, then the AI learns keywords from your corrections…",
       load: `Loading ${job.model} into Ollama. Can take up to a minute…` }[job.kind] || "Working…";
   } else if (p) {
     $("#barFill").style.width = Math.max(3, Math.round(100 * p.done / Math.max(p.total, 1))) + "%";
@@ -1575,6 +1583,7 @@ function drawLearnHead(rules, props) {
   const nr = drawLearnHead.rules || 0, np = drawLearnHead.props || 0;
   const nk = drawLearnHead.kw || 0;
   $("#learnCount").textContent = (nk ? `${nk} keyword${nk === 1 ? "" : "s"} · ` : "") + `${nr} rule${nr === 1 ? "" : "s"}`;
+  $("#ruleCount").textContent = String(nr);
   $("#learnBadge").classList.toggle("hidden", !np);
   $("#learnBadge").textContent = `${np} to review`;
 }

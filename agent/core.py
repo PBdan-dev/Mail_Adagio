@@ -1000,9 +1000,10 @@ def label_order(cfg, request, gmail_factory, ask=None, progress=None):
 # --- Learn from your changes in Gmail ------------------------------------------------------
 #
 # You moved a sorted mail to another theme (or status) in Gmail: Mail Adagio reads the labels of the
-# mails it sorted (labels only, no content, no AI), and takes each change as a correction: the mail
+# mails it sorted (labels only, no AI for this step), and takes each change as a correction: the mail
 # keeps its new theme, and the sender and subject become an example shown to the model.
 # The same correction twice for one sender: a rule is proposed (you accept or ignore it).
+# Then the AI reads each mail whose theme you corrected and learns keywords (keywords.py).
 
 CHECK_AT_MOST = 2000  # most recent sorted mails whose labels are read again
 FIND_AT_MOST = 200    # mails sorted before v0.5 (their All Mail id is unknown): searched one by one
