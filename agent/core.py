@@ -8,16 +8,17 @@ import time
 from collections import Counter
 from datetime import datetime
 
-from . import batches, classify, config, hardware, keywords, memory, models, senders
-from .mail import Gmail, MailError, chunks
+from . import ask as agent_ask
+from . import batches, classify, config, hardware, keywords, memory, models, senders, skills
+from .mail import TABS, Gmail, MailError, chunks
 
 AGENT = "mail-adagio"
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 ACTIONS = ("capabilities", "check", "hardware", "preview", "correct", "rules", "delete_rule",
            "estimate", "plan", "apply", "discard", "undo", "status",
            "scan", "senders", "sender_state", "suggest", "add_rule", "label_order",
            "keep", "to_delete", "trash", "restore", "learn_gmail", "why", "journal",
-           "proposals", "ignore_proposal", "read")
+           "proposals", "ignore_proposal", "read", "search", "relabel", "keywords", "request")
 UI_ONLY = ("trash", "restore", "label_order", "read")  # a person must click them in the window: refused from the JSON door
 MAIL_LINE = "mail · "  # journal lines about one mail: kept out of the activity list, shown in the Journal
 LOG_PATH = config.ROOT / "adagio.log"  # readable journal of every run; None turns it off
@@ -33,9 +34,11 @@ def handle(request, cfg=None, gmail_factory=Gmail, ask=None, progress=None, door
     try:
         if action not in ACTIONS:
             raise ValueError(f"Unknown action '{action}'. Expected one of: {', '.join(ACTIONS)}")
-        if door == "json" and action in UI_ONLY:
+        if door in ("json", "agent") and action in UI_ONLY:
             raise ValueError(f"'{action}' is only available in the Mail Adagio window: a person must click it "
                              f"there. Mail Adagio never does it on a program's request.")
+        if door == "agent" and action not in skills.AGENT_ACTIONS:
+            raise ValueError(f"'{action}' is not an action the agent may use")
         if action == "hardware":
             result = hardware_report(cfg)
         elif action == "capabilities":
@@ -118,7 +121,8 @@ def capabilities():
     except (OSError, ValueError):
         contract = {}
     return {"name": AGENT, "contract": contract, "actions": [a for a in ACTIONS if a not in UI_ONLY],
-            "ui_only": list(UI_ONLY), "how_to_call": "python adagio.py call  (JSON on stdin, JSON on stdout)"}
+            "ui_only": list(UI_ONLY), "skills": skills.card(),
+            "how_to_call": "python adagio.py call  (JSON on stdin, JSON on stdout)"}
 
 
 def hardware_report(cfg=None):
@@ -214,7 +218,7 @@ def learn(cfg, request):
         if request["action"] == "rules":  # the Learning card
             out.update(keyword_changes=[{k: r[k] for k in ("word", "theme", "kind", "detail", "created")}
                                         for r in mem.keyword_history(8)],
-                       keywords_waiting=len(mem.keyword_queue()), corrections=correction_rates())
+                       keywords_waiting=len(mem.keyword_queue()), corrections=correction_rates(), gmail_tabs=tab_themes())
         return out
     finally:
         mem.close()
@@ -230,6 +234,27 @@ def correction_rates(n=5):
         return rows[::-1]
     finally:
         store.close()
+
+
+def tab_themes(top=3):
+    """For each Gmail tab, the themes Mail Adagio gave its mails (after your corrections), most used first:
+    [{tab, mails, themes: [{theme, share}]}]. A check of the sort against Gmail's own."""
+    store = batches.Store(MEMORY_PATH)
+    try:
+        rows = store.all("SELECT tab, theme, COUNT(*) AS n FROM mails WHERE state = 'applied' AND tab != '' "
+                         "GROUP BY tab, theme ORDER BY n DESC")
+    finally:
+        store.close()
+    out = {}
+    for r in rows:
+        out.setdefault(r["tab"], []).append(r)
+    order = {t: i for i, t in enumerate(TABS)}
+    result = []
+    for tab, items in sorted(out.items(), key=lambda kv: order.get(kv[0], 9)):
+        total = sum(x["n"] for x in items)
+        result.append({"tab": tab, "mails": total,
+                       "themes": [{"theme": x["theme"], "share": round(100 * x["n"] / total)} for x in items[:top]]})
+    return result
 
 
 def queue_theme_change(mem, gm_msgid, theme):
@@ -373,7 +398,7 @@ def sort_mails(cfg, mails, ask, model_note, progress=None):
                 "uid": mail.uid, "gm_msgid": mail.gm_msgid, "date": mail.date,
                 "sender": mail.sender, "subject": mail.subject,
                 "gmail_url": gmail_url(mail.gm_msgid),
-                "existing_labels": [x for x in mail.labels if not x.startswith("\\")],
+                "existing_labels": [x for x in mail.labels if not x.startswith("\\")], "tab": mail.tab,
                 "theme": r.theme, "status": r.status, "classified": r.ok, "to_delete": r.to_delete,
                 "rule": f"{rule['kind']}: {rule['value']}" if rule else "",
                 "confidence": "" if rule else (r.confidence if r.ok else "low"), "to_check": check,
@@ -707,6 +732,12 @@ def undo(cfg, request, gmail_factory, ask=None, progress=None):
                     groups.setdefault(tuple(r["added"]), []).append(found[r["gm_msgid"]])
             for labels, uids in groups.items():
                 gmail.change_labels(uids, remove=labels)
+            put_back = {}  # labels a relabel removed
+            for r in rows:
+                if r["gm_msgid"] in found and r["removed"]:
+                    put_back.setdefault(tuple(r["removed"]), []).append(found[r["gm_msgid"]])
+            for labels, uids in put_back.items():
+                gmail.change_labels(uids, add=labels)
             back = [found[r["gm_msgid"]] for r in rows if r["archived"] and r["gm_msgid"] in found]
             gmail.change_labels(back, add=[INBOX])
             unread = [found[r["gm_msgid"]] for r in rows if r["marked_read"] and r["gm_msgid"] in found]
@@ -718,7 +749,8 @@ def undo(cfg, request, gmail_factory, ask=None, progress=None):
         return {"undone": len(rows), "back_in_inbox": len(back), "batch_id": batch["id"],
                 "changes_made": len(rows), "progress": prog,
                 "log": f"undo: batch applied at {batch['applied'][11:16]}: labels removed from {len(rows)} mails, "
-                       f"{len(back)} put back in the Inbox" + (f", {len(unread)} unread again" if unread else "")}
+                       f"{len(back)} put back in the Inbox" + (f", {len(unread)} unread again" if unread else "")
+                       + (f", old labels back on {sum(len(u) for u in put_back.values())}" if put_back else "")}
     finally:
         store.close()
 
@@ -858,6 +890,150 @@ def all_labels(cfg):
     statuses, themes = config.order(cfg)
     out = [names[n] for n in statuses + themes]
     return out[:-1] + [config.check_label(cfg), config.delete_label(cfg)] + out[-1:] if out else out
+
+
+# --- Finding and changing given mails (used by the agent mode, open to other programs) ---------------
+
+def label_names(cfg):
+    """{Gmail label (lower case): theme or status name}"""
+    return {label.lower(): name for name, label in config.labels(cfg).items()}
+
+
+def search(cfg, request, gmail_factory, ask=None, progress=None):
+    """Find mails with Gmail's search. Reads labels and the first lines only; changes nothing."""
+    p = skills.check("search", request, cfg)
+    parts = []
+    if p.get("sender"):
+        parts.append(f'from:"{p["sender"].replace(chr(34), "")}"')
+    if p.get("subject"):
+        parts.append(f'subject:"{p["subject"].replace(chr(34), "")}"')
+    if p.get("words"):
+        parts.append(p["words"].replace('"', ""))
+    if p.get("days"):
+        parts.append(f"newer_than:{p['days']}d")
+    folder = None
+    if p.get("label"):
+        names = config.labels(cfg)
+        wanted = p["label"].strip().lower()
+        extra = {"to check": config.check_label(cfg), "to delete": config.delete_label(cfg)}
+        folder = next((label for name, label in names.items() if wanted in (name.lower(), label.lower())),
+                      extra.get(wanted))
+        if not folder:
+            raise ValueError(f"search: unknown label '{p['label']}'")
+    raw = " ".join(parts)
+    limit = p.get("limit") or 50
+    by_label = label_names(cfg)
+    themes, statuses = config.names(cfg["themes"]), config.names(cfg["statuses"])
+    with connect(cfg, gmail_factory) as gmail:
+        gmail.open(folder or ("INBOX" if p.get("inbox") else gmail.all_mail()))
+        uids = gmail.search(raw)
+        total = len(uids)
+        mails = gmail.fetch(uids[:limit], 300) if uids else []
+    if folder and p.get("inbox"):
+        mails = [m for m in mails if INBOX in m.labels]
+    out = []
+    for m in mails:
+        have = [by_label.get(x.lower()) for x in m.labels]
+        out.append({"gm_msgid": m.gm_msgid, "date": m.date, "sender": m.sender, "subject": m.subject,
+                    "theme": next((x for x in have if x in themes), ""),
+                    "status": next((x for x in have if x in statuses), ""),
+                    "in_inbox": INBOX in m.labels, "url": gmail_url(m.gm_msgid)})
+    where = f" in {folder}" if folder else " in the Inbox" if p.get("inbox") else ""
+    return {"query": raw, "found": total, "shown": len(out), "mails": out, "changes_made": 0,
+            "log": f"search: {total} mail{'s' if total != 1 else ''} found{where}"
+                   + (f" ({raw})" if raw else "") + (f", {len(out)} listed" if total > len(out) else "")}
+
+
+def relabel(cfg, request, gmail_factory, ask=None, progress=None):
+    """Give mails another theme and/or status in Gmail. The other theme (status) labels go, "To check" too;
+    out of the Inbox like a sorted mail. One batch that undo puts back; counts as your correction."""
+    p = skills.check("relabel", request, cfg)
+    names, by_label = config.labels(cfg), label_names(cfg)
+    themes, statuses = config.names(cfg["themes"]), config.names(cfg["statuses"])
+    check = config.check_label(cfg)
+    archive = cfg["behavior"]["archive"]
+    store, mem = batches.Store(MEMORY_PATH), memory.Memory(MEMORY_PATH)
+    rows, moved = [], 0
+    try:
+        with connect(cfg, gmail_factory) as gmail:
+            folders = gmail.folders()
+            known = {f.lower() for f in folders}
+            for label in [names[x] for x in (p.get("theme"), p.get("status")) if x]:
+                if label.lower() not in known:
+                    gmail.create_label(label)
+            gmail.open(gmail.all_mail(folders), readonly=False)
+            found = gmail.find(p["gm_msgids"])
+            heads = {m.uid: m for m in gmail.fetch(list(found.values()), 0, tabs=False)} if found else {}
+            groups = {}
+            for gm, uid in found.items():
+                m = heads.get(uid)
+                if not m:
+                    continue
+                have = {x.lower(): x for x in m.labels}
+                now = [by_label[x] for x in have if x in by_label]
+                old_theme = next((x for x in now if x in themes), "")
+                old_status = next((x for x in now if x in statuses), "")
+                theme, status = p.get("theme") or old_theme, p.get("status") or old_status
+                remove = [have[names[x].lower()] for x in now
+                          if (p.get("theme") and x in themes and x != theme)
+                          or (p.get("status") and x in statuses and x != status)]
+                if p.get("theme") and check.lower() in have:
+                    remove.append(have[check.lower()])
+                add = [names[x] for x in (p.get("theme"), p.get("status")) if x and names[x].lower() not in have]
+                archived = archive and INBOX in m.labels
+                if archived:
+                    remove.append(INBOX)
+                if not add and not remove:
+                    continue
+                groups.setdefault((tuple(add), tuple(remove)), []).append(uid)
+                before = store.mail(gm)
+                if p.get("theme") and before and before["theme"] != theme and (not before["corrected"] or mem.queued(gm)):
+                    mem.queue_keyword(gm, m.sender, m.subject, before["theme"], theme)  # the agent's mistake
+                if theme and status:
+                    mem.add_example(m.sender, m.subject, theme, status)
+                rows.append({"gm_msgid": gm, "uid": uid, "date": m.date, "sender": m.sender, "subject": m.subject,
+                             "theme": theme or "", "status": status or "", "added": add,
+                             "removed": [x for x in remove if x != INBOX], "archived": archived,
+                             "old": f"{old_theme or '-'} / {old_status or '-'}"})
+                moved += archived
+            for (add, remove), uids in groups.items():
+                gmail.change_labels(uids, add=add, remove=remove)
+        if rows:
+            store.add_relabel(rows)
+            for r in rows:
+                log(f"{MAIL_LINE}{(r['date'] or '')[:10]} · {r['sender'][:60]} · \"{' '.join(r['subject'].split())[:90]}\" · "
+                    f"relabelled on request · {r['old']} -> {r['theme'] or '-'} / {r['status'] or '-'}")
+    finally:
+        store.close()
+        mem.close()
+    target = " / ".join(x for x in (p.get("theme"), p.get("status")) if x)
+    return {"relabelled": len(rows), "not_found": len(p["gm_msgids"]) - len(found), "moved": moved,
+            "changes_made": len(rows),
+            "log": f"relabel: {len(rows)} mail{'s' if len(rows) != 1 else ''} -> {target}"
+                   + (f", {moved} moved out of the Inbox" if moved else "") + " (undo puts them back)"}
+
+
+def keywords_action(cfg, request, gmail_factory=None, ask=None, progress=None):
+    """Read the keywords, or add / remove keywords of one theme. Saved in config.yaml."""
+    p = skills.check("keywords", request, cfg)
+    words = config.keywords(cfg)
+    theme = p.get("theme")
+    if not theme or not (p.get("add") or p.get("remove")):
+        return {"keywords": {theme: words[theme]} if theme else words, "changes_made": 0}
+    gone = {w.lower() for w in p.get("remove", [])}
+    new = [w for w in words[theme] if w.lower() not in gone]
+    added = [w for w in p.get("add", []) if w.lower() not in {x.lower() for x in new}]
+    room = config.MAX_KEYWORDS - len(new)
+    new = config.clean_words(new + added[:max(room, 0)])
+    words[theme] = new
+    cfg["keywords"] = words
+    if request.get("save_keywords", True):
+        config.save_keywords(request.get("config") or config.DEFAULT_PATH, words)
+    return {"keywords": {theme: new}, "new_keywords": words, "changes_made": 0,
+            "log": f"keywords of {theme}: " + ", ".join(
+                x for x in ((f"+{', '.join(added[:max(room, 0)])}" if added else ""),
+                            (f"-{', '.join(sorted(gone))}" if gone else "")) if x)
+                   + (f" ({len(added) - room} not added: {config.MAX_KEYWORDS} at most)" if len(added) > room else "")}
 
 
 def keep(cfg, request, gmail_factory=None, ask=None, progress=None):
@@ -1165,6 +1341,6 @@ def read(cfg, request, gmail_factory, ask=None, progress=None):
     return msg
 
 
-STEP3.update(read=read, keep=keep, to_delete=to_delete, trash=trash, restore=restore, label_order=label_order, scan=scan,
+STEP3.update(request=agent_ask.request, search=search, relabel=relabel, keywords=keywords_action, read=read, keep=keep, to_delete=to_delete, trash=trash, restore=restore, label_order=label_order, scan=scan,
              senders=list_senders, sender_state=sender_state, suggest=suggest, learn_gmail=learn_gmail, why=why,
              journal=journal)

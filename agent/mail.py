@@ -31,6 +31,9 @@ LOGIN_HELP = ("Gmail refused the login for {address}. Check these 3 things: "
               "3) Paste it in Mail Adagio > Settings.")
 
 
+TABS = ("Primary", "Social", "Promotions", "Updates", "Forums")  # Gmail's tabs (French: Principale, Réseaux sociaux, Promotions, Notifications, Forums)
+
+
 @dataclass
 class Mail:
     uid: int                # IMAP id inside the mailbox
@@ -41,6 +44,7 @@ class Mail:
     labels: list = field(default_factory=list)  # labels already on the mail
     body: str = ""          # plain text extract, kept in memory only
     unsubscribe: str = ""   # unsubscribe link (List-Unsubscribe header, else a link in the mail)
+    tab: str = ""           # Gmail's own tab: Primary, Social, Promotions, Updates, Forums ("" unknown)
 
 
 @dataclass
@@ -98,7 +102,7 @@ class Gmail:
         uids.sort(reverse=True)
         return uids[:limit] if limit else uids
 
-    def fetch(self, uids, body_chars=1500):
+    def fetch(self, uids, body_chars=1500, tabs=True):
         """Fetch the given mails (headers, existing labels, start of the text)."""
         mails = []
         for chunk in chunks(uids, 50):
@@ -111,7 +115,31 @@ class Gmail:
                 if isinstance(item, tuple):
                     mails.append(parse_fetch(item[0], item[1], body_chars))
         mails.sort(key=lambda m: m.uid, reverse=True)
+        if tabs and mails:
+            found = self.tabs([m.uid for m in mails])
+            for m in mails:
+                m.tab = found.get(m.uid, "")
         return mails
+
+    def tabs(self, uids):
+        """{uid: Gmail tab} of the given mails of the open folder: Gmail's own sorting (Social, Promotions,
+        Updates, Forums; Primary for the others). IMAP does not give it as a label, Gmail's search does
+        (category:...). 4 searches, nothing read or changed. {} if the server cannot search that way."""
+        out = {}
+        for part in chunks(sorted(uids), 500):
+            uid_set = ",".join(map(str, part))
+            try:
+                for tab in TABS[1:]:
+                    status, data = self.imap.uid("SEARCH", None, "UID", uid_set, "X-GM-RAW", f'"category:{tab.lower()}"')
+                    if status != "OK":
+                        return {}
+                    for u in (data[0] or b"").split():
+                        out.setdefault(int(u), tab)
+            except Exception:  # not Gmail, or the search is refused: the sort goes on without the tab
+                return {}
+            for u in part:
+                out.setdefault(u, TABS[0])
+        return out
 
     def message(self, uid):
         """One whole mail for the reader window. BODY.PEEK: Gmail does not mark it as read."""
@@ -193,6 +221,18 @@ class Gmail:
         status, data = self.imap.rename(quote(old), quote(new))
         if status != "OK":
             raise MailError(f"Cannot rename the label '{old}' to '{new}'")
+
+    def search(self, raw=""):
+        """Mail ids of the open folder matching a Gmail search ("from:shop.com newer_than:30d"), newest first.
+        Nothing is read or changed. The words go as a literal, so any language works."""
+        if raw:
+            self.imap.literal = raw.encode("utf-8")
+            status, data = self.imap.uid("SEARCH", "CHARSET", "UTF-8", "X-GM-RAW")
+        else:
+            status, data = self.imap.uid("SEARCH", None, "ALL")
+        if status != "OK":
+            raise MailError("Gmail search failed")
+        return sorted((int(u) for u in (data[0] or b"").split()), reverse=True)
 
     def find(self, gm_msgids):
         """{gm_msgid: uid} in the open folder (open All Mail to find a mail wherever it is)."""
