@@ -1,0 +1,33 @@
+{
+  "description": "Le fichier du rapport existe déjà",
+  "mission": {
+    "version": 1,
+    "id": "test-12",
+    "agent_id": "mail-adagio",
+    "projet": "PROJET_DE_TEST",
+    "type_tache": "apercu-tri",
+    "but": "Le fichier du rapport existe déjà",
+    "critere_reussite": "etat = echec, motif « existe déjà » ; apercu.md inchangé",
+    "contexte": "Boîte de démonstration (mails inventés).",
+    "limites": {
+      "outils_interdits": []
+    },
+    "format_retour": {
+      "type": "fichier",
+      "destination": "apercu.md"
+    },
+    "validation": [],
+    "cree_le": "2026-10-29T12:00:00+01:00",
+    "donnees": {
+      "boite": "demo",
+      "nombre": 5
+    }
+  },
+  "critere_reussite": "etat = echec, motif « existe déjà » ; apercu.md inchangé",
+  "fichiers_projet": {
+    "apercu.md": "Ancien rapport à garder.\n"
+  },
+  "etats_acceptes": [
+    "echec"
+  ]
+}

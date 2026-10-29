@@ -1,0 +1,44 @@
+{
+  "description": "Pause puis reprise pendant le tri",
+  "mission": {
+    "version": 1,
+    "id": "test-11",
+    "agent_id": "mail-adagio",
+    "projet": "PROJET_DE_TEST",
+    "type_tache": "trier-mails",
+    "but": "Pause puis reprise pendant le tri",
+    "critere_reussite": "événement en_pause émis, puis mission terminée normalement après reprendre",
+    "contexte": "Boîte de démonstration (mails inventés).",
+    "limites": {
+      "outils_interdits": []
+    },
+    "format_retour": {
+      "type": "fichier",
+      "destination": "tri.md"
+    },
+    "validation": [],
+    "cree_le": "2026-10-29T12:00:00+01:00",
+    "donnees": {
+      "boite": "demo",
+      "nombre": 10
+    }
+  },
+  "critere_reussite": "événement en_pause émis, puis mission terminée normalement après reprendre",
+  "messages": [
+    {
+      "apres_evenement": "demarrage",
+      "type": "pause"
+    },
+    {
+      "apres_evenement": "en_pause",
+      "type": "reprendre"
+    }
+  ],
+  "delai_porte_s": 0.3,
+  "etats_acceptes": [
+    "termine"
+  ],
+  "evenements_attendus": [
+    "en_pause"
+  ]
+}

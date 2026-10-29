@@ -1,4 +1,9 @@
-"""Read, check and fill in config.yaml."""
+"""Read, check and fill in config.yaml.
+
+Everything Mail Adagio keeps lives in memoire/ (its own memory, as Orchestra asks): config.yaml, adagio.db,
+the journal. The memory_ functions below are the only ones that write there. Secrets are never in it:
+they go to the Windows vault (vault.py).
+"""
 import copy
 import json
 import os
@@ -9,9 +14,14 @@ from pathlib import Path
 
 import yaml
 
+from . import vault
+
 ROOT = Path(__file__).resolve().parent.parent
+MEMOIRE = ROOT / "memoire"  # the agent's own memory: settings, learned rules, journal
 EXAMPLE = ROOT / "config.example.yaml"
-DEFAULT_PATH = ROOT / "config.yaml"
+DEFAULT_PATH = MEMOIRE / "config.yaml"
+# files kept next to the program before v0.9: moved into memoire/ at the first start
+OLD_FILES = ("config.yaml", "adagio.db", "adagio.log", "adagio-window.log", "adagio-demo.db", "adagio-demo.log")
 
 PROVIDERS = ("anthropic", "openrouter", "ollama")
 
@@ -27,7 +37,67 @@ def load(path=DEFAULT_PATH):
         raise ConfigError(f"No config file at {path}. Run: python adagio.py setup")
     cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     check(cfg)
+    if move_secrets(path, cfg):
+        cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    gmail, model = cfg["gmail"], cfg["model"]
+    gmail["app_password"] = gmail.get("app_password") or vault.secret_read(vault.GMAIL, gmail.get("email"))
+    model["api_key"] = model.get("api_key") or vault.secret_read(vault.API_KEY, model.get("provider"))
     return cfg
+
+
+def move_secrets(path, cfg):
+    """An app password or API key still written in config.yaml (before v0.9): moved to the Windows vault,
+    then removed from the file. Left as it is when there is no vault here. True if the file changed."""
+    moved = {}
+    pw, email = cfg["gmail"].get("app_password"), cfg["gmail"].get("email")
+    if pw and email and vault.secret_save(vault.GMAIL, email, pw):
+        moved["app_password"] = ""
+    key, provider = cfg["model"].get("api_key"), cfg["model"].get("provider")
+    if key and provider and vault.secret_save(vault.API_KEY, provider, key):
+        moved["api_key"] = ""
+    if moved:
+        save_values(path, moved)
+    return bool(moved)
+
+
+def save_secrets(email=None, app_password="", provider=None, api_key=""):
+    """Typed in the page or at setup: straight to the Windows vault, never into config.yaml."""
+    if app_password and not vault.secret_save(vault.GMAIL, email, app_password):
+        raise ConfigError("Cannot save the app password: the Windows vault is not available "
+                          "(the keyring library is missing: run Mail Adagio.bat again, or pip install -r requirements.txt)")
+    if api_key and not vault.secret_save(vault.API_KEY, provider, api_key):
+        raise ConfigError("Cannot save the API key: the Windows vault is not available "
+                          "(the keyring library is missing: pip install -r requirements.txt)")
+
+
+def has_password(cfg):
+    g = cfg.get("gmail") or {}
+    return bool(g.get("app_password") or vault.secret_read(vault.GMAIL, g.get("email")))
+
+
+def memory_store_text(path, text):
+    """Write a file of the agent's memory (config.yaml): the only way config.yaml is written."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)  # only you can read the file (no effect on Windows)
+    except OSError:
+        pass
+
+
+def memory_move_old_files(root=ROOT, memoire=None):
+    """Before v0.9 the settings, the database and the journal were next to the program: move them into
+    memoire/ (once; a file already in memoire/ is never replaced). Returns the names moved."""
+    memoire = Path(memoire or root / "memoire")
+    moved = []
+    for name in OLD_FILES:
+        old, new = Path(root) / name, memoire / name
+        if old.exists() and not new.exists():
+            memoire.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(old), str(new))
+            moved.append(name)
+    return moved
 
 
 def check(cfg):
@@ -162,7 +232,7 @@ def save_colors(path, colors_by_label):
     if data:
         text += ("\n# Colours of the labels, picked in the app (Views > Color & Order). Gmail's own colour is set by hand.\n"
                  "colors: " + json.dumps(data, ensure_ascii=False) + "\n")
-    path.write_text(text, encoding="utf-8")
+    memory_store_text(path, text)
     return load(path)
 
 
@@ -276,7 +346,7 @@ def save_keywords(path, words_by_theme):
     text = re.sub(r"(?m)^keywords:.*\n?", "", text).rstrip("\n") + "\n"
     text += ("\n# Typical words of each theme, given to the model as clues. Change them in the app: Views > Keywords.\n"
              "keywords: " + json.dumps(data, ensure_ascii=False) + "\n")
-    path.write_text(text, encoding="utf-8")
+    memory_store_text(path, text)
     return load(path)
 
 
@@ -343,7 +413,7 @@ def save_rename(path, old, new, hint=None):
     if hint:
         block = re.sub(r"(?m)^(\s*hint:\s*).*$", lambda h: h.group(1) + json.dumps(after_hint(after, new), ensure_ascii=False), block, count=1)
     block = re.sub(r"(?m)^(\s*label:\s*).*$", lambda h: h.group(1) + json.dumps(new, ensure_ascii=False), block, count=1)
-    path.write_text(text[:m.start()] + block + text[end:], encoding="utf-8")
+    memory_store_text(path, text[:m.start()] + block + text[end:])
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if raw.get("keywords") is not None or after.get("keywords") != before.get("keywords"):
         save_keywords(path, after.get("keywords") or {})
@@ -381,11 +451,7 @@ def save_values(path, values):
     text = path.read_text(encoding="utf-8")
     for key, value in values.items():
         text = set_value(text, key, value)
-    path.write_text(text, encoding="utf-8")
-    try:
-        os.chmod(path, 0o600)  # only you can read the file (no effect on Windows)
-    except OSError:
-        pass
+    memory_store_text(path, text)
 
 
 DEFAULT_MODELS = {"anthropic": "claude-haiku-5-5", "openrouter": "anthropic/claude-haiku-5.5",
@@ -397,7 +463,7 @@ def ensure_file(path=DEFAULT_PATH):
     path = Path(path)
     if path.exists():
         return False
-    shutil.copy(EXAMPLE, path)
+    memory_store_text(path, EXAMPLE.read_text(encoding="utf-8"))
     return True
 
 
@@ -411,7 +477,7 @@ def save_order(path, names_in_order=None):
     if names_in_order:
         text += ("\n# Order and numbering of the Gmail labels (01 - ..., 11 - ...). Change it in the app: "
                  "Labels in Gmail > Order.\nlabel_order: " + json.dumps(list(names_in_order), ensure_ascii=False) + "\n")
-    path.write_text(text, encoding="utf-8")
+    memory_store_text(path, text)
     return load(path)
 
 
@@ -442,10 +508,7 @@ def save_settings(path, email, provider, model_name="", app_password="", api_key
     ensure_file(path)
     values = {"email": email.strip(), "provider": provider,
               "model_name": model_name.strip().strip("'\"").strip() or DEFAULT_MODELS[provider]}
-    if app_password.strip():
-        values["app_password"] = app_password.replace(" ", "").strip()
-    if api_key.strip():
-        values["api_key"] = api_key.strip()
+    save_secrets(values["email"], app_password.replace(" ", "").strip(), provider, api_key.strip())
     if base_url is not None:
         values["base_url"] = base_url.strip()
     save_values(path, values)
@@ -462,10 +525,11 @@ def setup(path=DEFAULT_PATH, ask=input, ask_secret=getpass, say=print):
 
     email = cfg["gmail"].get("email") or ask("  Gmail address: ").strip()
     values["email"] = email
-    if not cfg["gmail"].get("app_password"):
+    secrets = {}
+    if not has_password({"gmail": {**cfg["gmail"], "email": email}}):
         say("Create an app password at https://myaccount.google.com/apppasswords")
         say("(2-step verification must be on, and IMAP enabled in Gmail settings).")
-        values["app_password"] = ask_secret("  App password (hidden): ").replace(" ", "").strip()
+        secrets["app_password"] = ask_secret("  App password (hidden): ").replace(" ", "").strip()
 
     provider = ask(f"  Model provider ({' / '.join(PROVIDERS)}) [{cfg['model']['provider']}]: ").strip()
     provider = provider or cfg["model"]["provider"]
@@ -477,9 +541,10 @@ def setup(path=DEFAULT_PATH, ask=input, ask_secret=getpass, say=print):
     elif provider == "openrouter" and cfg["model"]["model_name"].startswith("claude-"):
         values["model_name"] = ask("  OpenRouter model [anthropic/claude-haiku-5.5]: ").strip() \
             or "anthropic/claude-haiku-5.5"
-    if provider != "ollama" and not cfg["model"].get("api_key"):
-        values["api_key"] = ask_secret(f"  {provider} API key (hidden): ").strip()
+    if provider != "ollama" and not (cfg["model"].get("api_key") or vault.secret_read(vault.API_KEY, provider)):
+        secrets["api_key"] = ask_secret(f"  {provider} API key (hidden): ").strip()
 
+    save_secrets(email, secrets.get("app_password", ""), provider, secrets.get("api_key", ""))
     save_values(path, values)
     say(f"Saved to {path}. Edit it any time to change themes or settings.")
     return load(path)
@@ -490,5 +555,4 @@ def needs_setup(path=DEFAULT_PATH):
     if not path.exists():
         return True
     cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    gmail = cfg.get("gmail", {})
-    return not (gmail.get("email") and gmail.get("app_password"))
+    return not ((cfg.get("gmail") or {}).get("email") and has_password(cfg))

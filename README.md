@@ -30,12 +30,15 @@ Python environment and installs the libraries. Then it opens Mail Adagio in your
 enter your details and run the sort. No window stays open: Mail Adagio runs in the background and
 **stops when you close its tab** (a reload does not stop it; a sort in progress ends after the mail
 in progress, like with Stop). What the window would have shown, startup errors included, goes to
-`adagio-window.log`; an error that stops the start also shows in a small message box.
+`memoire/adagio-window.log`; an error that stops the start also shows in a small message box.
 `Mail Adagio - demo.bat` opens the same interface with made-up mails, no Gmail account needed.
 Python must be installed (<https://www.python.org/downloads/>).
 
 `setup` asks for your Gmail address, the app password (hidden while you type), the model provider
-and its API key. Everything is saved in `config.yaml`, on your computer only (it is in `.gitignore`).
+and its API key. The settings are saved in `memoire/config.yaml`, on your computer only (in `.gitignore`).
+The app password and the API key go to the **Windows vault** (Credential Manager, under
+`orchestra/mail-adagio/...`), never in a file. Coming from 0.8 or older: on the first start, the old
+files (`config.yaml`, `adagio.db`, `adagio.log`) move into `memoire/` and the password moves to the vault.
 
 ## Use
 
@@ -88,7 +91,7 @@ reserved for the window.
 4. **Undo**: removes the labels the agent added and puts the mails back in the Inbox.
 
 With **Let the agent act alone** (or `act_alone: true`), batches are applied one after the other
-without asking. Progress is saved in `adagio.db`: after a stop or a crash, it resumes where it was.
+without asking. Progress is saved in `memoire/adagio.db`: after a stop or a crash, it resumes where it was.
 Gmail reserves the name *Important*, so that status uses the label **Priority** (change it with
 `label:` in `config.yaml`). Set `archive: false` to keep the mails in the Inbox.
 
@@ -97,7 +100,7 @@ Gmail reserves the name *Important*, so that status uses the label **Priority** 
 - **Order and numbers** (Labels in Gmail > Order and numbers): drag the labels into the order you
   want. With numbering on, Gmail lists them in that order: statuses `01 - Priority`, `02 - To Do`,
   `03 - Info`, themes `11 - Health` ... `21 - Promotions`, `97 - To check`, `98 - To delete`, `99 - Other`. Applying
-  renames the labels in Gmail (mails and colours stay), `config.yaml` (`label_order:`) and `adagio.db`.
+  renames the labels in Gmail (mails and colours stay), `config.yaml` (`label_order:`) and `memoire/adagio.db`.
 - **Colours**: each theme and status has one of Gmail's label colours (`color:` in `config.yaml`).
   IMAP cannot colour a label, so pick the same colour once in Gmail (the app lists them).
 
@@ -123,7 +126,7 @@ Gmail reserves the name *Important*, so that status uses the label **Priority** 
   the model was and its reason. **Ask the model why** reads the mail again for any other mail.
 - **Journal** (left menu): every mail sorted, with its sender, subject, rule or model and confidence,
   theme and status, the labels added and the reason for the mails to check; also what it learned.
-  Search and filter it. It is saved in `adagio.log`; the activity list on the right keeps one line per
+  Search and filter it. It is saved in `memoire/adagio.log`; the activity list on the right keeps one line per
   run.
 
 ## Learning from your changes in Gmail
@@ -236,13 +239,31 @@ Edit `themes` in `config.yaml`: add, rename or remove entries. To rename one, as
 in the theme. Each theme also has typical words (bank, invoice, receipt...) given to the model as
 clues: change them in the app, **Views > Keywords** (saved as `keywords:` at the end of `config.yaml`). Keep one theme named `Other` (used when nothing fits). Same for `statuses`.
 
+## Run by Orchestra (mission mode)
+
+Orchestra, the local agent orchestrator, runs Mail Adagio as a certified agent (contract 1, `manifeste.json`):
+
+```bash
+python adagio.py mission    # one mission (JSON) on stdin; events, then the report, on stdout
+```
+
+- Three tasks: `trier-mails` (sort the next batch and apply it, undoable), `apercu-tri` (classify recent
+  mails, change nothing), `demande` (a request in your own words, as in agent mode).
+- The only model is Orchestra's gate (`ORCHESTRA_MODELE_URL`, `ORCHESTRA_JETON`): no other model, no fallback.
+- The Trash, restoring, unsubscribing and sending mail are never done in a mission.
+- Stop and pause between two mails; the report (Markdown, in French) goes in the project folder, never
+  over an existing file. Everything else stays in `memoire/`.
+- `donnees.boite: "demo"` runs on the made-up mailbox (`memoire/demo/`): that is what `tests/*.json` use.
+  Replay them with the certification kit: `python rejouer_tests.py <this folder>`.
+
 ## Files
 
 ```
-adagio.py            command line (door 1) and JSON mode (door 2)
+adagio.py            command line (door 1), JSON mode (door 2), mission mode (Orchestra)
+manifeste.json       Orchestra manifest 2.0: what it does, its functions, network, secrets
 agent/core.py        handle(request) -> result: the single entry point
 agent/mail.py        Gmail over IMAP: read, labels, read flag, Trash on request (never expunges)
-agent/batches.py     progress of the sort and what was done to each mail, in adagio.db
+agent/batches.py     progress of the sort and what was done to each mail, in memoire/adagio.db
 agent/classify.py    prompt, answer check, retry, fallback
 agent/models.py      Anthropic, OpenRouter, Ollama adapters
 agent/hardware.py    graphics memory detection, local model choice
@@ -251,12 +272,20 @@ agent/ui.py          terminal display
 agent/web.py         local web server (127.0.0.1 only) for the interface
 agent/web/index.html the interface: one page, no external files
 agent/demo.py        made-up mails for the demo mode
-agent/memory.py      what you taught it: rules and corrections, kept in adagio.db
-agent/senders.py     who writes to you: counts, unsubscribe links, suggested rules, in adagio.db
+agent/memory.py      what you taught it: rules and corrections, kept in memoire/adagio.db
+agent/senders.py     who writes to you: counts, unsubscribe links, suggested rules, in memoire/adagio.db
 agent/keywords.py    keywords learned from your corrections
 agent/skills.py      the skills card: every action, its parameters, the checks of agent mode
 agent/ask.py         agent mode: a request in your own words -> checked steps -> results
-tests/               python -m unittest   (fake Gmail, fake model)
+agent/tools.py       the tools agent mode may use: read_, memory_ or action_ (with a reason)
+agent/mission.py     mission mode: Orchestra's contract 1, protocol stdio-json
+agent/vault.py       secrets in the Windows vault (keyring)
+agent/db.py          the only door to the SQLite memory
+agent/donnee.py      external content is shown to the model as data (<donnee_externe>)
+memoire/             settings, memory, journal (created on first run, never committed)
+modeles/             the form of each mission task and of its report
+tests/               python -m unittest discover -s tests   (fake Gmail, fake model)
+tests/*.json         Orchestra mission tests (replayed by the certification kit)
 ```
 
 ## Privacy

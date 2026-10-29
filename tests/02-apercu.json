@@ -1,0 +1,30 @@
+{
+  "description": "Aperçu du tri des 10 mails les plus récents, sans rien changer",
+  "mission": {
+    "version": 1,
+    "id": "test-02",
+    "agent_id": "mail-adagio",
+    "projet": "PROJET_DE_TEST",
+    "type_tache": "apercu-tri",
+    "but": "Aperçu du tri des 10 mails les plus récents, sans rien changer",
+    "critere_reussite": "rapport apercu.md écrit ; aucune action déclarée (lecture seule)",
+    "contexte": "Boîte de démonstration (mails inventés).",
+    "limites": {
+      "outils_interdits": []
+    },
+    "format_retour": {
+      "type": "fichier",
+      "destination": "apercu.md"
+    },
+    "validation": [],
+    "cree_le": "2026-10-29T12:00:00+01:00",
+    "donnees": {
+      "boite": "demo",
+      "nombre": 10
+    }
+  },
+  "critere_reussite": "rapport apercu.md écrit ; aucune action déclarée (lecture seule)",
+  "etats_acceptes": [
+    "termine"
+  ]
+}

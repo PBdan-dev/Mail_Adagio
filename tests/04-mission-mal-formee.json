@@ -1,0 +1,30 @@
+{
+  "description": "Mission sans dossier de projet",
+  "mission": {
+    "version": 1,
+    "id": "test-04",
+    "agent_id": "mail-adagio",
+    "type_tache": "trier-mails",
+    "but": "Mission sans dossier de projet",
+    "critere_reussite": "etat = echec avec un motif qui nomme le champ « projet » ; aucun fichier écrit",
+    "contexte": "Boîte de démonstration (mails inventés).",
+    "limites": {
+      "outils_interdits": []
+    },
+    "format_retour": {
+      "type": "fichier",
+      "destination": "rapport.md"
+    },
+    "validation": [],
+    "cree_le": "2026-10-29T12:00:00+01:00",
+    "donnees": {
+      "boite": "demo",
+      "nombre": 5
+    }
+  },
+  "critere_reussite": "etat = echec avec un motif qui nomme le champ « projet » ; aucun fichier écrit",
+  "mal_formee": true,
+  "etats_acceptes": [
+    "echec"
+  ]
+}

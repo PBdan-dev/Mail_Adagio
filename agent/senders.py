@@ -8,10 +8,10 @@ Used for two things:
 Kept in adagio.db. Only the address, the name, counts and the unsubscribe link are stored.
 """
 import json
-import sqlite3
 from collections import Counter
 
 from .batches import now
+from .db import Db
 from .memory import address, domain
 
 SCHEMA = """
@@ -58,64 +58,51 @@ def aggregate(headers, samples=3):
     return rows
 
 
-class Senders:
+class Senders(Db):
     def __init__(self, path):
-        self.db = sqlite3.connect(path, check_same_thread=False)
-        self.db.row_factory = sqlite3.Row
-        self.db.executescript(SCHEMA)
-
-    def close(self):
-        self.db.close()
+        self.memory_open(path, SCHEMA)
 
     def save_scan(self, rows, mails, mailbox):
         """Replace the counts with the new scan; keep what you did (opened, hidden) and suggestions."""
-        with self.db:
-            self.db.execute("UPDATE senders SET mails = 0, samples = '[]'")
-            for r in rows.values():
-                self.db.execute(
-                    "INSERT INTO senders (address, name, domain, mails, last_date, unsubscribe, samples) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (address) DO UPDATE SET name = excluded.name, "
-                    "mails = excluded.mails, last_date = excluded.last_date, samples = excluded.samples, "
-                    "unsubscribe = CASE WHEN excluded.unsubscribe != '' THEN excluded.unsubscribe "
-                    "ELSE senders.unsubscribe END",
-                    (r["address"], r["name"], r["domain"], r["mails"], r["last_date"], r["unsubscribe"],
-                     json.dumps(r["samples"])))
-            self.db.execute("INSERT INTO scans (created, mails, mailbox) VALUES (?, ?, ?)", (now(), mails, mailbox))
+        self.memory_write(
+            ("UPDATE senders SET mails = 0, samples = '[]'", ()),
+            *[("INSERT INTO senders (address, name, domain, mails, last_date, unsubscribe, samples) "
+               "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (address) DO UPDATE SET name = excluded.name, "
+               "mails = excluded.mails, last_date = excluded.last_date, samples = excluded.samples, "
+               "unsubscribe = CASE WHEN excluded.unsubscribe != '' THEN excluded.unsubscribe "
+               "ELSE senders.unsubscribe END",
+               (r["address"], r["name"], r["domain"], r["mails"], r["last_date"], r["unsubscribe"],
+                json.dumps(r["samples"]))) for r in rows.values()],
+            ("INSERT INTO scans (created, mails, mailbox) VALUES (?, ?, ?)", (now(), mails, mailbox)))
 
     def last_scan(self):
-        row = self.db.execute("SELECT * FROM scans ORDER BY id DESC LIMIT 1").fetchone()
-        return dict(row) if row else None
+        return self.one("SELECT * FROM scans ORDER BY id DESC LIMIT 1")
 
     def all(self):
-        rows = [dict(r) for r in self.db.execute(
-            "SELECT * FROM senders WHERE mails > 0 ORDER BY mails DESC, last_date DESC")]
+        rows = self.memory_read("SELECT * FROM senders WHERE mails > 0 ORDER BY mails DESC, last_date DESC")
         for r in rows:
             r["samples"] = json.loads(r["samples"])
         return rows
 
     def get(self, addr):
-        row = self.db.execute("SELECT * FROM senders WHERE address = ?", (addr,)).fetchone()
-        if not row:
+        r = self.one("SELECT * FROM senders WHERE address = ?", addr)
+        if not r:
             return None
-        r = dict(row)
         r["samples"] = json.loads(r["samples"])
         return r
 
     def set_state(self, addr, state):
         if state not in ("", "opened", "hidden"):
             raise ValueError("state must be '', opened or hidden")
-        with self.db:
-            self.db.execute("UPDATE senders SET state = ?, state_at = ? WHERE address = ?", (state, now(), addr))
+        self.memory_write(("UPDATE senders SET state = ?, state_at = ? WHERE address = ?", (state, now(), addr)))
 
     def set_link(self, addr, link):
-        with self.db:
-            self.db.execute("UPDATE senders SET unsubscribe = ? WHERE address = ? AND unsubscribe = ''",
-                            (link, addr))
+        self.memory_write(("UPDATE senders SET unsubscribe = ? WHERE address = ? AND unsubscribe = ''",
+                           (link, addr)))
 
     def suggest(self, addr, theme, status, votes):
-        with self.db:
-            self.db.execute("UPDATE senders SET theme = ?, status = ?, votes = ? WHERE address = ?",
-                            (theme, status, votes, addr))
+        self.memory_write(("UPDATE senders SET theme = ?, status = ?, votes = ? WHERE address = ?",
+                           (theme, status, votes, addr)))
 
 
 def majority(results):

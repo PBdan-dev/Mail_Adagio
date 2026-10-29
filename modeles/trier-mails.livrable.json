@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "description": "Rapport .md : comptes par thème et par statut, puis un tableau Date | Expéditeur | Sujet | Thème | Statut | À vérifier. Dans Gmail : un libellé de thème et un de statut par mail, mails sortis de la boîte de réception ; annulable.",
+  "required": [
+    "fichier",
+    "mails_tries"
+  ],
+  "properties": {
+    "fichier": {
+      "type": "string",
+      "pattern": "\\.md$",
+      "description": "Rapport en Markdown écrit à format_retour.destination (absent si format_retour.type = texte)."
+    },
+    "mails_tries": {
+      "type": "integer"
+    },
+    "sortis_de_la_boite": {
+      "type": "integer"
+    },
+    "a_verifier": {
+      "type": "integer"
+    },
+    "par_theme": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer"
+      }
+    },
+    "par_statut": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer"
+      }
+    }
+  }
+}

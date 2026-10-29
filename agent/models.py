@@ -1,7 +1,10 @@
 """Model adapters. Each one turns (system, user, schema) into the model's text answer.
 
 The rest of the code only calls `ask(system, user, schema)` and never knows which model answered.
+Run by Orchestra (a mission), the only model is Orchestra's gate ("porte"): ORCHESTRA_MODELE_URL and
+ORCHESTRA_JETON, nothing else. Every network call goes through the read_ functions below.
 """
+import os
 import json
 import shutil
 import socket
@@ -28,9 +31,19 @@ class ModelTimeout(ModelError):
     """The model did not answer in time (one mail): skip it, do not stop the batch."""
 
 
+ONLY_PORTE = {"on": False}  # True during a mission: Orchestra's gate is the only model
+
+
+def no_other_model(what):
+    if ONLY_PORTE["on"]:
+        raise ModelError(f"In a mission the only model is Orchestra's gate ({what} refused)")
+
+
 def make_ask(model_cfg):
     """Return a function ask(system, user, schema) -> str for the configured provider."""
     provider = model_cfg["provider"]
+    if provider != "porte":
+        no_other_model(provider)
     name = model_cfg.get("model_name")
     key = model_cfg.get("api_key") or None
     url = (model_cfg.get("base_url") or DEFAULT_URLS.get(provider, "")).rstrip("/")
@@ -42,6 +55,8 @@ def make_ask(model_cfg):
         return _openai_compatible(name, key, url)
     if provider == "ollama":
         return _ollama(name, url, int(model_cfg.get("timeout_s") or 60))
+    if provider == "porte":
+        return _porte(name, model_cfg["base_url"], model_cfg["api_key"], int(model_cfg.get("timeout_s") or 600))
     raise ModelError(f"Unknown provider '{provider}'")
 
 
@@ -50,11 +65,12 @@ def _anthropic(name, key, url):
         import anthropic
     except ImportError as e:
         raise ModelError("The 'anthropic' package is missing: pip install -r requirements.txt") from e
-    client = anthropic.Anthropic(api_key=key, base_url=url, max_retries=3)
+    client = anthropic.Anthropic(api_key=key, base_url=url, max_retries=2)  # at most 2 new tries
 
     def ask(system, user, schema):
         try:
-            response = client.messages.create(
+            response = read_anthropic(
+                client,
                 model=name,
                 max_tokens=1024,
                 system=system,
@@ -74,6 +90,11 @@ def _anthropic(name, key, url):
     return ask
 
 
+def read_anthropic(client, **request):
+    """One call to Anthropic's API (the cloud model you chose in Settings; never in a mission)."""
+    return client.messages.create(**request)
+
+
 def _openai_compatible(name, key, url):
     """OpenRouter, and any server that speaks the OpenAI chat format."""
     def ask(system, user, schema):
@@ -85,7 +106,7 @@ def _openai_compatible(name, key, url):
                 "name": "classification", "strict": True, "schema": schema}},
             "temperature": 0,
         }
-        data = _post(f"{url}/chat/completions", body, {"Authorization": f"Bearer {key}"})
+        data = read_http_post(f"{url}/chat/completions", body, {"Authorization": f"Bearer {key}"})
         try:
             return data["choices"][0]["message"]["content"] or ""
         except (KeyError, IndexError, TypeError) as e:
@@ -100,8 +121,9 @@ OLLAMA_MISSING = ("Ollama is not installed on this computer. Get it at https://o
 tried_start = {"done": False}  # start Ollama at most once per session: never wait on it again and again
 
 
-def start_ollama(url=None, wait=20):
+def action_start_ollama(url=None, wait=20):
     """Ollama is not running: start it if it is installed on this computer. True if it now answers."""
+    no_other_model("starting Ollama")
     url = (url or DEFAULT_URLS["ollama"]).rstrip("/")
     host = urllib.parse.urlparse(url).hostname or ""
     exe = _ollama_exe()
@@ -116,7 +138,7 @@ def start_ollama(url=None, wait=20):
         return False
     for _ in range(wait * 2):
         try:
-            _get(f"{url}/api/tags", timeout=1)
+            read_http_get(f"{url}/api/tags", timeout=1)
             return True
         except ModelError:
             time.sleep(0.5)
@@ -127,17 +149,18 @@ def ollama_models(url=None, start=False):
     """What Ollama has: {'installed': [names], 'running': [names loaded in memory]}.
 
     start: if Ollama is not running, try to start it once, else say clearly how to."""
+    no_other_model("Ollama")
     url = (url or DEFAULT_URLS["ollama"]).rstrip("/")
     try:
-        _get(f"{url}/api/tags", timeout=3)
+        read_http_get(f"{url}/api/tags", timeout=3)
     except ModelError as e:
-        if not (start and start_ollama(url)):
+        if not (start and action_start_ollama(url)):
             local = (urllib.parse.urlparse(url).hostname or "") in ("localhost", "127.0.0.1")
             if local and not _ollama_exe():
                 raise ModelError(OLLAMA_MISSING, "ollama_missing") from e
             raise ModelError(OLLAMA_DOWN if local else f"Ollama does not answer at {url}.", "ollama_down") from e
-    installed = _get(f"{url}/api/tags").get("models") or []
-    running = _get(f"{url}/api/ps").get("models") or []
+    installed = read_http_get(f"{url}/api/tags").get("models") or []
+    running = read_http_get(f"{url}/api/ps").get("models") or []
     return {"installed": [m.get("name") or m.get("model") for m in installed],
             "running": [m.get("name") or m.get("model") for m in running]}
 
@@ -148,9 +171,10 @@ LOAD_TIMEOUT = 300  # loading a model from disk can take a few minutes on a slow
 
 def load_model(name, url=None):
     """Load a model into Ollama's memory now, so the first mail does not wait. Returns the seconds it took."""
+    no_other_model("Ollama")
     url = (url or DEFAULT_URLS["ollama"]).rstrip("/")
     started = time.time()
-    _post(f"{url}/api/generate", {"model": name, "prompt": "", "stream": False, "keep_alive": KEEP_ALIVE},
+    read_http_post(f"{url}/api/generate", {"model": name, "prompt": "", "stream": False, "keep_alive": KEEP_ALIVE},
           {}, timeout=LOAD_TIMEOUT)
     return round(time.time() - started, 1)
 
@@ -175,7 +199,7 @@ def _ollama(name, url, timeout=60):
         if no_think["on"]:
             body["think"] = False
         try:
-            data = _post(f"{url}/api/chat", body, {}, timeout=wait)
+            data = read_http_post(f"{url}/api/chat", body, {}, timeout=wait)
         except ModelTimeout:
             raise
         except ModelError as e:
@@ -183,12 +207,40 @@ def _ollama(name, url, timeout=60):
                 raise
             no_think["on"] = False
             body.pop("think")
-            data = _post(f"{url}/api/chat", body, {}, timeout=wait)
+            data = read_http_post(f"{url}/api/chat", body, {}, timeout=wait)
         first["on"] = False
         try:
             return data["message"]["content"]
         except (KeyError, TypeError) as e:
             raise ModelError(f"Unexpected answer: {str(data)[:200]}") from e
+    return ask
+
+
+PORTE_ENV = ("ORCHESTRA_MODELE_URL", "ORCHESTRA_JETON")
+
+
+def porte_config(name="inherit"):
+    """The model settings of a mission: Orchestra's gate only. ModelError if Orchestra gave none."""
+    url, token = (os.environ.get(k, "").strip() for k in PORTE_ENV)
+    if not url or not token:
+        raise ModelError("Orchestra's model gate is missing (ORCHESTRA_MODELE_URL / ORCHESTRA_JETON): "
+                         "a mission never uses another model")
+    return {"provider": "porte", "model_name": name or "inherit", "base_url": url.rstrip("/"), "api_key": token}
+
+
+def _porte(name, url, token, timeout=600):
+    """Orchestra's gate speaks Ollama's /api/chat. Orchestra picks and loads the model; Mail Adagio only
+    asks. No other model if it does not answer: the mission fails with the reason."""
+    def ask(system, user, schema):
+        body = {"model": name, "messages": [{"role": "system", "content": system},
+                                            {"role": "user", "content": user}],
+                "format": schema, "stream": False, "think": False,
+                "options": {"temperature": 0, "num_predict": 256, "num_ctx": 4096}}
+        data = read_http_post(f"{url}/api/chat", body, {"Authorization": f"Bearer {token}"}, timeout=timeout)
+        try:
+            return data["message"]["content"] or ""
+        except (KeyError, TypeError) as e:
+            raise ModelError(f"Unexpected answer from Orchestra's gate: {str(data)[:200]}") from e
     return ask
 
 
@@ -199,7 +251,7 @@ def _ollama_exe():
     return shutil.which("ollama") or (default if default and os.path.exists(default) else "")
 
 
-def _get(url, timeout=5):
+def read_http_get(url, timeout=5):
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:
             return json.loads(response.read())
@@ -209,7 +261,7 @@ def _get(url, timeout=5):
         raise ModelError(f"Ollama is not reachable at {url.rsplit('/api', 1)[0]}. Is it running?") from e
 
 
-def _post(url, body, headers, timeout=60):
+def read_http_post(url, body, headers, timeout=60):
     request = urllib.request.Request(
         url, data=json.dumps(body).encode(), method="POST",
         headers={"Content-Type": "application/json", **headers})

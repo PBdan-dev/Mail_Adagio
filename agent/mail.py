@@ -1,6 +1,10 @@
 """Gmail over IMAP: read mails, and (step 3) add labels and move mails out of the Inbox.
 
 Never deletes: the only writes are adding/removing Gmail labels (\\Inbox is a label too).
+Every exchange with Gmail goes through three functions of the Gmail class:
+- read_imap: reads only (open a folder, list, search, fetch with BODY.PEEK so a mail stays unread);
+- action_imap: changes that can be undone (labels, read/unread, copy to a label, create or rename a label);
+- action_sensitive_trash: the Trash, only on a click in the window with the count seen; never in a mission.
 """
 import base64
 import email
@@ -12,6 +16,8 @@ from datetime import date, timedelta
 from email import policy
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
+
+from . import models
 
 FETCH_BYTES = 30000  # first 30 KB of each mail: enough for the text, skips big attachments
 READ_BYTES = 3_000_000  # the reader window: the whole mail up to 3 MB (big attachments are cut, their names stay)
@@ -57,6 +63,12 @@ class Header:
     unsubscribe: str = ""
 
 
+READ_COMMANDS = ("select", "list", "logout")
+READ_UID = ("SEARCH", "FETCH")
+WRITE_COMMANDS = ("create", "rename")
+WRITE_UID = ("STORE", "COPY")
+
+
 class Gmail:
     """Small wrapper around imaplib for Gmail."""
 
@@ -66,6 +78,17 @@ class Gmail:
         self.imap = None
 
     def __enter__(self):
+        self.read_connect()
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            self.read_imap("logout")
+        except Exception:
+            pass
+
+    def read_connect(self):
+        """Connect to Gmail (imap.gmail.com, port 993) and sign in with the app password."""
         try:
             self.imap = self.imap_class(self.host)
             self.imap.login(self.address, self.password)
@@ -74,17 +97,44 @@ class Gmail:
         except OSError as e:
             raise MailError(f"Cannot reach Gmail ({self.host}). Check your internet connection. ({e})",
                             "offline") from e
-        return self
 
-    def __exit__(self, *exc):
-        try:
-            self.imap.logout()
-        except Exception:
-            pass
+    def read_imap(self, command, *args, **kwargs):
+        """Read Gmail. Only commands that change nothing: anything else is refused."""
+        if command == "uid":
+            if args[0] not in READ_UID:
+                raise MailError(f"read_imap only reads (refused: UID {args[0]})")
+            if args[0] == "FETCH" and re.search(r"BODY\[|RFC822\b(?!\.SIZE)", " ".join(map(str, args[1:]))):
+                raise MailError("read_imap fetches with BODY.PEEK only: a mail must stay unread")
+        elif command not in READ_COMMANDS:
+            raise MailError(f"read_imap only reads (refused: {command})")
+        return getattr(self.imap, command)(*args, **kwargs)
+
+    def action_imap(self, command, *args):
+        """Change Gmail in a way that can be undone: add or remove labels and the read flag, copy to a
+        label, create or rename a label. Never the Trash, never a permanent delete."""
+        if command == "uid":
+            if args[0] not in WRITE_UID:
+                raise MailError(f"action_imap refused: UID {args[0]}")
+            if args[0] == "STORE" and ("\\Deleted" in str(args[-1]) or
+                                       args[2].startswith("+") and "\\Trash" in str(args[-1])):
+                raise MailError("action_imap never deletes nor moves to the Trash")
+        elif command not in WRITE_COMMANDS:
+            raise MailError(f"action_imap refused: {command}")
+        return getattr(self.imap, command)(*args)
+
+    def action_sensitive_trash(self, uids):
+        """Move to Gmail's Trash (Gmail empties it after 30 days). Never a permanent delete. Only on your
+        click in the window, after the count was shown; refused to other programs and to missions."""
+        if models.ONLY_PORTE["on"]:  # a mission is running: never the Trash, whoever asks
+            raise MailError("The Trash is never used in a mission")
+        for chunk in chunks(sorted(uids), 200):
+            status, _ = self.imap.uid("STORE", ",".join(map(str, chunk)), "+X-GM-LABELS", "(\\Trash)")
+            if status != "OK":
+                raise MailError("Gmail refused to move mails to the Trash")
 
     def open(self, mailbox="INBOX", readonly=True):
         """Open a mailbox (read-only unless asked) and return its number of mails."""
-        status, data = self.imap.select(quote(mailbox), readonly=readonly)
+        status, data = self.read_imap("select", quote(mailbox), readonly=readonly)
         if status != "OK":
             raise MailError(f"Cannot open mailbox '{mailbox}'")
         return int(data[0])
@@ -95,7 +145,7 @@ class Gmail:
         if since_days:
             day = date.today() - timedelta(days=since_days)
             criteria = ["SINCE", day.strftime("%d-%b-%Y")]
-        status, data = self.imap.uid("SEARCH", None, *criteria)
+        status, data = self.read_imap("uid", "SEARCH", None, *criteria)
         if status != "OK":
             raise MailError("Search failed")
         uids = [int(u) for u in data[0].split() if not max_uid or int(u) <= max_uid]
@@ -107,8 +157,7 @@ class Gmail:
         mails = []
         for chunk in chunks(uids, 50):
             uid_set = ",".join(str(u) for u in chunk)
-            status, data = self.imap.uid(
-                "FETCH", uid_set, f"(X-GM-MSGID X-GM-LABELS BODY.PEEK[]<0.{FETCH_BYTES}>)")
+            status, data = self.read_imap("uid", "FETCH", uid_set, f"(X-GM-MSGID X-GM-LABELS BODY.PEEK[]<0.{FETCH_BYTES}>)")
             if status != "OK":
                 raise MailError("Fetch failed")
             for item in data:
@@ -130,7 +179,7 @@ class Gmail:
             uid_set = ",".join(map(str, part))
             try:
                 for tab in TABS[1:]:
-                    status, data = self.imap.uid("SEARCH", None, "UID", uid_set, "X-GM-RAW", f'"category:{tab.lower()}"')
+                    status, data = self.read_imap("uid", "SEARCH", None, "UID", uid_set, "X-GM-RAW", f'"category:{tab.lower()}"')
                     if status != "OK":
                         return {}
                     for u in (data[0] or b"").split():
@@ -143,7 +192,7 @@ class Gmail:
 
     def message(self, uid):
         """One whole mail for the reader window. BODY.PEEK: Gmail does not mark it as read."""
-        status, data = self.imap.uid("FETCH", str(uid), f"(X-GM-MSGID X-GM-LABELS RFC822.SIZE BODY.PEEK[]<0.{READ_BYTES}>)")
+        status, data = self.read_imap("uid", "FETCH", str(uid), f"(X-GM-MSGID X-GM-LABELS RFC822.SIZE BODY.PEEK[]<0.{READ_BYTES}>)")
         if status != "OK":
             raise MailError("Fetch failed")
         for item in data:
@@ -155,7 +204,7 @@ class Gmail:
         """From, Date and List-Unsubscribe of many mails, fast: the mail content is not downloaded."""
         out = []
         for chunk in chunks(list(uids), 500):
-            status, data = self.imap.uid("FETCH", ",".join(map(str, chunk)),
+            status, data = self.read_imap("uid", "FETCH", ",".join(map(str, chunk)),
                                          "(X-GM-MSGID BODY.PEEK[HEADER.FIELDS (FROM DATE LIST-UNSUBSCRIBE)])")
             if status != "OK":
                 raise MailError("Fetch failed")
@@ -174,7 +223,7 @@ class Gmail:
     # --- step 3: writing labels -------------------------------------------------
     def folders(self):
         """{name: flags} of every folder and label."""
-        status, data = self.imap.list()
+        status, data = self.read_imap("list")
         if status != "OK":
             raise MailError("Cannot list the labels")
         out = {}
@@ -200,25 +249,21 @@ class Gmail:
                 return name
         return default
 
-    def to_trash(self, uids):
-        """Move to Gmail's Trash (Gmail empties it after 30 days). Never a permanent delete."""
-        self.change_labels(uids, add=["\\Trash"])
-
     def copy(self, uids, label):
         """Copy to a label: out of the Trash, a mail goes back with this label."""
         for chunk in chunks(sorted(uids), 200):
-            status, _ = self.imap.uid("COPY", ",".join(map(str, chunk)), quote(label))
+            status, _ = self.action_imap("uid", "COPY", ",".join(map(str, chunk)), quote(label))
             if status != "OK":
                 raise MailError(f"Gmail refused to copy mails to '{label}'")
 
     def create_label(self, name):
-        status, data = self.imap.create(quote(name))
+        status, data = self.action_imap("create", quote(name))
         if status != "OK" and b"ALREADYEXISTS" not in b" ".join(d or b"" for d in data).upper():
             raise MailError(f"Cannot create the label '{name}'")
 
     def rename_label(self, old, new):
         """Gmail keeps the mails and the colour of a renamed label."""
-        status, data = self.imap.rename(quote(old), quote(new))
+        status, data = self.action_imap("rename", quote(old), quote(new))
         if status != "OK":
             raise MailError(f"Cannot rename the label '{old}' to '{new}'")
 
@@ -227,9 +272,9 @@ class Gmail:
         Nothing is read or changed. The words go as a literal, so any language works."""
         if raw:
             self.imap.literal = raw.encode("utf-8")
-            status, data = self.imap.uid("SEARCH", "CHARSET", "UTF-8", "X-GM-RAW")
+            status, data = self.read_imap("uid", "SEARCH", "CHARSET", "UTF-8", "X-GM-RAW")
         else:
-            status, data = self.imap.uid("SEARCH", None, "ALL")
+            status, data = self.read_imap("uid", "SEARCH", None, "ALL")
         if status != "OK":
             raise MailError("Gmail search failed")
         return sorted((int(u) for u in (data[0] or b"").split()), reverse=True)
@@ -238,7 +283,7 @@ class Gmail:
         """{gm_msgid: uid} in the open folder (open All Mail to find a mail wherever it is)."""
         found = {}
         for gm in gm_msgids:
-            status, data = self.imap.uid("SEARCH", None, "X-GM-MSGID", str(gm))
+            status, data = self.read_imap("uid", "SEARCH", None, "X-GM-MSGID", str(gm))
             ids = data[0].split() if status == "OK" and data and data[0] else []
             if ids:
                 found[str(gm)] = int(ids[-1])
@@ -248,7 +293,7 @@ class Gmail:
         """{uid: (gm_msgid, [labels])} for mails of the open folder (\\Inbox included). No content."""
         out = {}
         for chunk in chunks(list(uids), 500):
-            status, data = self.imap.uid("FETCH", ",".join(map(str, chunk)), "(X-GM-MSGID X-GM-LABELS)")
+            status, data = self.read_imap("uid", "FETCH", ",".join(map(str, chunk)), "(X-GM-MSGID X-GM-LABELS)")
             if status != "OK":
                 raise MailError("Fetch failed")
             for item in data:
@@ -265,7 +310,7 @@ class Gmail:
         """The mails among `uids` (open folder) that are not read yet."""
         out = set()
         for chunk in chunks(sorted(uids), 500):
-            status, data = self.imap.uid("FETCH", ",".join(map(str, chunk)), "(FLAGS)")
+            status, data = self.read_imap("uid", "FETCH", ",".join(map(str, chunk)), "(FLAGS)")
             if status != "OK":
                 raise MailError("Fetch failed")
             for item in data:
@@ -277,7 +322,7 @@ class Gmail:
 
     def mark_read(self, uids, read=True):
         for chunk in chunks(sorted(uids), 200):
-            status, _ = self.imap.uid("STORE", ",".join(map(str, chunk)), "+FLAGS" if read else "-FLAGS", "(\\Seen)")
+            status, _ = self.action_imap("uid", "STORE", ",".join(map(str, chunk)), "+FLAGS" if read else "-FLAGS", "(\\Seen)")
             if status != "OK":
                 raise MailError("Gmail refused to mark mails as read")
 
@@ -289,7 +334,7 @@ class Gmail:
             value = "(" + " ".join(label if label.startswith("\\") else quote(label)
                                    for label in labels) + ")"
             for chunk in chunks(sorted(uids), 200):
-                status, _ = self.imap.uid("STORE", ",".join(map(str, chunk)), op, value)
+                status, _ = self.action_imap("uid", "STORE", ",".join(map(str, chunk)), op, value)
                 if status != "OK":
                     raise MailError(f"Gmail refused to change labels ({op} {value})")
 

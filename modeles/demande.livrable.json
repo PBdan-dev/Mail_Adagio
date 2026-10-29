@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "description": "Rapport .md : la demande, la réponse, puis un tableau N° | Outil | Raison | Résultat (une ligne par étape).",
+  "required": [
+    "fichier",
+    "reponse",
+    "etapes"
+  ],
+  "properties": {
+    "fichier": {
+      "type": "string",
+      "pattern": "\\.md$",
+      "description": "Rapport en Markdown écrit à format_retour.destination (absent si format_retour.type = texte)."
+    },
+    "reponse": {
+      "type": "string"
+    },
+    "etapes": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": [
+          "outil",
+          "raison",
+          "resultat"
+        ],
+        "properties": {
+          "outil": {
+            "type": "string"
+          },
+          "raison": {
+            "type": "string"
+          },
+          "resultat": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

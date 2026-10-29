@@ -265,6 +265,23 @@ def gmail_match(m, raw):
     return True
 
 
+def add_mails(items):
+    """More made-up mails, newest of all (a mission's test mailbox: memoire/demo/boite.json).
+    items: [{"de": sender, "sujet": subject, "texte": text, "html": optional html}]"""
+    if FakeIMAP.mails is None:
+        FakeIMAP.reset(extra=FakeIMAP.extra)
+    when = datetime(2026, 10, 25, 9, 0, tzinfo=timezone.utc)
+    for n, item in enumerate(items, 1):
+        m = EmailMessage()
+        m["From"], m["Subject"], m["To"] = str(item.get("de") or "x@example.com"), str(item.get("sujet") or ""), "you@gmail.com"
+        m["Date"] = format_datetime(when + timedelta(minutes=n))
+        m.set_content(str(item.get("texte") or ""))
+        if item.get("html"):
+            m.add_alternative(str(item["html"]), subtype="html")
+        FakeIMAP.mails[20_000 + n] = {"gm": str(1879950646965600000 + n), "labels": {"\\Inbox"}, "tab": "Primary",
+                                      "raw": m.as_bytes(), "date": when + timedelta(minutes=n), "seen": False}
+
+
 def gmail_factory(address, password, host):
     return Gmail(address, password, host, imap_class=FakeIMAP)
 
@@ -285,7 +302,15 @@ WORDS = {"Shoply Prime Days: up to 40% off": ["Shoply Prime Days", "up to 40% of
 
 
 def agent_steps(user):
-    """What the made-up model answers in agent mode: a few requests it understands, in French or English."""
+    """What the made-up model answers in agent mode: a few requests it understands, in French or English.
+    Each step carries its reason, as a real model must."""
+    out = _agent_steps(user)
+    for step in out["steps"]:
+        step.setdefault("raison", "This step does what the request asks.")
+    return out
+
+
+def _agent_steps(user):
     text = user.lower()
     if any(w in text for w in ("trash", "corbeille", "supprime", "delete", "efface")):
         return {"steps": [], "refuse": "Mail Adagio never deletes mail: only you can move mails to the Trash, "

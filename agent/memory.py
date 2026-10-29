@@ -7,9 +7,10 @@
 Only the sender and the subject are stored, never the content of a mail.
 """
 import re
-import sqlite3
 from email.utils import parseaddr
 from pathlib import Path
+
+from .db import Db
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS rules (
@@ -72,41 +73,34 @@ def domain(sender):
     return addr.split("@", 1)[1] if "@" in addr else ""
 
 
-class Memory:
+class Memory(Db):
     def __init__(self, path):
         self.path = Path(path)
-        self.db = sqlite3.connect(self.path, check_same_thread=False)
-        self.db.row_factory = sqlite3.Row
-        self.db.executescript(SCHEMA)
+        self.memory_open(path, SCHEMA)
 
     def rename_theme(self, old, new):
         """A theme renamed: your rules, examples and the keyword learning follow it."""
-        with self.db:
-            for table, column in (("rules", "theme"), ("examples", "theme"), ("ignored", "theme"),
-                                  ("keyword_queue", "wrong"), ("keyword_queue", '"right"'),
-                                  ("keyword_errors", "theme"), ("keyword_errors", "to_theme"), ("keyword_log", "theme")):
-                self.db.execute(f"UPDATE OR IGNORE {table} SET {column} = ? WHERE {column} = ?", (new, old))
-
-    def close(self):
-        self.db.close()
+        self.memory_write(*[(f"UPDATE OR IGNORE {table} SET {column} = ? WHERE {column} = ?", (new, old))
+                            for table, column in (("rules", "theme"), ("examples", "theme"), ("ignored", "theme"),
+                                                  ("keyword_queue", "wrong"), ("keyword_queue", '"right"'),
+                                                  ("keyword_errors", "theme"), ("keyword_errors", "to_theme"),
+                                                  ("keyword_log", "theme"))])
 
     # rules ------------------------------------------------------------------
     def add_rule(self, kind, value, theme, status):
         value = value.strip().lower()
         if kind not in ("sender", "domain") or not re.fullmatch(r"[^\s]+", value or ""):
             raise ValueError("A rule needs a sender address or a domain")
-        with self.db:
-            self.db.execute(
-                "INSERT INTO rules (kind, value, theme, status) VALUES (?, ?, ?, ?) "
-                "ON CONFLICT (kind, value) DO UPDATE SET theme = excluded.theme, status = excluded.status",
-                (kind, value, theme, status))
+        self.memory_write((
+            "INSERT INTO rules (kind, value, theme, status) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT (kind, value) DO UPDATE SET theme = excluded.theme, status = excluded.status",
+            (kind, value, theme, status)))
 
     def rules(self):
-        return [dict(r) for r in self.db.execute("SELECT * FROM rules ORDER BY created DESC, id DESC")]
+        return self.memory_read("SELECT * FROM rules ORDER BY created DESC, id DESC")
 
     def delete_rule(self, rule_id):
-        with self.db:
-            self.db.execute("DELETE FROM rules WHERE id = ?", (int(rule_id),))
+        self.memory_write(("DELETE FROM rules WHERE id = ?", (int(rule_id),)))
 
     def match(self, sender, themes, statuses):
         """The rule for this sender: exact address first, then its domain or a parent domain.
@@ -118,87 +112,77 @@ class Memory:
         candidates = [("sender", addr)] + [("domain", ".".join(dom.split(".")[i:]))
                                            for i in range(max(dom.count("."), 1))]
         for kind, value in candidates:
-            row = self.db.execute("SELECT * FROM rules WHERE kind = ? AND value = ?", (kind, value)).fetchone()
+            row = self.one("SELECT * FROM rules WHERE kind = ? AND value = ?", kind, value)
             if row and row["theme"] in themes and row["status"] in statuses:
-                return dict(row)
+                return row
         return None
 
     # examples ---------------------------------------------------------------
     def add_example(self, sender, subject, theme, status):
-        with self.db:
-            self.db.execute("INSERT INTO examples (sender, subject, theme, status) VALUES (?, ?, ?, ?)",
-                            (address(sender) or sender, subject[:200], theme, status))
+        self.memory_write(("INSERT INTO examples (sender, subject, theme, status) VALUES (?, ?, ?, ?)",
+                           (address(sender) or sender, subject[:200], theme, status)))
 
     # rule proposals: the same correction several times for one sender ----------
     def proposals(self, themes, statuses):
         """[{sender, theme, status, count}] that would make a good rule, most corrections first."""
-        rows = self.db.execute(
+        rows = self.memory_read(
             "SELECT sender, theme, status, COUNT(*) AS count, MAX(id) AS last FROM examples "
-            "GROUP BY sender, theme, status HAVING COUNT(*) >= ? ORDER BY count DESC, last DESC",
-            (PROPOSE_AFTER,)).fetchall()
+            "GROUP BY sender, theme, status HAVING COUNT(*) >= ? ORDER BY count DESC, last DESC", PROPOSE_AFTER)
         out = []
         for r in rows:
-            r = dict(r)
-            latest = self.db.execute("SELECT theme, status FROM examples WHERE sender = ? ORDER BY id DESC LIMIT 1",
-                                     (r["sender"],)).fetchone()
+            latest = self.one("SELECT theme, status FROM examples WHERE sender = ? ORDER BY id DESC LIMIT 1",
+                              r["sender"])
             rule = self.match(r["sender"], themes, statuses)
             if ("@" not in r["sender"] or r["theme"] not in themes or r["status"] not in statuses
                     or (latest["theme"], latest["status"]) != (r["theme"], r["status"])  # you changed your mind
                     or (rule and (rule["theme"], rule["status"]) == (r["theme"], r["status"]))
-                    or self.db.execute("SELECT 1 FROM ignored WHERE sender = ? AND theme = ? AND status = ?",
-                                       (r["sender"], r["theme"], r["status"])).fetchone()):
+                    or self.one("SELECT 1 FROM ignored WHERE sender = ? AND theme = ? AND status = ?",
+                                r["sender"], r["theme"], r["status"])):
                 continue
             out.append({k: r[k] for k in ("sender", "theme", "status", "count")})
         return out
 
     def ignore(self, sender, theme, status):
-        with self.db:
-            self.db.execute("INSERT OR IGNORE INTO ignored (sender, theme, status) VALUES (?, ?, ?)",
-                            (address(sender) or sender, theme, status))
+        self.memory_write(("INSERT OR IGNORE INTO ignored (sender, theme, status) VALUES (?, ?, ?)",
+                           (address(sender) or sender, theme, status)))
 
     # keywords learned from theme corrections (see keywords.py) ------------------
     def queue_keyword(self, gm_msgid, sender, subject, wrong, right):
         """A theme correction to learn from. Corrected again: the first wrong theme is kept."""
-        with self.db:
-            self.db.execute(
-                'INSERT INTO keyword_queue (gm_msgid, sender, subject, wrong, "right") VALUES (?, ?, ?, ?, ?) '
-                'ON CONFLICT (gm_msgid) DO UPDATE SET "right" = excluded."right"',
-                (str(gm_msgid), sender or "", (subject or "")[:300], wrong, right))
-            self.db.execute('DELETE FROM keyword_queue WHERE gm_msgid = ? AND wrong = "right"', (str(gm_msgid),))
+        self.memory_write((
+            'INSERT INTO keyword_queue (gm_msgid, sender, subject, wrong, "right") VALUES (?, ?, ?, ?, ?) '
+            'ON CONFLICT (gm_msgid) DO UPDATE SET "right" = excluded."right"',
+            (str(gm_msgid), sender or "", (subject or "")[:300], wrong, right)),
+            ('DELETE FROM keyword_queue WHERE gm_msgid = ? AND wrong = "right"', (str(gm_msgid),)))
 
     def queued(self, gm_msgid):
-        return self.db.execute("SELECT 1 FROM keyword_queue WHERE gm_msgid = ?", (str(gm_msgid),)).fetchone() is not None
+        return self.one("SELECT 1 FROM keyword_queue WHERE gm_msgid = ?", str(gm_msgid)) is not None
 
     def keyword_queue(self, n=50):
-        return [dict(r) for r in self.db.execute("SELECT * FROM keyword_queue ORDER BY created, rowid LIMIT ?", (n,))]
+        return self.memory_read("SELECT * FROM keyword_queue ORDER BY created, rowid LIMIT ?", n)
 
     def unqueue_keyword(self, gm_msgid):
-        with self.db:
-            self.db.execute("DELETE FROM keyword_queue WHERE gm_msgid = ?", (str(gm_msgid),))
+        self.memory_write(("DELETE FROM keyword_queue WHERE gm_msgid = ?", (str(gm_msgid),)))
 
     def keyword_error(self, word, theme, to_theme, gm_msgid):
-        with self.db:
-            self.db.execute("INSERT OR IGNORE INTO keyword_errors (word, theme, to_theme, gm_msgid) "
-                            "VALUES (?, ?, ?, ?)", (word.lower(), theme, to_theme, str(gm_msgid)))
+        self.memory_write(("INSERT OR IGNORE INTO keyword_errors (word, theme, to_theme, gm_msgid) "
+                           "VALUES (?, ?, ?, ?)", (word.lower(), theme, to_theme, str(gm_msgid))))
 
     def keyword_errors(self, word, theme):
         """[to_theme] of each correction where this keyword of `theme` was in the mail."""
-        return [r["to_theme"] for r in self.db.execute(
-            "SELECT to_theme FROM keyword_errors WHERE word = ? AND theme = ?", (word.lower(), theme))]
+        return [r["to_theme"] for r in self.memory_read(
+            "SELECT to_theme FROM keyword_errors WHERE word = ? AND theme = ?", word.lower(), theme)]
 
     def forget_keyword_errors(self, word, theme):
-        with self.db:
-            self.db.execute("DELETE FROM keyword_errors WHERE word = ? AND theme = ?", (word.lower(), theme))
+        self.memory_write(("DELETE FROM keyword_errors WHERE word = ? AND theme = ?", (word.lower(), theme)))
 
     def log_keyword(self, word, theme, kind, detail=""):
-        with self.db:
-            self.db.execute("INSERT INTO keyword_log (word, theme, kind, detail) VALUES (?, ?, ?, ?)",
-                            (word, theme, kind, detail[:200]))
+        self.memory_write(("INSERT INTO keyword_log (word, theme, kind, detail) VALUES (?, ?, ?, ?)",
+                           (word, theme, kind, detail[:200])))
 
     def keyword_history(self, n=None):
         sql = "SELECT * FROM keyword_log ORDER BY created DESC, rowid DESC" + (" LIMIT ?" if n else "")
-        return [dict(r) for r in self.db.execute(sql, (n,) if n else ())]
+        return self.memory_read(sql, *((n,) if n else ()))
 
     def examples(self, n=8):
-        rows = self.db.execute("SELECT * FROM examples ORDER BY id DESC LIMIT ?", (n,))
-        return [dict(r) for r in rows][::-1]
+        return self.memory_read("SELECT * FROM examples ORDER BY id DESC LIMIT ?", n)[::-1]
