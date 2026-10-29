@@ -319,13 +319,13 @@
         "expose_au_modele": false
       },
       {
-        "nom": "memory_write_running",
-        "description": "Note dans memoire/ le port de la page ouverte, pour la retrouver.",
+        "nom": "action_write_running",
+        "description": "Note le port de la page ouverte dans .adagio-ui.json, à côté d'adagio.py (Workspace l'y lit pour afficher Mail Adagio). Fenêtre seulement, jamais en mission ; effacé à la fermeture.",
         "expose_au_modele": false
       },
       {
-        "nom": "memory_remove_running",
-        "description": "Efface cette note quand la page se ferme.",
+        "nom": "action_remove_running",
+        "description": "Efface .adagio-ui.json quand la page se ferme.",
         "expose_au_modele": false
       }
     ],
@@ -370,7 +370,7 @@
     "imap.gmail.com:993"
   ],
   "acces_declares": {
-    "fichiers": "dossier du projet de la mission (rapport .md) ; agents/installes/mail-adagio/memoire/"
+    "fichiers": "dossier du projet de la mission (rapport .md) ; agents/installes/mail-adagio/memoire/ ; hors mission seulement (fenêtre) : .adagio-ui.json à côté d'adagio.py, pour Workspace"
   },
   "identifiants": [
     {

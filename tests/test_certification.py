@@ -132,6 +132,11 @@ class TestFiles(unittest.TestCase):
         self.assertEqual((self.dir / "memoire" / "adagio.db").read_text(), "db")
         self.assertFalse((self.dir / "adagio.db").exists())
 
+    def test_workspace_still_finds_the_open_page(self):
+        from agent import web  # Workspace reads the port in .adagio-ui.json next to adagio.py
+        self.assertEqual(web.running_file(config.DEFAULT_PATH, False), config.ROOT / ".adagio-ui.json")
+        self.assertEqual(web.running_file(self.dir / "config.yaml", True), self.dir / ".adagio-ui-demo.json")
+
     def test_password_leaves_the_file_for_the_vault(self):
         path = self.dir / "config.yaml"
         text = config.EXAMPLE.read_text(encoding="utf-8")

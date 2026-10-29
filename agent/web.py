@@ -524,7 +524,12 @@ def words_notice(out):
 
 
 def running_file(config_path, demo_mode):
-    return Path(config_path).resolve().parent / (".adagio-ui-demo.json" if demo_mode else ".adagio-ui.json")
+    """Where the open page is noted. For the settings in memoire/ it stays next to adagio.py, as before 0.9:
+    Workspace reads the port there to show Mail Adagio in its Adagio tab."""
+    folder = Path(config_path).resolve().parent
+    if folder == config.MEMOIRE.resolve():
+        folder = config.ROOT
+    return folder / (".adagio-ui-demo.json" if demo_mode else ".adagio-ui.json")
 
 
 def action_stop_previous(path):
@@ -560,8 +565,9 @@ def action_open_browser(url):
     threading.Timer(0.5, webbrowser.open, [url]).start()
 
 
-def memory_write_running(path, port, token):
-    """memoire/.adagio-ui.json: where the open page is, so a new launch can close it first."""
+def action_write_running(path, port, token):
+    """.adagio-ui.json next to adagio.py: where the open page is (port and token), so a new launch can close it
+    first and Workspace can show it. Removed when the page closes. Window only, never in a mission."""
     try:
         path.write_text(json.dumps({"port": port, "token": token}), encoding="utf-8")
         return path
@@ -569,8 +575,8 @@ def memory_write_running(path, port, token):
         return None
 
 
-def memory_remove_running(path, token):
-    """Remove memoire/.adagio-ui.json, only if it is still ours (a newer launch writes its own)."""
+def action_remove_running(path, token):
+    """Remove .adagio-ui.json, only if it is still ours (a newer launch writes its own)."""
     try:
         if path and json.loads(path.read_text(encoding="utf-8")).get("token") == token:
             path.unlink()
@@ -585,7 +591,7 @@ def serve(config_path=config.DEFAULT_PATH, port=8765, demo_mode=False, open_brow
     action_stop_previous(running)
     server, p = action_open_page_server(app, port)
     app.server = server
-    running = memory_write_running(running, p, app.token)
+    running = action_write_running(running, p, app.token)
     url = f"http://127.0.0.1:{p}/"
     print(f"\n  Mail Adagio is open at {url}\n  It stops when you close its tab.\n")
     if open_browser:
@@ -598,4 +604,4 @@ def serve(config_path=config.DEFAULT_PATH, port=8765, demo_mode=False, open_brow
         pass
     finally:
         server.server_close()
-        memory_remove_running(running, app.token)
+        action_remove_running(running, app.token)
