@@ -1,0 +1,34 @@
+{
+  "description": "Trier les 20 mails suivants de la boîte de démonstration",
+  "mission": {
+    "version": 1,
+    "id": "test-01",
+    "agent_id": "mail-adagio",
+    "projet": "PROJET_DE_TEST",
+    "type_tache": "trier-mails",
+    "but": "Trier les 20 mails suivants de la boîte de démonstration",
+    "critere_reussite": "rapport tri.md écrit : comptes par thème et statut et tableau des mails ; actions déclarées = libellés et sortie de la boîte de réception seulement ; aucune Corbeille",
+    "contexte": "Boîte de démonstration (mails inventés).",
+    "limites": {
+      "outils_interdits": []
+    },
+    "format_retour": {
+      "type": "fichier",
+      "destination": "tri.md"
+    },
+    "validation": [],
+    "cree_le": "2026-10-29T12:00:00+01:00",
+    "donnees": {
+      "boite": "demo",
+      "nombre": 20
+    }
+  },
+  "critere_reussite": "rapport tri.md écrit : comptes par thème et statut et tableau des mails ; actions déclarées = libellés et sortie de la boîte de réception seulement ; aucune Corbeille",
+  "etats_acceptes": [
+    "termine"
+  ],
+  "evenements_attendus": [
+    "demarrage",
+    "termine"
+  ]
+}

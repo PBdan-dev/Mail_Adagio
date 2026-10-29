@@ -1,2 +1,3 @@
 PyYAML>=6,<7        # reads config.yaml
 anthropic>=2,<3     # only needed for provider: anthropic
+keyring>=24,<26     # Windows vault (Credential Manager) for the Gmail app password and API key

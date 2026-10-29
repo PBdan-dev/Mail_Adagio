@@ -430,8 +430,8 @@ def run(session, m):
     except Arret as a:
         etat, reprise = "arrete_proprement", {
             "etape": str(a), "type_tache": m["type_tache"],
-            "reprise": "relancer la même mission : le lot en attente est repris là où il en était, "
-                       "rien de ce qui a été fait dans Gmail n'est refait"}
+            "reprise": "relancer la même mission : les mails déjà analysés forment le lot en attente, appliqué "
+                       "en premier ; les suivants viennent à la mission d'après. Rien n'est refait dans Gmail"}
         result = {"texte": f"Arrêté proprement ({a}). Rien n'a été changé dans Gmail pour l'étape non commencée.",
                   "controle": [], "non_controle": ["mission interrompue avant la fin"]}
     except Refus as r:

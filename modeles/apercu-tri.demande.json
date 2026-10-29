@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200,
+      "description": "Nombre de mails récents à classer (20 par défaut)."
+    },
+    "jours": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Seulement les mails des N derniers jours (facultatif)."
+    },
+    "boite": {
+      "enum": [
+        "gmail",
+        "demo"
+      ],
+      "description": "gmail (par défaut) : la vraie boîte ; demo : boîte de démonstration inventée (tests)."
+    },
+    "compte": {
+      "type": "string",
+      "description": "Adresse Gmail, si elle n'est pas déjà dans memoire/config.yaml."
+    }
+  }
+}

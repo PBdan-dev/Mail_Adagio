@@ -9,10 +9,10 @@ from .models import ModelTimeout
 
 SYSTEM = """You sort e-mails. For the e-mail you receive, choose exactly one theme and one status.
 
-Themes:
+Themes (name: what belongs there):
 {themes}
 
-Statuses:
+Statuses (name: when to use it):
 {statuses}
 
 Rules:
@@ -93,7 +93,9 @@ def system_prompt(cfg, examples=()):
     delete = asks_delete(cfg)
     answer = ('{"theme": "...", "status": "...", "confidence": "high", "to_delete": false}' if delete
               else '{"theme": "...", "status": "...", "confidence": "high"}')
-    return SYSTEM.format(themes=lines(cfg["themes"]), statuses=lines(cfg["statuses"]), words=words,
+    # the names and hints are read from memoire/config.yaml: descriptions, shown as data too
+    return SYSTEM.format(themes=donnee_externe(lines(cfg["themes"]), "réglages : thèmes"),
+                         statuses=donnee_externe(lines(cfg["statuses"]), "réglages : statuts"), words=words,
                          other=cfg["fallback"]["theme"], examples=shown, rule=RULE,
                          delete=DELETE_RULE if delete else "", answer=answer)
 

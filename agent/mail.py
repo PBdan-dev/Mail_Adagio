@@ -17,6 +17,8 @@ from email import policy
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 
+from . import models
+
 FETCH_BYTES = 30000  # first 30 KB of each mail: enough for the text, skips big attachments
 READ_BYTES = 3_000_000  # the reader window: the whole mail up to 3 MB (big attachments are cut, their names stay)
 INLINE_BYTES = 1_500_000  # pictures inside a mail (cid:) shown up to this total
@@ -123,6 +125,8 @@ class Gmail:
     def action_sensitive_trash(self, uids):
         """Move to Gmail's Trash (Gmail empties it after 30 days). Never a permanent delete. Only on your
         click in the window, after the count was shown; refused to other programs and to missions."""
+        if models.ONLY_PORTE["on"]:  # a mission is running: never the Trash, whoever asks
+            raise MailError("The Trash is never used in a mission")
         for chunk in chunks(sorted(uids), 200):
             status, _ = self.imap.uid("STORE", ",".join(map(str, chunk)), "+X-GM-LABELS", "(\\Trash)")
             if status != "OK":

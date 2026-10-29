@@ -26,9 +26,10 @@ if not exist ".venv\Scripts\python.exe" (
   %PY% -m venv .venv || goto :failed
 )
 set "APP=.venv\Scripts\python.exe"
-if not exist ".venv\installed.txt" (
+rem Installs again when requirements.txt changes (0.9.0 adds keyring for the Windows vault).
+fc /b requirements.txt ".venv\installed.txt" >nul 2>&1 || (
   "%APP%" -m pip install --quiet --disable-pip-version-check -r requirements.txt || goto :failed
-  echo ok> ".venv\installed.txt"
+  copy /y requirements.txt ".venv\installed.txt" >nul
 )
 
 rem --- 3. Open the interface in your browser, without a console window ----

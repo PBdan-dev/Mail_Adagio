@@ -1,0 +1,38 @@
+{
+  "description": "Arrêt pendant le tri",
+  "mission": {
+    "version": 1,
+    "id": "test-10",
+    "agent_id": "mail-adagio",
+    "projet": "PROJET_DE_TEST",
+    "type_tache": "trier-mails",
+    "but": "Arrêt pendant le tri",
+    "critere_reussite": "etat = arrete_proprement avec point_de_reprise ; arrêt pendant la lecture des mails, avant l'application : aucun rapport, rien n'a changé dans Gmail (aucune action déclarée)",
+    "contexte": "Boîte de démonstration (mails inventés).",
+    "limites": {
+      "outils_interdits": []
+    },
+    "format_retour": {
+      "type": "fichier",
+      "destination": "tri.md"
+    },
+    "validation": [],
+    "cree_le": "2026-10-29T12:00:00+01:00",
+    "donnees": {
+      "boite": "demo",
+      "nombre": 30
+    }
+  },
+  "critere_reussite": "etat = arrete_proprement avec point_de_reprise ; arrêt pendant la lecture des mails, avant l'application : aucun rapport, rien n'a changé dans Gmail (aucune action déclarée)",
+  "messages": [
+    {
+      "apres_evenement": "etape",
+      "type": "arret"
+    }
+  ],
+  "delai_porte_s": 0.3,
+  "etats_acceptes": [
+    "arrete_proprement",
+    "termine"
+  ]
+}

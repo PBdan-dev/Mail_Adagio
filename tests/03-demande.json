@@ -1,0 +1,31 @@
+{
+  "description": "Combien de mails portent le libellé To delete ?",
+  "mission": {
+    "version": 1,
+    "id": "test-03",
+    "agent_id": "mail-adagio",
+    "projet": "PROJET_DE_TEST",
+    "type_tache": "demande",
+    "but": "Combien de mails portent le libellé To delete ?",
+    "critere_reussite": "avec un vrai modèle : état termine, une étape read_to_delete, réponse avec le nombre ; avec la porte de test (texte fixe) : echec avec motif clair, aucun fichier",
+    "contexte": "Boîte de démonstration (mails inventés).",
+    "limites": {
+      "outils_interdits": []
+    },
+    "format_retour": {
+      "type": "fichier",
+      "destination": "demande.md"
+    },
+    "validation": [],
+    "cree_le": "2026-10-29T12:00:00+01:00",
+    "donnees": {
+      "boite": "demo",
+      "texte": "Combien de mails portent le libellé To delete ?"
+    }
+  },
+  "critere_reussite": "avec un vrai modèle : état termine, une étape read_to_delete, réponse avec le nombre ; avec la porte de test (texte fixe) : echec avec motif clair, aucun fichier",
+  "etats_acceptes": [
+    "termine",
+    "echec"
+  ]
+}

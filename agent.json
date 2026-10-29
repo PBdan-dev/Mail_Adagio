@@ -1,9 +1,9 @@
 {
   "name": "mail-adagio",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Sorts Gmail: gives each mail one theme and one status, using an AI model you choose. Never deletes mail.",
   "status": "Step 3: sorts the inbox by batches (labels + out of the Inbox), with approval, undo and resume. 'To check' label for unsure mails, a journal of every mail, learning from the changes you make in Gmail. Senders page: subscriptions and suggested rules. Agent mode: a request in your own words, turned into checked actions by the model.",
-  "how_to_call": "python adagio.py call   (one JSON request on stdin, one JSON result on stdout)",
+  "how_to_call": "python adagio.py call   (one JSON request on stdin, one JSON result on stdout). Orchestra: python adagio.py mission (contract 1, see manifeste.json)",
   "input": {
     "action": "capabilities | check | hardware | preview | estimate | plan | apply | discard | undo | status | correct | rules | delete_rule | add_rule | scan | senders | sender_state | suggest | keep | to_delete | learn_gmail | why | journal | proposals | ignore_proposal | search | relabel | keywords | request  (window only, refused here: trash | restore | label_order | read | rename_theme)",
     "scope": "estimate/plan: {kind: count|days|all, value: N}",
@@ -65,6 +65,7 @@
     "unsubscribe on its own (it only gives you the link)",
     "move mail to the Trash, restore it or rename labels or themes on another program's request (window only)",
     "change Gmail while learning from your changes (it only reads labels)",
-    "let agent mode trash, restore, read a whole mail, reorder labels, unsubscribe or send mail (not on its skills card, and refused by the code)"
+    "let agent mode trash, restore, read a whole mail, reorder labels, unsubscribe or send mail (not on its skills card, and refused by the code)",
+    "in a mission (Orchestra): use the Trash, restore, unsubscribe, send mail, or any model but Orchestra's gate"
   ]
 }

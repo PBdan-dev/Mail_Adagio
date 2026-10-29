@@ -1,0 +1,31 @@
+{
+  "description": "Type de tâche inconnu",
+  "mission": {
+    "version": 1,
+    "id": "test-05",
+    "agent_id": "mail-adagio",
+    "projet": "PROJET_DE_TEST",
+    "type_tache": "supprimer-mails",
+    "but": "Type de tâche inconnu",
+    "critere_reussite": "etat = echec avec un motif qui nomme type_tache ; rien n'est fait",
+    "contexte": "Boîte de démonstration (mails inventés).",
+    "limites": {
+      "outils_interdits": []
+    },
+    "format_retour": {
+      "type": "fichier",
+      "destination": "rapport.md"
+    },
+    "validation": [],
+    "cree_le": "2026-10-29T12:00:00+01:00",
+    "donnees": {
+      "boite": "demo",
+      "nombre": 5
+    }
+  },
+  "critere_reussite": "etat = echec avec un motif qui nomme type_tache ; rien n'est fait",
+  "mal_formee": true,
+  "etats_acceptes": [
+    "echec"
+  ]
+}

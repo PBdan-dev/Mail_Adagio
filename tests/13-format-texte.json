@@ -1,0 +1,29 @@
+{
+  "description": "Aperçu rendu en texte, sans fichier",
+  "mission": {
+    "version": 1,
+    "id": "test-13",
+    "agent_id": "mail-adagio",
+    "projet": "PROJET_DE_TEST",
+    "type_tache": "apercu-tri",
+    "but": "Aperçu rendu en texte, sans fichier",
+    "critere_reussite": "etat = termine, resultat.texte résume l'aperçu, aucun fichier écrit",
+    "contexte": "Boîte de démonstration (mails inventés).",
+    "limites": {
+      "outils_interdits": []
+    },
+    "format_retour": {
+      "type": "texte"
+    },
+    "validation": [],
+    "cree_le": "2026-10-29T12:00:00+01:00",
+    "donnees": {
+      "boite": "demo",
+      "nombre": 5
+    }
+  },
+  "critere_reussite": "etat = termine, resultat.texte résume l'aperçu, aucun fichier écrit",
+  "etats_acceptes": [
+    "termine"
+  ]
+}

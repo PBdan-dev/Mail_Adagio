@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "required": [
+    "texte"
+  ],
+  "properties": {
+    "texte": {
+      "type": "string",
+      "minLength": 1,
+      "description": "La demande en langage courant, par exemple « mets les mails de la banque dans Finance »."
+    },
+    "boite": {
+      "enum": [
+        "gmail",
+        "demo"
+      ],
+      "description": "gmail (par défaut) : la vraie boîte ; demo : boîte de démonstration inventée (tests)."
+    },
+    "compte": {
+      "type": "string",
+      "description": "Adresse Gmail, si elle n'est pas déjà dans memoire/config.yaml."
+    }
+  }
+}
