@@ -9,10 +9,13 @@ from pathlib import Path
 
 import yaml
 
-from agent import classify, config, core, hardware, mail
+from agent import classify, config, core, hardware, mail, vault
 
 core.LOG_PATH = None  # tests do not write the journal
 core.MEMORY_PATH = ":memory:"  # nor the learned rules
+VAULT = {}  # tests never touch the real Windows vault: a dict instead
+vault.secret_read = lambda name, account: VAULT.get((name, str(account)), "")
+vault.secret_save = lambda name, account, value: bool(name and account and value) and VAULT.update({(name, str(account)): value}) is None
 EXAMPLE_CFG = yaml.safe_load(config.EXAMPLE.read_text(encoding="utf-8"))
 
 
@@ -155,6 +158,9 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(cfg["gmail"]["app_password"], "abcdefghijklmnop")
             self.assertEqual(cfg["model"]["api_key"], "sk-test")
             self.assertIn("# Google app password", path.read_text())
+            self.assertNotIn("abcdefghijklmnop", path.read_text())  # in the vault, never in the file
+            self.assertNotIn("sk-test", path.read_text())
+            self.assertEqual(VAULT[(vault.GMAIL, "me@gmail.com")], "abcdefghijklmnop")
             self.assertFalse(config.needs_setup(path))
         finally:
             shutil.rmtree(tmp)
@@ -269,8 +275,8 @@ class TestModelChoice(unittest.TestCase):
 
     def test_load_model_and_keep_alive(self):
         sent = []
-        saved = self.models._post
-        self.models._post = lambda url, body, headers, timeout=60: (sent.append((url, body, timeout)),
+        saved = self.models.read_http_post
+        self.models.read_http_post = lambda url, body, headers, timeout=60: (sent.append((url, body, timeout)),
                                                                     {"message": {"content": "{}"}})[1]
         try:
             self.models.load_model("qwen3.5:9b", "http://x:11434")
@@ -279,7 +285,7 @@ class TestModelChoice(unittest.TestCase):
             ask("s", "u", {})
             ask("s", "u", {})
         finally:
-            self.models._post = saved
+            self.models.read_http_post = saved
         load, first, second = sent
         self.assertEqual((load[0], load[1]["prompt"], load[1]["keep_alive"]), ("http://x:11434/api/generate", "", "30m"))
         self.assertEqual(first[1]["keep_alive"], "30m")
@@ -588,7 +594,7 @@ class TestKeywords(unittest.TestCase):
         self.assertIn("flight", config.keywords(cfg_with())["Travel"])
         prompt = classify.system_prompt(cfg)
         self.assertIn("- Finance: ", prompt)
-        self.assertIn("(typical words: Bank, Crypto)", prompt)
+        self.assertIn("- Finance: Bank, Crypto", prompt)
         self.assertNotIn("typical words: flight", prompt)
 
     def test_saved_in_config_file(self):
@@ -666,7 +672,7 @@ class TestKeywordLearning(unittest.TestCase):
         self.assertIn("Prime Days", config.keywords(self.cfg)["Promotions"])           # used from this run on
         saved = config.keywords(config.load(self.path))["Promotions"]
         self.assertEqual(saved[-2:], ["Prime Days", "up to 40% off"])                  # and kept in config.yaml
-        self.assertIn("keyword learned", r["log"] + "\n".join(core.read_log(50)))
+        self.assertIn("keyword learned", r["log"] + "\n".join(core.memory_read_log(50)))
         card = self.run_(action="rules")
         self.assertEqual((card["keywords_waiting"], card["keyword_changes"][0]["kind"]), (0, "learned"))
         self.assertIn("Promotions", classify.system_prompt(self.cfg).split("Prime Days")[0].splitlines()[-1])
@@ -930,7 +936,7 @@ class TestReliability(unittest.TestCase):
         labelled = [m for m in self.demo.FakeIMAP.mails.values() if "To check" in m["labels"]]
         self.assertEqual(len(labelled), 4)
         self.assertIn("To check", core.all_labels(self.cfg))
-        activity = core.read_log(100)
+        activity = core.memory_read_log(100)
         self.assertFalse(any(core.MAIL_LINE in x for x in activity))  # the activity list stays short
         lines = self.run_(action="journal", kind="mails")["lines"]
         self.assertEqual(len(lines), 28)
@@ -953,7 +959,7 @@ class TestReliability(unittest.TestCase):
         r = self.run_(action="why", gm_msgid=m["gm_msgid"])
         self.assertTrue(r["ok"], r.get("error"))
         self.assertIn(m["theme"], r["reason"])
-        self.assertTrue(any("why ·" in x for x in core.read_log(50, mails=True)))
+        self.assertTrue(any("why ·" in x for x in core.memory_read_log(50, mails=True)))
 
     def test_learns_from_changes_in_gmail(self):
         plan = self.sorted_batch()
@@ -996,15 +1002,15 @@ class TestReliability(unittest.TestCase):
         self.assertEqual(r["error_code"], "gmail_login")
         self.assertIn("apppasswords", r["error"])
         from agent import models
-        saved = models._get
-        models._get = lambda url, timeout=5: (_ for _ in ()).throw(models.ModelError("refused"))
+        saved = models.read_http_get
+        models.read_http_get = lambda url, timeout=5: (_ for _ in ()).throw(models.ModelError("refused"))
         models.tried_start["done"] = True  # do not start a real Ollama here
         try:
             with self.assertRaises(models.ModelError) as e:
                 models.ollama_models(start=True)
             self.assertIn(e.exception.code, ("ollama_down", "ollama_missing"))
         finally:
-            models._get = saved
+            models.read_http_get = saved
 
 
 class TestWeb(unittest.TestCase):
@@ -1190,7 +1196,7 @@ class TestRelaunch(unittest.TestCase):
         self.assertEqual(info["port"], 8931)  # and the new one took its place
         with urllib.request.urlopen(f"http://127.0.0.1:8931/") as r:
             self.assertIn(info["token"], r.read().decode())
-        web.stop_previous(running)
+        web.action_stop_previous(running)
         second.join(timeout=5)
         self.assertFalse(second.is_alive())
         shutil.rmtree(tmp)
@@ -1297,7 +1303,7 @@ class TestAgentMode(unittest.TestCase):
         self.assertGreater(r["changes_made"], 0)
         self.assertTrue(r["answer"])
         self.assertIn(config.labels(self.cfg)["Promotions"], self.labels_of("Prime Days"))
-        self.assertIn('request: "Mets les mails Prime Day', "\n".join(core.read_log(50)))
+        self.assertIn('request: "Mets les mails Prime Day', "\n".join(core.memory_read_log(50)))
 
     def test_a_search_that_finds_nothing_stops_cleanly(self):
         fake = lambda system, user, schema: json.dumps(

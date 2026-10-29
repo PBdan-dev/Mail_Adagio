@@ -11,10 +11,7 @@ def detect():
     info = {"gpu": None, "vram_gb": None, "ram_gb": ram_gb()}
     if shutil.which("nvidia-smi"):
         try:
-            out = subprocess.run(
-                ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, timeout=10).stdout
-            name, mib = out.strip().splitlines()[0].rsplit(",", 1)
+            name, mib = action_run_nvidia_smi().strip().splitlines()[0].rsplit(",", 1)
             info["gpu"], info["vram_gb"] = name.strip(), round(int(mib) / 1024, 1)
         except Exception:
             pass
@@ -24,6 +21,12 @@ def detect():
         if info["ram_gb"]:
             info["vram_gb"] = round(info["ram_gb"] * 2 / 3, 1)
     return info
+
+
+def action_run_nvidia_smi():
+    """Run nvidia-smi (NVIDIA's own tool, read-only) for the name and memory of the graphics card."""
+    return subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+                          capture_output=True, text=True, timeout=10).stdout
 
 
 def ram_gb():

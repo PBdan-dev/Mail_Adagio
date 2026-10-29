@@ -4,8 +4,15 @@ import shutil
 import sys
 
 CONSOLE = sys.stdout is not None  # None when started without a console (pythonw)
-if os.name == "nt" and CONSOLE:
-    os.system("")  # turns on colour codes in the Windows terminal (without a console it would open one)
+
+
+def action_console_colors():
+    """Turn on colour codes in the Windows terminal (without a console it would open one)."""
+    if os.name == "nt" and CONSOLE:
+        os.system("")
+
+
+action_console_colors()
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:

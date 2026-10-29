@@ -113,7 +113,7 @@ class App:
             "default_models": config.DEFAULT_MODELS,
             "job": job, "stopping": stopping, "error": error, "error_code": error_code, "notice": notice,
             "sort": sort if sort and sort.get("ok") else None,
-            "log": core.read_log(40),
+            "log": core.memory_read_log(40),
             "outdated": code_stamp() != self.stamp,  # files updated while open: a restart is needed
         }
 
@@ -199,7 +199,7 @@ class App:
                 self.demo_colors = colors
             else:
                 config.save_colors(self.config_path, colors)
-                core.log(f"colours saved for {len(colors)} label(s)")
+                core.memory_log(f"colours saved for {len(colors)} label(s)")
         return r
 
     def save_keywords(self, body):
@@ -214,7 +214,7 @@ class App:
         else:
             current = config.load(self.config_path).get("keywords") or {}
             config.save_keywords(self.config_path, {**current, **data})
-            core.log(f"keywords saved for {len(data)} theme(s)")
+            core.memory_log(f"keywords saved for {len(data)} theme(s)")
         return {"ok": True, "keywords": config.keywords(self.cfg())}
 
     def start(self, kind, work):
@@ -308,7 +308,7 @@ class App:
             if self.job["running"]:  # end the job cleanly first (a page coming back cancels the close)
                 self.job["stop"] = True
                 continue
-            core.log("Mail Adagio closed: its tab was closed")
+            core.memory_log("Mail Adagio closed: its tab was closed")
             print("\n  The Mail Adagio tab was closed: Mail Adagio stops.\n")
             server.shutdown()
             return
@@ -457,7 +457,7 @@ def make_handler(app, port):
                                          body.get("provider", "anthropic"),
                                          body.get("model_name", ""), body.get("app_password", ""),
                                          body.get("api_key", ""), body.get("base_url"))
-                    core.log("settings saved")
+                    core.memory_log("settings saved")
                     return self.send(200, {"ok": True})
                 except config.ConfigError as e:
                     return self.send(200, {"ok": False, "error": str(e)})
@@ -527,7 +527,7 @@ def running_file(config_path, demo_mode):
     return Path(config_path).resolve().parent / (".adagio-ui-demo.json" if demo_mode else ".adagio-ui.json")
 
 
-def stop_previous(path):
+def action_stop_previous(path):
     """Ask a Mail Adagio still open from an earlier launch (maybe an older version) to stop."""
     try:
         old = json.loads(path.read_text(encoding="utf-8"))
@@ -545,28 +545,51 @@ def stop_previous(path):
             return
 
 
+def action_open_page_server(app, port):
+    """The page's server, on this computer only (127.0.0.1), on the first free port from `port`."""
+    for p in range(port, port + 20):
+        try:
+            return ThreadingHTTPServer(("127.0.0.1", p), make_handler(app, p)), p
+        except OSError:
+            continue
+    raise OSError("No free port found")
+
+
+def action_open_browser(url):
+    """Open the page in your browser, half a second after the server started."""
+    threading.Timer(0.5, webbrowser.open, [url]).start()
+
+
+def memory_write_running(path, port, token):
+    """memoire/.adagio-ui.json: where the open page is, so a new launch can close it first."""
+    try:
+        path.write_text(json.dumps({"port": port, "token": token}), encoding="utf-8")
+        return path
+    except OSError:
+        return None
+
+
+def memory_remove_running(path, token):
+    """Remove memoire/.adagio-ui.json, only if it is still ours (a newer launch writes its own)."""
+    try:
+        if path and json.loads(path.read_text(encoding="utf-8")).get("token") == token:
+            path.unlink()
+    except (OSError, ValueError):
+        pass
+
+
 def serve(config_path=config.DEFAULT_PATH, port=8765, demo_mode=False, open_browser=True, close_with_tab=None):
     app = App(config_path, demo_mode)
     demo.FakeIMAP.extra = demo_mode  # the demo window also gets the mail that shows keyword learning
     running = running_file(config_path, demo_mode)
-    stop_previous(running)
-    for p in range(port, port + 20):  # first free port
-        try:
-            server = ThreadingHTTPServer(("127.0.0.1", p), make_handler(app, p))
-            break
-        except OSError:
-            continue
-    else:
-        raise OSError("No free port found")
+    action_stop_previous(running)
+    server, p = action_open_page_server(app, port)
     app.server = server
-    try:
-        running.write_text(json.dumps({"port": p, "token": app.token}), encoding="utf-8")
-    except OSError:
-        running = None
+    running = memory_write_running(running, p, app.token)
     url = f"http://127.0.0.1:{p}/"
     print(f"\n  Mail Adagio is open at {url}\n  It stops when you close its tab.\n")
     if open_browser:
-        threading.Timer(0.5, webbrowser.open, [url]).start()
+        action_open_browser(url)
     if open_browser if close_with_tab is None else close_with_tab:
         threading.Thread(target=app.watch_pages, args=(server,), daemon=True).start()
     try:
@@ -575,8 +598,4 @@ def serve(config_path=config.DEFAULT_PATH, port=8765, demo_mode=False, open_brow
         pass
     finally:
         server.server_close()
-        try:  # only if it is still ours (a newer launch writes its own)
-            if running and json.loads(running.read_text(encoding="utf-8")).get("token") == app.token:
-                running.unlink()
-        except (OSError, ValueError):
-            pass
+        memory_remove_running(running, app.token)

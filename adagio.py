@@ -16,28 +16,42 @@ EXAMPLES = """examples:
   python adagio.py undo                  undo the last applied batch
   python adagio.py hardware              which local model fits this computer
   echo '{"action":"preview","limit":5}' | python adagio.py call    JSON in, JSON out
+  python adagio.py mission               run by Orchestra: one mission in, events and a report out
 """
 
 
-CONSOLE_LOG = config.ROOT / "adagio-window.log"  # what the window would have shown, when started without one
+CONSOLE_LOG = config.MEMOIRE / "adagio-window.log"  # what the window would have shown, when started without one
 
 
 def no_console():
     """Started without a console (pythonw, from Mail Adagio.bat): messages and errors go to
-    adagio-window.log instead. True in that case."""
+    memoire/adagio-window.log instead. True in that case."""
     if sys.stdout is not None and sys.stderr is not None:
         return False
-    try:
-        if CONSOLE_LOG.exists() and CONSOLE_LOG.stat().st_size > 1_000_000:  # keep it small
-            CONSOLE_LOG.unlink()
-        out = open(CONSOLE_LOG, "a", encoding="utf-8", buffering=1)
-    except OSError:
-        import os
-        out = open(os.devnull, "w")
-    sys.stdout = sys.stderr = out
+    sys.stdout = sys.stderr = memory_open_console_log()
     from datetime import datetime
     print(f"--- {datetime.now():%Y-%m-%d %H:%M:%S} Mail Adagio started without a console")
     return True
+
+
+def memory_open_console_log():
+    """memoire/adagio-window.log, opened to add lines (emptied first when it passes 1 MB)."""
+    try:
+        CONSOLE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        if CONSOLE_LOG.exists() and CONSOLE_LOG.stat().st_size > 1_000_000:  # keep it small
+            CONSOLE_LOG.unlink()
+        return open(CONSOLE_LOG, "a", encoding="utf-8", buffering=1)
+    except OSError:
+        import os
+        return open(os.devnull, "w")
+
+
+def memory_reset_demo():
+    """The made-up mailbox starts fresh each time: its own database and journal in memoire/."""
+    core.LOG_PATH = config.MEMOIRE / "adagio-demo.log"
+    core.MEMORY_PATH = config.MEMOIRE / "adagio-demo.db"
+    for f in (core.LOG_PATH, core.MEMORY_PATH):
+        f.unlink(missing_ok=True)
 
 
 def fatal(error, hidden):
@@ -77,11 +91,19 @@ def main(argv=None):
     srt.add_argument("--yes", action="store_true", help="act alone: apply every batch without asking")
     sub.add_parser("undo", help="undo the last applied batch")
     sub.add_parser("call", help="read one JSON request on stdin, write the JSON result on stdout")
+    sub.add_parser("mission", help="Orchestra: one mission (stdio-json, contract 1) on stdin")
     u = sub.add_parser("ui", help="open the web interface in your browser")
     u.add_argument("--demo", action="store_true", help="made-up mails, no Gmail account needed")
     u.add_argument("--port", type=int, default=8765)
     u.add_argument("--no-browser", action="store_true", help="do not open the browser")
     args = parser.parse_args(argv)
+    if args.command == "mission":  # run by Orchestra: one mission on stdin, events and the report on stdout
+        from agent import mission
+        return mission.main()
+    try:  # before v0.9 the settings and the database were next to the program: into memoire/ once
+        config.memory_move_old_files()
+    except OSError:
+        pass
 
     if args.command == "ui":
         hidden = no_console()
@@ -90,10 +112,7 @@ def main(argv=None):
         except Exception as e:  # a missing library: say it even without a console
             return fatal(e, hidden)
         if args.demo:
-            core.LOG_PATH = config.ROOT / "adagio-demo.log"
-            core.MEMORY_PATH = config.ROOT / "adagio-demo.db"
-            for f in (core.LOG_PATH, core.MEMORY_PATH):  # the made-up mailbox starts fresh each time
-                f.unlink(missing_ok=True)
+            memory_reset_demo()
         try:
             web.serve(args.config, port=args.port, demo_mode=args.demo, open_browser=not args.no_browser)
         except Exception as e:

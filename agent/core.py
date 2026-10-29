@@ -7,6 +7,7 @@ import math
 import time
 from collections import Counter
 from datetime import datetime
+from pathlib import Path
 
 from . import ask as agent_ask
 from . import batches, classify, config, hardware, keywords, memory, models, senders, skills
@@ -22,8 +23,8 @@ ACTIONS = ("capabilities", "check", "hardware", "preview", "correct", "rules", "
 UI_ONLY = ("trash", "restore", "label_order", "read", "rename_theme")  # refused from the JSON door: done from the window
 # (rename_theme also from agent mode: a request you typed in the window)
 MAIL_LINE = "mail · "  # journal lines about one mail: kept out of the activity list, shown in the Journal
-LOG_PATH = config.ROOT / "adagio.log"  # readable journal of every run; None turns it off
-MEMORY_PATH = config.ROOT / "adagio.db"  # rules and examples learned from your corrections
+LOG_PATH = config.MEMOIRE / "adagio.log"  # readable journal of every run; None turns it off
+MEMORY_PATH = config.MEMOIRE / "adagio.db"  # rules and examples learned from your corrections
 
 
 def handle(request, cfg=None, gmail_factory=Gmail, ask=None, progress=None, door="app"):
@@ -61,7 +62,7 @@ def handle(request, cfg=None, gmail_factory=Gmail, ask=None, progress=None, door
         result = {"ok": False, "error": f"Unexpected error: {type(e).__name__}: {e}"}
     result.update(agent=AGENT, version=VERSION, action=action,
                   seconds=round(time.time() - started, 1))
-    log(summary_line(result))
+    memory_log(summary_line(result))
     return result
 
 
@@ -83,9 +84,11 @@ def summary_line(r):
     return f"{r['action']}: ok"
 
 
-def log(text):
+def memory_log(text):
+    """Add lines to the journal (memoire/adagio.log), the readable record of every run and every mail."""
     if LOG_PATH and text:
         try:
+            Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
             with open(LOG_PATH, "a", encoding="utf-8") as f:
                 for line in text.splitlines():
                     f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  {line}\n")
@@ -93,11 +96,11 @@ def log(text):
             pass
 
 
-def read_log(n=30, mails=False):
+def memory_read_log(n=30, mails=False):
     """The last n lines of the journal, newest first. Without mails: only the run summaries."""
     try:
-        lines = LOG_PATH.read_text(encoding="utf-8").splitlines()
-    except (OSError, AttributeError):
+        lines = Path(LOG_PATH).read_text(encoding="utf-8").splitlines()
+    except (OSError, AttributeError, TypeError):
         return []
     if not mails:
         lines = [x for x in lines if x[21:].lstrip()[:len(MAIL_LINE)] != MAIL_LINE]
@@ -108,7 +111,7 @@ def journal(cfg, request, gmail_factory=None, ask=None, progress=None):
     """The full journal: every run and every mail. kind: all | mails | check | learned; q: words to find."""
     kind, words = request.get("kind") or "all", str(request.get("q") or "").lower().split()
     n = max(1, min(int(request.get("n") or 500), 5000))
-    lines = read_log(10**9, mails=True)
+    lines = memory_read_log(10**9, mails=True)
     test = {"mails": lambda x: MAIL_LINE in x, "check": lambda x: "to check:" in x,
             "learned": lambda x: "learned from Gmail" in x or "correction" in x or "rule" in x}.get(kind)
     out = [x for x in lines if (not test or test(x)) and all(w in x.lower() for w in words)]
@@ -194,25 +197,25 @@ def learn(cfg, request):
             if remember in ("sender", "domain"):
                 value = memory.address(sender) if remember == "sender" else memory.domain(sender)
                 mem.add_rule(remember, value, theme, status)
-                log(f"rule learned: mails from {value} -> {theme} / {status}")
+                memory_log(f"rule learned: mails from {value} -> {theme} / {status}")
             else:
-                log(f"correction: '{request.get('subject', '')[:60]}' -> {theme} / {status}")
+                memory_log(f"correction: '{request.get('subject', '')[:60]}' -> {theme} / {status}")
             plan = update_plan(cfg, mem, request.get("gm_msgid"), theme, status)
             return {"rules": mem.rules(), "plan": plan}
         if request["action"] == "delete_rule":
             mem.delete_rule(request["id"])
-            log(f"rule {request['id']} deleted")
+            memory_log(f"rule {request['id']} deleted")
         if request["action"] == "add_rule":  # e.g. a suggestion you accepted on the Senders page
             theme, status, kind = request.get("theme"), request.get("status"), request.get("kind", "sender")
             if theme not in config.names(cfg["themes"]) or status not in config.names(cfg["statuses"]):
                 raise ValueError("Unknown theme or status")
             mem.add_rule(kind, request.get("value", ""), theme, status)
-            log(f"rule added: mails from {request.get('value')} -> {theme} / {status}")
+            memory_log(f"rule added: mails from {request.get('value')} -> {theme} / {status}")
             update_plan(cfg, mem, None, theme, status)
         themes, statuses = config.names(cfg["themes"]), config.names(cfg["statuses"])
         if request["action"] == "ignore_proposal":
             mem.ignore(request.get("sender", ""), request.get("theme", ""), request.get("status", ""))
-            log(f"rule proposal ignored: {request.get('sender')} -> {request.get('theme')} / {request.get('status')}")
+            memory_log(f"rule proposal ignored: {request.get('sender')} -> {request.get('theme')} / {request.get('status')}")
         if request["action"] in ("proposals", "ignore_proposal"):
             return {"proposals": mem.proposals(themes, statuses)}
         out = {"rules": mem.rules(), "proposals": mem.proposals(themes, statuses)}
@@ -300,10 +303,10 @@ def learn_keywords(cfg, request, gmail, ask):
             if request.get("save_keywords", True):
                 config.save_keywords(request.get("config") or config.DEFAULT_PATH, out["keywords"])
         for line in out["lines"]:  # "nothing to learn" lines are about one mail: Journal only
-            log((MAIL_LINE if line.startswith("keywords: nothing") else "") + line)
+            memory_log((MAIL_LINE if line.startswith("keywords: nothing") else "") + line)
         return out
     except Exception as e:  # never block the sorting for it
-        log(f"keywords: not learned this time ({type(e).__name__}: {e})")
+        memory_log(f"keywords: not learned this time ({type(e).__name__}: {e})")
         return None
     finally:
         mem.close()
@@ -555,7 +558,7 @@ def plan(cfg, request, gmail_factory, ask=None, progress=None):
             if cfg["behavior"]["learn_gmail"]:  # first, what you changed in Gmail since the last batch
                 try:
                     learned = gmail_changes(cfg, gmail)
-                    log(learned_line(learned))
+                    memory_log(learned_line(learned))
                 except MailError:
                     learned = None  # never block the sorting for it
             learned_words = learn_keywords(cfg, request, gmail, ask)
@@ -564,7 +567,7 @@ def plan(cfg, request, gmail_factory, ask=None, progress=None):
             if not same:  # a new sort (a finished one starts again only when asked: restart)
                 uids = scope_uids(gmail, kind, value)
                 job = store.new_job(kind, value, max(uids, default=0), len(uids))
-                log(f"new sort: {describe_scope(kind, value)}, {len(uids)} mails, batches of {size}")
+                memory_log(f"new sort: {describe_scope(kind, value)}, {len(uids)} mails, batches of {size}")
             left = job["total"] - store.done_in_job(job["id"])
             picked = next_mails(gmail, store, job, min(size, left)) if left > 0 else []
             if not picked:
@@ -699,7 +702,7 @@ def journal_mail(r, added, archived=False, read=False):
             f"{r['theme']} / {r['status']} · {done}")
     if r.get("to_check"):
         line += f" · to check: {r.get('reason') or 'the model was not sure'}"
-    log(line)
+    memory_log(line)
 
 
 def discard(cfg, request, gmail_factory=None, ask=None, progress=None):
@@ -709,7 +712,7 @@ def discard(cfg, request, gmail_factory=None, ask=None, progress=None):
         batch = store.pending()
         if batch:
             store.discard(batch["id"])
-            log(f"plan of batch {batch['id']} discarded, nothing changed in Gmail")
+            memory_log(f"plan of batch {batch['id']} discarded, nothing changed in Gmail")
         return {"discarded": bool(batch), "plan": None}
     finally:
         store.close()
@@ -840,7 +843,7 @@ def sender_state(cfg, request, gmail_factory=None, ask=None, progress=None):
     try:
         store.set_state(request.get("address", ""), request.get("state", ""))
         if request.get("state") == "opened":
-            log(f"unsubscribe link opened for {request.get('address')}")
+            memory_log(f"unsubscribe link opened for {request.get('address')}")
         return {}
     finally:
         store.close()
@@ -1002,7 +1005,7 @@ def relabel(cfg, request, gmail_factory, ask=None, progress=None):
         if rows:
             store.add_relabel(rows)
             for r in rows:
-                log(f"{MAIL_LINE}{(r['date'] or '')[:10]} · {r['sender'][:60]} · \"{' '.join(r['subject'].split())[:90]}\" · "
+                memory_log(f"{MAIL_LINE}{(r['date'] or '')[:10]} · {r['sender'][:60]} · \"{' '.join(r['subject'].split())[:90]}\" · "
                     f"relabelled on request · {r['old']} -> {r['theme'] or '-'} / {r['status'] or '-'}")
     finally:
         store.close()
@@ -1078,7 +1081,7 @@ def trash(cfg, request, gmail_factory, ask=None, progress=None):
         if int(request.get("confirm", -1)) != len(uids):
             raise ValueError(f"The label now holds {len(uids)} mails. Refresh and confirm again.")
         meta = gmail.meta(uids)
-        gmail.to_trash(uids)
+        gmail.action_sensitive_trash(uids)
     store = batches.Store(MEMORY_PATH)
     try:
         trash_id = store.add_trash(m[0] for m in meta.values())
@@ -1269,7 +1272,7 @@ def gmail_changes(cfg, gmail):
                 out["changed"] += 1
                 out["changes"].append({"gm_msgid": r["gm_msgid"], "sender": r["sender"], "subject": r["subject"],
                                        "old": [r["theme"], r["status"]], "new": [theme, status]})
-                log(f"{MAIL_LINE}learned from Gmail · {r['sender'][:60]} · \"{' '.join(r['subject'].split())[:90]}\" · "
+                memory_log(f"{MAIL_LINE}learned from Gmail · {r['sender'][:60]} · \"{' '.join(r['subject'].split())[:90]}\" · "
                     f"{r['theme']} / {r['status']} -> {theme} / {status}")
             elif r["to_check"] and check not in have:  # you removed "To check": you looked at it
                 store.checked(r["gm_msgid"])
@@ -1300,7 +1303,7 @@ def learn_gmail(cfg, request, gmail_factory, ask=None, progress=None):
                 model_ask, _note = get_model(cfg, request, ask)
                 words = learn_keywords(cfg, request, gmail, model_ask)
             except models.ModelError as e:  # the corrections wait for the next time
-                log(f"keywords: not learned this time, the model is not available ({e})")
+                memory_log(f"keywords: not learned this time, the model is not available ({e})")
     out["keywords_learned"] = words
     out["log"] = "\n".join(x for x in (learned_line(out, always=True), keywords_line(words)) if x)
     out["changes_made"] = 0
