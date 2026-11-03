@@ -64,7 +64,8 @@ def _anthropic(name, key, url):
     try:
         import anthropic
     except ImportError as e:
-        raise ModelError("The 'anthropic' package is missing: pip install -r requirements.txt") from e
+        raise ModelError("The 'anthropic' package is missing (provider: anthropic, outside Orchestra only): "
+                         r".venv\Scripts\python -m pip install anthropic") from e
     client = anthropic.Anthropic(api_key=key, base_url=url, max_retries=2)  # at most 2 new tries
 
     def ask(system, user, schema):

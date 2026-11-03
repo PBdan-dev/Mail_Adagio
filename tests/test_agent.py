@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import time
 import unittest
+from datetime import date
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -266,7 +267,7 @@ class TestModelChoice(unittest.TestCase):
         finally:
             hardware.detect = saved
             core.MEMORY_PATH = ":memory:"
-            shutil.rmtree(tmp)
+            shutil.rmtree(tmp, ignore_errors=True)  # Windows may still hold the base open
 
     def test_no_model_installed(self):
         self.models.ollama_models = lambda url=None, start=False: {"installed": [], "running": []}
@@ -480,7 +481,9 @@ class TestStep3(unittest.TestCase):
         self.assertEqual(done["applied"], 7)
 
     def test_estimate(self):
-        r = self.run_(action="estimate", scope={"kind": "days", "value": 7}, batch_size=50)
+        # The demo mails are dated from 2026-10-24 back: count the days from today, plus one week.
+        days = (date.today() - date(2026, 10, 24)).days + 7
+        r = self.run_(action="estimate", scope={"kind": "days", "value": days}, batch_size=50)
         self.assertTrue(r["ok"], r.get("error"))
         self.assertTrue(0 < r["mails"] < 50 and r["batches"] == 1)
         self.assertIn("$", r["cost_note"])

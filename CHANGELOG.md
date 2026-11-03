@@ -1,5 +1,11 @@
 # Changelog — mail-adagio
 
+## 0.9.1 — 2026-11-03
+Mise en ligne sur l'Agent Market (aucun changement de comportement).
+- `requirements.txt` : la bibliothèque `anthropic` n'est plus installée d'office (elle tire `typing_extensions`, sous licence PSF, hors de la liste MIT, Apache, BSD). Elle ne sert qu'hors Orchestra, avec le fournisseur `anthropic` : `.venv\Scripts\python -m pip install anthropic`.
+- Manifeste : la fiche dit que le tri prend les mails les plus récents d'abord ; `reseau_declare` cite aussi les accès hors mission (Ollama, Anthropic, OpenRouter), selon le modèle choisi dans la fenêtre.
+- Tests : `test_estimate` ne dépend plus de la date du jour ; un dossier temporaire encore ouvert par Windows ne fait plus échouer `test_nothing_loaded_uses_the_last_model`.
+
 ## 0.9.0 — 2026-10-29
 Mise en conformité avec le kit de certification Orchestra (contrat 1, manifeste 2.0).
 - Mode mission : `python adagio.py mission`, protocole stdio-json (mission en entrée, événements puis compte rendu en sortie). Trois tâches : `trier-mails`, `apercu-tri`, `demande`. Arrêt propre avec point de reprise, pause et reprise. Rapport Markdown dans le dossier du projet, sans rien écraser.
