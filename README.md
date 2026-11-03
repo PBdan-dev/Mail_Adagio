@@ -224,6 +224,8 @@ In `config.yaml`, section `model`:
 | `openrouter` | `anthropic/claude-haiku-5.5`| OpenRouter key    | any model OpenRouter offers |
 | `ollama`     | `""` (auto) or `qwen3.5:9b`| none              | runs on your computer, free |
 
+The `anthropic` library is not in `requirements.txt` (0.9.1): to use the `anthropic` provider, run `.venv\Scripts\python -m pip install anthropic` once.
+
 With Ollama and an empty `model_name`, the agent reads your graphics memory and picks a model from
 the `local_models` table. `python adagio.py hardware` shows what it found and why it chose that model.
 

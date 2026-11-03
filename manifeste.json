@@ -2,7 +2,7 @@
   "format_manifeste": "2.0",
   "id": "mail-adagio",
   "name": "Mail Adagio",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "author": {
     "nom": "PB",
     "contact": "https://github.com/PBdan-dev"
@@ -18,7 +18,7 @@
   ],
   "fiche": {
     "sait_faire": [
-      "Trier le lot suivant de la boîte de réception Gmail : un libellé de thème et un libellé de statut par mail, mails triés sortis de la boîte de réception (annulable)",
+      "Trier les N mails suivants de la boîte de réception Gmail, des plus récents aux plus anciens (50 par défaut, jusqu'à 1000) : un libellé de thème et un libellé de statut par mail, mails triés sortis de la boîte de réception (annulable)",
       "Faire un aperçu du tri des mails récents sans rien changer dans Gmail",
       "Exécuter une demande en langage courant sur le tri (chercher des mails, changer le thème de mails donnés, ajouter une règle d'expéditeur, annuler le dernier lot), chaque étape vérifiée par le code",
       "Apprendre des corrections : règles d'expéditeur et mots-clés par thème, gardés dans sa mémoire",
@@ -367,7 +367,8 @@
     "gpu_exclusif": false
   },
   "reseau_declare": [
-    "imap.gmail.com:993"
+    "imap.gmail.com:993",
+    "hors mission seulement (fenêtre), selon le modèle choisi par l'utilisateur : 127.0.0.1:11434 (Ollama), api.anthropic.com:443, openrouter.ai:443"
   ],
   "acces_declares": {
     "fichiers": "dossier du projet de la mission (rapport .md) ; agents/installes/mail-adagio/memoire/ ; hors mission seulement (fenêtre) : .adagio-ui.json à côté d'adagio.py, pour Workspace"
